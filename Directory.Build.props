@@ -1,0 +1,55 @@
+<Project>
+
+  <!--
+    Propiedades aplicadas a TODOS los proyectos .NET de la solución.
+    Centraliza target framework, nullable, ImplicitUsings, etc.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>CS1591</WarningsNotAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <RootNamespace>$(MSBuildProjectName)</RootNamespace>
+    <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    <!--
+      Diagnósticos suprimidos con justificación explícita.
+      Las reglas cosméticas corregibles (CA1725 nombre del parámetro de la interfaz, CA1720 conflicto
+      con nombre de tipo) NO se suprimen; se cumplen en el código.
+
+      - CA1716: avisa cuando un identificador coincide con keyword de VB.NET/F#. Aethra es 100% C#,
+                no expone APIs públicas a otros lenguajes .NET. Usar `Error`, `Domain`, `Shared`
+                como nombres es idiomático en .NET moderno (Clean Architecture, etc.).
+
+      - CA1000: prohíbe miembros estáticos en tipos genéricos. El factory pattern
+                `Result<T>.Success(value)` es idiomático en librerías de resultado (e.g. FluentResults)
+                y aporta legibilidad. Aceptamos pagar el costo en algunos call sites.
+
+      - CA1848: pide LoggerMessage source-gen delegates para hot paths. Aethra es single-user,
+                el throughput de logs nunca es bottleneck. Si en F2+ alguna ruta caliente lo necesita,
+                se quitará la supresión solo en ese archivo y se usará el generador.
+
+      - IDE0005: detecta usings no usados pero requiere `GenerateDocumentationFile=true` para emitirlo
+                en build. Activar doc-gen exige docstrings en todo lo público o más ruido.
+                Trade-off: confiar en format-on-save del IDE para limpieza de usings.
+    -->
+    <!--
+      - CA1711: prohíbe sufijos como "Queue", "Stack", "Event" en nombres de tipos.
+                En .NET moderno sufijos descriptivos son idiomáticos (Channel<T>, ConcurrentQueue<T>).
+                Aethra usa "Queue", "Worker", "Behavior", "Provider" como sufijos semánticos legítimos.
+    -->
+    <NoWarn>$(NoWarn);CA1716;CA1000;CA1711;CA1848;IDE0005</NoWarn>
+  </PropertyGroup>
+
+  <!-- Activa Central Package Management (versiones en Directory.Packages.props) -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+</Project>

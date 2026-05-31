@@ -1,0 +1,56 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+.vs/
+artifacts/
+publish/
+TestResults/
+coverage*.xml
+*.coverage
+*.coveragexml
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json.example
+!.vscode/extensions.json
+*.swp
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+.env.local
+.env.development.local
+.env.production.local
+
+# Secrets y runtime local
+*.pfx
+*.pem
+*.key
+appsettings.Development.local.json
+appsettings.Local.json
+secrets.json
+.userprofile/
+
+# Logs
+logs/
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Datos locales del satélite y backups
+data/
+buffer.db
+buffer.db-shm
+buffer.db-wal
+
+# Docker
+docker-compose.override.yml

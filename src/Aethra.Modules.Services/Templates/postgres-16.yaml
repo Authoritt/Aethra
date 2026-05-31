@@ -1,0 +1,21 @@
+id: postgres-16
+display_name: PostgreSQL 16
+type: Postgres
+version: "16-alpine"
+image: postgres:16-alpine
+internal_port: 5432
+admin_user: postgres
+admin_password_generator: random(32)
+env:
+  POSTGRES_USER: "${admin_user}"
+  POSTGRES_PASSWORD: "${admin_password}"
+  POSTGRES_DB: postgres
+volumes:
+  - name: data
+    container_path: /var/lib/postgresql/data
+healthcheck:
+  test: ["CMD-SHELL", "pg_isready -U ${admin_user}"]
+  interval_seconds: 10
+  retries: 5
+notes: |
+  Postgres 16 production-ready. Volume persistente en /var/lib/postgresql/data.

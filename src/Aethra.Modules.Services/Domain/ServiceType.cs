@@ -1,0 +1,27 @@
+namespace Aethra.Modules.Services.Domain;
+
+/// <summary>
+/// Tipo de servicio gestionado. Cada tipo tiene su <c>IServiceProvisioner</c> asociado
+/// que sabe cómo aprovisionar credentials cuando se crea un binding.
+/// </summary>
+public enum ServiceType
+{
+    Postgres,
+    Redis,
+    RabbitMQ,
+    MySQL,
+    MongoDB,
+}
+
+public static class ServiceTypeExtensions
+{
+    public static int DefaultInternalPort(this ServiceType type) => type switch
+    {
+        ServiceType.Postgres => 5432,
+        ServiceType.Redis => 6379,
+        ServiceType.RabbitMQ => 5672,
+        ServiceType.MySQL => 3306,
+        ServiceType.MongoDB => 27017,
+        _ => throw new ArgumentOutOfRangeException(nameof(type)),
+    };
+}

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Primitivos compartidos: Result, eventos de dominio, value objects, IClock, IDs.
+Sin dependencias externas — solo BCL.</Description>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,21 @@
+id: rabbitmq-3-mgmt
+display_name: RabbitMQ 3 (Management plugin)
+type: RabbitMQ
+version: "3-management"
+image: rabbitmq:3-management
+internal_port: 5672
+management_port: 15672
+admin_user: aethra
+admin_password_generator: random(32)
+env:
+  RABBITMQ_DEFAULT_USER: "${admin_user}"
+  RABBITMQ_DEFAULT_PASS: "${admin_password}"
+volumes:
+  - name: data
+    container_path: /var/lib/rabbitmq
+healthcheck:
+  test: ["CMD", "rabbitmq-diagnostics", "ping"]
+  interval_seconds: 15
+  retries: 5
+notes: |
+  RabbitMQ con plugin de management habilitado (puerto 15672 interno).

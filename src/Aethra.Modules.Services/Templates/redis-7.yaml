@@ -1,0 +1,19 @@
+id: redis-7
+display_name: Redis 7
+type: Redis
+version: "7-alpine"
+image: redis:7-alpine
+internal_port: 6379
+admin_user: default
+admin_password_generator: random(32)
+env: {}
+command: ["redis-server", "--requirepass", "${admin_password}", "--appendonly", "yes"]
+volumes:
+  - name: data
+    container_path: /data
+healthcheck:
+  test: ["CMD", "redis-cli", "-a", "${admin_password}", "PING"]
+  interval_seconds: 10
+  retries: 5
+notes: |
+  Redis 7 con AOF persistence y requirepass. ACL users se crean por binding.

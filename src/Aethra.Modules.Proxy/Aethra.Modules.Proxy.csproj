@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Routes y Certificates que alimentan YARP en tiempo de ejecución
+con hot-reload. Incluye Let's Encrypt + HTTP-01 challenge.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aethra.Shared.Kernel\Aethra.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\Aethra.Shared.Contracts\Aethra.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\Aethra.Shared.Infrastructure\Aethra.Shared.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Yarp.ReverseProxy" />
+    <PackageReference Include="Certes" />
+  </ItemGroup>
+
+  <!-- ASP.NET para hub y endpoints REST. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

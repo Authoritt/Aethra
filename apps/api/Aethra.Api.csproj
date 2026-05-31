@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>aethra-api-dev</UserSecretsId>
+    <Description>Host central de Aethra: API REST + SignalR hubs + workers + YARP.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Aethra.Shared.Kernel\Aethra.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Shared.Contracts\Aethra.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Shared.Infrastructure\Aethra.Shared.Infrastructure.csproj" />
+
+    <ProjectReference Include="..\..\src\Aethra.Modules.Projects\Aethra.Modules.Projects.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Deployments\Aethra.Modules.Deployments.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Services\Aethra.Modules.Services.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Proxy\Aethra.Modules.Proxy.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Vms\Aethra.Modules.Vms.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Metrics\Aethra.Modules.Metrics.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Monitoring\Aethra.Modules.Monitoring.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Cloudflare\Aethra.Modules.Cloudflare.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Notes\Aethra.Modules.Notes.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Identity\Aethra.Modules.Identity.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Mcp\Aethra.Modules.Mcp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="Serilog.Settings.Configuration" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+</Project>

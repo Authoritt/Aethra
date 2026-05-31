@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>ManagedService (Postgres/Redis/Rabbit) + ServiceBinding con provisioners.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aethra.Shared.Kernel\Aethra.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\Aethra.Shared.Contracts\Aethra.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\Aethra.Shared.Infrastructure\Aethra.Shared.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Templates\*.yaml" />
+  </ItemGroup>
+
+  <!-- Microsoft.AspNetCore.DataProtection (usado por Provisioning/AdminCredentials para cifrar credenciales admin). -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

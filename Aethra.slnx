@@ -1,0 +1,28 @@
+<Solution>
+  <Folder Name="/apps/" />
+  <Folder Name="/apps/api/">
+    <Project Path="apps/api/Aethra.Api.csproj" />
+  </Folder>
+  <Folder Name="/apps/satellite/">
+    <Project Path="apps/satellite/Aethra.Satellite.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Aethra.Modules.Cloudflare/Aethra.Modules.Cloudflare.csproj" />
+    <Project Path="src/Aethra.Modules.Deployments/Aethra.Modules.Deployments.csproj" />
+    <Project Path="src/Aethra.Modules.Identity/Aethra.Modules.Identity.csproj" />
+    <Project Path="src/Aethra.Modules.Mcp/Aethra.Modules.Mcp.csproj" />
+    <Project Path="src/Aethra.Modules.Metrics/Aethra.Modules.Metrics.csproj" />
+    <Project Path="src/Aethra.Modules.Monitoring/Aethra.Modules.Monitoring.csproj" />
+    <Project Path="src/Aethra.Modules.Notes/Aethra.Modules.Notes.csproj" />
+    <Project Path="src/Aethra.Modules.Projects/Aethra.Modules.Projects.csproj" />
+    <Project Path="src/Aethra.Modules.Proxy/Aethra.Modules.Proxy.csproj" />
+    <Project Path="src/Aethra.Modules.Services/Aethra.Modules.Services.csproj" />
+    <Project Path="src/Aethra.Modules.Vms/Aethra.Modules.Vms.csproj" />
+    <Project Path="src/Aethra.Shared.Contracts/Aethra.Shared.Contracts.csproj" />
+    <Project Path="src/Aethra.Shared.Infrastructure/Aethra.Shared.Infrastructure.csproj" />
+    <Project Path="src/Aethra.Shared.Kernel/Aethra.Shared.Kernel.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Aethra.ArchitectureTests/Aethra.ArchitectureTests.csproj" />
+  </Folder>
+</Solution>

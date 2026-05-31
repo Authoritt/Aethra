@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Eventos de integración cross-module (DTOs).
+Records puros que implementan MediatR.INotification para ser publicables por el bus
+in-memory (InMemoryIntegrationEventBus → mediator.Publish).
+Ningún módulo debe referenciar internals de otro — solo este ensamblado.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aethra.Shared.Kernel\Aethra.Shared.Kernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- MediatR.Contracts es solo las interfaces (INotification, IRequest, etc.) sin runtime.
+         Mantiene Shared.Contracts "ligero" pero permite que los integration events sean directamente
+         INotification, evitando wrappers en cada módulo consumidor. -->
+    <PackageReference Include="MediatR.Contracts" />
+  </ItemGroup>
+
+</Project>

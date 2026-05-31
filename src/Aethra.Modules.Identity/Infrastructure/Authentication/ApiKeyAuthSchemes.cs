@@ -1,0 +1,29 @@
+namespace Aethra.Modules.Identity.Infrastructure.Authentication;
+
+/// <summary>
+/// Constantes del esquema de auth de API keys. El nombre real del scheme está en
+/// <c>Aethra.Api.Bootstrap.AuthSchemes.ApiKey</c> y se pasa al handler durante el
+/// registro — esta clase solo expone los nombres de claims y headers que el handler
+/// produce/consume, para que otros módulos los referencien sin acoplarse al host.
+/// </summary>
+public static class ApiKeyAuthSchemes
+{
+    /// <summary>Cabecera HTTP que lleva el bearer token. Convención: <c>Authorization: Bearer aethra_...</c>.</summary>
+    public const string AuthorizationHeader = "Authorization";
+
+    /// <summary>Prefijo Bearer esperado en el header Authorization.</summary>
+    public const string BearerPrefix = "Bearer ";
+
+    /// <summary>Claim type que el handler usa para emitir cada scope de la key.</summary>
+    public const string ScopeClaim = "scope";
+
+    /// <summary>Claim type donde se guarda el id de la API key (también usado como Subject).</summary>
+    public const string ApiKeyIdClaim = "aethra:api_key_id";
+
+    /// <summary>
+    /// Nombre del scheme cookie que el host registra. Endpoints sensibles (gestión de
+    /// api-keys mismas) lo referencian para forzar auth por cookie y rechazar API keys.
+    /// Debe coincidir con la constante del host (<c>Aethra.Api.Bootstrap.AuthSchemes.Cookie</c>).
+    /// </summary>
+    public const string CookieScheme = "aethra.cookie";
+}

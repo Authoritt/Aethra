@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Projects, Environments, Applications y variables de entorno con scopes.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aethra.Shared.Kernel\Aethra.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\Aethra.Shared.Contracts\Aethra.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\Aethra.Shared.Infrastructure\Aethra.Shared.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <!-- Microsoft.Extensions.* (DI, Hosting, Configuration, Options, Logging) y los runtime
+       de ASP.NET vienen incluidos via FrameworkReference Microsoft.AspNetCore.App.
+       Solo declaramos los paquetes que NO están en el framework de ASP.NET. -->
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <!-- Solo el módulo Projects referencia ASP.NET porque tiene endpoints REST.
+       Otros módulos sin presentación NO la referencian; eso preserva la regla:
+       Domain/Application no conoce HTTP. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

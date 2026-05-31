@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>MCP (Model Context Protocol) server agregador. Expone aethra_* tools que reutilizan los handlers MediatR de cada módulo. Por ser el agregador externo, este módulo SI puede referenciar todos los módulos — está explícitamente excluido del architecture test de aislamiento.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aethra.Shared.Kernel\Aethra.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\Aethra.Shared.Contracts\Aethra.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\Aethra.Shared.Infrastructure\Aethra.Shared.Infrastructure.csproj" />
+
+    <!-- MCP es el agregador: importa todos los módulos para invocar sus handlers via IMediator
+         y, en el caso de Identity, para leer scopes catálogo. -->
+    <ProjectReference Include="..\Aethra.Modules.Projects\Aethra.Modules.Projects.csproj" />
+    <ProjectReference Include="..\Aethra.Modules.Deployments\Aethra.Modules.Deployments.csproj" />
+    <ProjectReference Include="..\Aethra.Modules.Services\Aethra.Modules.Services.csproj" />
+    <ProjectReference Include="..\Aethra.Modules.Proxy\Aethra.Modules.Proxy.csproj" />
+    <ProjectReference Include="..\Aethra.Modules.Vms\Aethra.Modules.Vms.csproj" />
+    <ProjectReference Include="..\Aethra.Modules.Metrics\Aethra.Modules.Metrics.csproj" />
+    <ProjectReference Include="..\Aethra.Modules.Monitoring\Aethra.Modules.Monitoring.csproj" />
+    <ProjectReference Include="..\Aethra.Modules.Cloudflare\Aethra.Modules.Cloudflare.csproj" />
+    <ProjectReference Include="..\Aethra.Modules.Notes\Aethra.Modules.Notes.csproj" />
+    <ProjectReference Include="..\Aethra.Modules.Identity\Aethra.Modules.Identity.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+  </ItemGroup>
+
+  <!-- ASP.NET para mapear el endpoint MCP + Authorize. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

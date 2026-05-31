@@ -1,0 +1,15 @@
+<Project>
+
+  <!-- Heredamos Directory.Build.props raíz e importamos primero. -->
+  <Import Project="..\Directory.Build.props" />
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!--
+      En tests permitimos snake_case_legible_para_humanos en los nombres de los tests.
+      CA1707 prohibe underscores; lo apagamos solo aquí.
+    -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+</Project>

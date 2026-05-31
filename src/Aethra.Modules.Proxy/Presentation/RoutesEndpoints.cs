@@ -1,0 +1,53 @@
+using Aethra.Modules.Proxy.UseCases.Routes.Commands;
+using Aethra.Modules.Proxy.UseCases.Routes.Queries;
+using Aethra.Shared.Kernel.Errors;
+using Aethra.Shared.Kernel.Results;
+using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
+
+namespace Aethra.Modules.Proxy.Presentation;
+
+public static class RoutesEndpoints
+{
+    public static IEndpointRouteBuilder MapRoutesEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/proxy/routes").WithTags("Proxy").RequireAuthorization();
+
+        group.MapGet("/", async (IMediator mediator, CancellationToken ct) =>
+            ToResult(await mediator.Send(new ListRoutesQuery(), ct)))
+            .WithName("ListRoutes");
+
+        group.MapPost("/", async ([FromBody] CreateRouteRequest body, IMediator mediator, CancellationToken ct) =>
+        {
+            var cmd = new CreateRouteCommand(body.Hostname, body.BackendUrl, body.TlsEnabled);
+            var r = await mediator.Send(cmd, ct);
+            return r.IsSuccess ? Results.Created($"/api/proxy/routes/{r.Value.Id}", r.Value) : MapError(r.Error);
+        })
+        .WithName("CreateRoute");
+
+        group.MapDelete("/{routeId}", async (string routeId, IMediator mediator, CancellationToken ct) =>
+        {
+            var r = await mediator.Send(new DeleteRouteCommand(routeId), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .WithName("DeleteRoute");
+
+        return app;
+    }
+
+    public sealed record CreateRouteRequest(string Hostname, string BackendUrl, bool TlsEnabled);
+
+    private static IResult ToResult<T>(Result<T> r)
+        => r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
+
+    private static IResult MapError(Error e) => e.Type switch
+    {
+        ErrorType.Validation => Results.UnprocessableEntity(new { e.Code, e.Message }),
+        ErrorType.NotFound => Results.NotFound(new { e.Code, e.Message }),
+        ErrorType.Conflict => Results.Conflict(new { e.Code, e.Message }),
+        _ => Results.Problem(e.Message),
+    };
+}

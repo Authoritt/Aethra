@@ -1,0 +1,54 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{json,yml,yaml,md,csproj,props,targets,sln}]
+indent_size = 2
+
+[*.{ts,tsx,js,jsx,css,scss}]
+indent_size = 2
+
+[*.cs]
+# Convenciones idiomáticas C#
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+csharp_new_line_before_open_brace = all
+csharp_prefer_braces = true:warning
+dotnet_sort_system_directives_first = true
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+dotnet_style_qualification_for_event = false:warning
+
+# Naming
+dotnet_naming_rule.private_fields_underscore.severity = warning
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel.required_prefix = _
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+
+# Análisis: warning como error en lo que importa
+dotnet_diagnostic.IDE0005.severity = warning      # usings no usados
+dotnet_diagnostic.CS8618.severity = warning       # non-nullable sin inicializar
+dotnet_diagnostic.CA1822.severity = suggestion    # member can be static
+
+# Migraciones EF Core: artefactos generados por la herramienta. No imponemos estilo
+# ni nullable strict — EF las re-genera con block-scoped namespace.
+[**/Migrations/**.cs]
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.CS8618.severity = none
+generated_code = true
+
+[**/SharedMigrations/**.cs]
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.CS8618.severity = none
+generated_code = true

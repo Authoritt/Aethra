@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <Description>Tests de arquitectura: NetArchTest verifica que la modularidad se respeta.
+Fallan en CI si un modulo referencia internals de otro o si Domain referencia EF.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="NetArchTest.Rules" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Aethra.Shared.Kernel\Aethra.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Shared.Contracts\Aethra.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Shared.Infrastructure\Aethra.Shared.Infrastructure.csproj" />
+
+    <ProjectReference Include="..\..\src\Aethra.Modules.Projects\Aethra.Modules.Projects.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Deployments\Aethra.Modules.Deployments.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Services\Aethra.Modules.Services.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Proxy\Aethra.Modules.Proxy.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Vms\Aethra.Modules.Vms.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Metrics\Aethra.Modules.Metrics.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Monitoring\Aethra.Modules.Monitoring.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Cloudflare\Aethra.Modules.Cloudflare.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Notes\Aethra.Modules.Notes.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Identity\Aethra.Modules.Identity.csproj" />
+  </ItemGroup>
+
+</Project>

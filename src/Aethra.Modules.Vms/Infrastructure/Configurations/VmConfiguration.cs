@@ -1,0 +1,76 @@
+using Aethra.Modules.Vms.Domain;
+using Aethra.Shared.Kernel.Ids;
+using Aethra.Shared.Kernel.Primitives;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+
+namespace Aethra.Modules.Vms.Infrastructure.Configurations;
+
+internal sealed class VmConfiguration : IEntityTypeConfiguration<Vm>
+{
+    public void Configure(EntityTypeBuilder<Vm> builder)
+    {
+        builder.ToTable("vms");
+        builder.HasKey(v => v.Id);
+
+        builder.Property(v => v.Id)
+            .HasColumnName("id")
+            .HasConversion(new ValueConverter<VmId, string>(
+                id => id.ToString(),
+                s => ParseVmId(s)))
+            .HasMaxLength(64);
+
+        builder.Property(v => v.Slug)
+            .HasColumnName("slug")
+            .HasConversion(new ValueConverter<Slug, string>(s => s.Value, v => Slug.Create(v).Value))
+            .HasMaxLength(64)
+            .IsRequired();
+        builder.HasIndex(v => v.Slug).IsUnique().HasDatabaseName("ux_vms_slug");
+
+        builder.Property(v => v.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
+        builder.Property(v => v.PublicIp).HasColumnName("public_ip").HasMaxLength(45);
+        builder.Property(v => v.PrivateIp).HasColumnName("private_ip").HasMaxLength(45);
+        builder.Property(v => v.Description).HasColumnName("description").HasMaxLength(2000);
+        builder.Property(v => v.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.Property(v => v.CreatedAt).HasColumnName("created_at").IsRequired();
+        builder.Property(v => v.UpdatedAt).HasColumnName("updated_at").IsRequired();
+        builder.Property(v => v.LastConnectedAt).HasColumnName("last_connected_at");
+        builder.Property(v => v.LastDisconnectedAt).HasColumnName("last_disconnected_at");
+
+        builder.Property(v => v.Hostname).HasColumnName("hostname").HasMaxLength(255);
+        builder.Property(v => v.KernelVersion).HasColumnName("kernel_version").HasMaxLength(255);
+        builder.Property(v => v.CpuModel).HasColumnName("cpu_model").HasMaxLength(255);
+        builder.Property(v => v.CpuCores).HasColumnName("cpu_cores");
+        builder.Property(v => v.TotalMemoryBytes).HasColumnName("total_memory_bytes");
+
+        builder.OwnsOne(v => v.Satellite, s =>
+        {
+            s.Property(x => x.Id)
+                .HasColumnName("satellite_id")
+                .HasConversion(new ValueConverter<SatelliteId, string>(
+                    id => id.ToString(),
+                    str => ParseSatelliteId(str)))
+                .HasMaxLength(64)
+                .IsRequired();
+            s.Property(x => x.AgentVersion).HasColumnName("satellite_agent_version").HasMaxLength(64);
+            s.Property(x => x.LastHandshakeAt).HasColumnName("satellite_last_handshake_at");
+
+            s.OwnsOne(x => x.Token, t =>
+            {
+                t.Property(x => x.Hash).HasColumnName("satellite_token_hash").HasMaxLength(128).IsRequired();
+                t.Property(x => x.RotatedAt).HasColumnName("satellite_token_rotated_at").IsRequired();
+                // Índice por hash para que el SatelliteAuthenticator haga lookup O(log n).
+                t.HasIndex(x => x.Hash).HasDatabaseName("ix_vms_satellite_token_hash");
+            });
+        });
+
+        builder.Ignore(v => v.DomainEvents);
+    }
+
+    private static VmId ParseVmId(string s)
+        => AethraId.TryParse(s, out var parsed) ? new VmId(parsed.Value) : default;
+
+    private static SatelliteId ParseSatelliteId(string s)
+        => AethraId.TryParse(s, out var parsed) ? new SatelliteId(parsed.Value) : default;
+}
