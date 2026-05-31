@@ -46,11 +46,11 @@ internal static class ServiceMappers
         InternalPort: t.InternalPort,
         Notes: t.Notes);
 
-    public static ServiceBindingDto ToDto(ServiceBinding b, string? appSlug) => new(
+    public static ServiceBindingDto ToDto(ServiceBinding b, string? instanceSlug) => new(
         Id: b.Id.ToString(),
         ServiceId: b.ServiceId.ToString(),
-        ApplicationId: b.ApplicationId,
-        ApplicationSlug: appSlug,
+        InstanceId: b.InstanceId,
+        InstanceSlug: instanceSlug,
         ResourceName: b.ResourceName,
         Permissions: b.Permissions.ToString().ToLowerInvariant(),
         EnvVarPrefix: b.InjectedEnvVarPrefix,

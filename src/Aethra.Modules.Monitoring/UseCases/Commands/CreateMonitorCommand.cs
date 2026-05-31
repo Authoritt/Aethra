@@ -21,7 +21,7 @@ public sealed record CreateMonitorCommand(
     int? TimeoutMs,
     IReadOnlyDictionary<string, string>? Headers,
     string? BodyTemplate,
-    string? ApplicationId,
+    string? InstanceId,
     string? ProjectId) : ICommand<MonitorDetailDto>;
 
 public sealed class CreateMonitorValidator : AbstractValidator<CreateMonitorCommand>
@@ -70,7 +70,7 @@ internal sealed class CreateMonitorHandler(MonitoringDbContext db, IClock clock)
                 request.TimeoutMs ?? 10000,
                 request.Headers,
                 request.BodyTemplate,
-                request.ApplicationId,
+                request.InstanceId,
                 request.ProjectId,
                 clock.UtcNow);
         }

@@ -4,16 +4,16 @@ using Aethra.Shared.Kernel.Domain;
 namespace Aethra.Modules.Services.Domain;
 
 /// <summary>
-/// Relación "App X usa instancia Y". Cada binding tiene su propio recurso aislado
+/// Relación "Instance X usa servicio Y". Cada binding tiene su propio recurso aislado
 /// (BD/vhost/prefix) y credenciales independientes. Al crearse, el provisioner crea
-/// los recursos y se inyectan env vars en la Application.
+/// los recursos y se inyectan env vars/secrets en la Instance.
 ///
 /// Las credenciales se cifran con DataProtection (purpose: "aethra-binding-creds").
 /// </summary>
 public sealed class ServiceBinding : AggregateRoot<ServiceBindingId>
 {
     public ManagedServiceId ServiceId { get; private set; }
-    public string ApplicationId { get; private set; }
+    public string InstanceId { get; private set; }
     public string ResourceName { get; private set; }
     public byte[] CredentialsCipher { get; private set; }
     public BindingPermissions Permissions { get; private set; }
@@ -26,12 +26,12 @@ public sealed class ServiceBinding : AggregateRoot<ServiceBindingId>
 
     public bool IsActive => RevokedAt is null;
 
-    private ServiceBinding(ServiceBindingId id, ManagedServiceId serviceId, string applicationId,
+    private ServiceBinding(ServiceBindingId id, ManagedServiceId serviceId, string instanceId,
         string resourceName, byte[] credentialsCipher, BindingPermissions permissions,
         string injectedEnvVarPrefix, MigrationsHook? hook, DateTimeOffset now) : base(id)
     {
         ServiceId = serviceId;
-        ApplicationId = applicationId;
+        InstanceId = instanceId;
         ResourceName = resourceName;
         CredentialsCipher = credentialsCipher;
         Permissions = permissions;
@@ -40,13 +40,13 @@ public sealed class ServiceBinding : AggregateRoot<ServiceBindingId>
         CreatedAt = now;
     }
 
-    public static ServiceBinding Create(ManagedServiceId serviceId, string applicationId, string resourceName,
+    public static ServiceBinding Create(ManagedServiceId serviceId, string instanceId, string resourceName,
         byte[] credentialsCipher, BindingPermissions permissions, string? injectedEnvVarPrefix,
         MigrationsHook? hook, DateTimeOffset now)
     {
-        if (string.IsNullOrWhiteSpace(applicationId))
+        if (string.IsNullOrWhiteSpace(instanceId))
         {
-            throw new ArgumentException("ApplicationId requerido.", nameof(applicationId));
+            throw new ArgumentException("InstanceId requerido.", nameof(instanceId));
         }
         if (string.IsNullOrWhiteSpace(resourceName))
         {
@@ -63,9 +63,9 @@ public sealed class ServiceBinding : AggregateRoot<ServiceBindingId>
             prefix += "_";
         }
 
-        var binding = new ServiceBinding(ServiceBindingId.New(), serviceId, applicationId, resourceName.Trim(),
+        var binding = new ServiceBinding(ServiceBindingId.New(), serviceId, instanceId, resourceName.Trim(),
             credentialsCipher, permissions, prefix, hook, now);
-        binding.Raise(new ServiceBindingCreatedEvent(binding.Id, serviceId, applicationId, binding.ResourceName));
+        binding.Raise(new ServiceBindingCreatedEvent(binding.Id, serviceId, instanceId, binding.ResourceName));
         return binding;
     }
 
@@ -73,14 +73,14 @@ public sealed class ServiceBinding : AggregateRoot<ServiceBindingId>
     {
         if (ProvisionedAt is not null) { return; }
         ProvisionedAt = now;
-        Raise(new ServiceBindingProvisionedEvent(Id, ApplicationId, ResourceName, InjectedEnvVarPrefix));
+        Raise(new ServiceBindingProvisionedEvent(Id, InstanceId, ResourceName, InjectedEnvVarPrefix));
     }
 
     public void Revoke(DateTimeOffset now)
     {
         if (RevokedAt is not null) { return; }
         RevokedAt = now;
-        Raise(new ServiceBindingRevokedEvent(Id, ApplicationId));
+        Raise(new ServiceBindingRevokedEvent(Id, InstanceId));
     }
 
     public void RotateCredentials(byte[] newCipher, DateTimeOffset now)
@@ -91,7 +91,7 @@ public sealed class ServiceBinding : AggregateRoot<ServiceBindingId>
         }
         CredentialsCipher = newCipher;
         LastRotatedAt = now;
-        Raise(new ServiceBindingCredentialsRotatedEvent(Id, ApplicationId));
+        Raise(new ServiceBindingCredentialsRotatedEvent(Id, InstanceId));
     }
 
     public void SetMigrationsHook(MigrationsHook? hook)
@@ -102,7 +102,7 @@ public sealed class ServiceBinding : AggregateRoot<ServiceBindingId>
     // EF Core
     private ServiceBinding() : base()
     {
-        ApplicationId = string.Empty;
+        InstanceId = string.Empty;
         ResourceName = string.Empty;
         CredentialsCipher = [];
         InjectedEnvVarPrefix = string.Empty;

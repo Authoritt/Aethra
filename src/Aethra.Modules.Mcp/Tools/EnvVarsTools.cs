@@ -12,14 +12,13 @@ public sealed class EnvVarsTools(IEnvVarWriter envVarWriter, IMcpCallerContext c
         string Key,
         string Value,
         bool IsBuildTime,
-        bool IsRuntime,
-        bool IsSecret);
+        bool IsRuntime);
 
     [McpServerTool(Name = "aethra_set_env_vars", Destructive = true, Idempotent = true, OpenWorld = false)]
-    [Description("Upsert idempotente de env vars en una Application. Cada var se etiqueta con el source 'mcp:apikey:{id}' para revoke selectivo.")]
+    [Description("Upsert idempotente de env vars en un scope (project|template|client|instance). Cada var se etiqueta con el source 'mcp:apikey:{id}' para revoke selectivo.")]
     public async Task<object> SetEnvVarsAsync(
-        [Description("Tipo de scope. Actualmente sólo se admite 'application' — Environment/Project quedan para F7 (planeado).")] string scopeType,
-        [Description("ID de la Application (formato 'app_...').")] string scopeId,
+        [Description("Tipo de scope: 'project', 'template', 'client' o 'instance'.")] string scopeType,
+        [Description("ID del scope (prj_*, tpl_*, cli_*, ins_*).")] string scopeId,
         [Description("Lista de variables a inyectar.")] IReadOnlyList<EnvVarInput> vars,
         CancellationToken ct)
     {
@@ -27,10 +26,10 @@ public sealed class EnvVarsTools(IEnvVarWriter envVarWriter, IMcpCallerContext c
         {
             return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
         }
-        if (!string.Equals(scopeType, "application", StringComparison.OrdinalIgnoreCase))
+        if (!Enum.TryParse<EnvVarScope>(scopeType, ignoreCase: true, out var scope) || !Enum.IsDefined(scope))
         {
-            return McpResponses.Failure("env_vars.unsupported_scope",
-                $"scope_type='{scopeType}' aún no soportado por la tool MCP. Solo 'application' por ahora.",
+            return McpResponses.Failure("env_vars.invalid_scope",
+                $"scope_type='{scopeType}' inválido. Use project, template, client o instance.",
                 "validation");
         }
         if (vars is null || vars.Count == 0)
@@ -38,11 +37,11 @@ public sealed class EnvVarsTools(IEnvVarWriter envVarWriter, IMcpCallerContext c
             return McpResponses.Failure("env_vars.empty", "vars no puede estar vacío.", "validation");
         }
 
-        var upserts = vars.Select(v => new EnvVarUpsert(v.Key, v.Value, v.IsBuildTime, v.IsRuntime, v.IsSecret)).ToList();
+        var upserts = vars.Select(v => new EnvVarUpsert(v.Key, v.Value, v.IsBuildTime, v.IsRuntime)).ToList();
 
         try
         {
-            await envVarWriter.UpsertManyAsync(scopeId, caller.AuditSource, upserts, ct).ConfigureAwait(false);
+            await envVarWriter.UpsertManyAsync(scope, scopeId, caller.AuditSource, upserts, ct).ConfigureAwait(false);
         }
         catch (ArgumentException ex)
         {
@@ -50,7 +49,8 @@ public sealed class EnvVarsTools(IEnvVarWriter envVarWriter, IMcpCallerContext c
         }
         return McpResponses.Ok(new
         {
-            application_id = scopeId,
+            scope = scope.ToString(),
+            scope_id = scopeId,
             count = upserts.Count,
             source = caller.AuditSource,
         });

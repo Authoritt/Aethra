@@ -46,7 +46,7 @@ namespace Aethra.Modules.Monitoring.Infrastructure.Migrations
                     interval_sec = table.Column<int>(type: "integer", nullable: false),
                     timeout_ms = table.Column<int>(type: "integer", nullable: false),
                     body_template = table.Column<string>(type: "text", nullable: true),
-                    application_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    instance_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     project_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     is_enabled = table.Column<bool>(type: "boolean", nullable: false),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
@@ -89,10 +89,10 @@ namespace Aethra.Modules.Monitoring.Infrastructure.Migrations
                 descending: new[] { false, true });
 
             migrationBuilder.CreateIndex(
-                name: "ix_monitors_application",
+                name: "ix_monitors_instance",
                 schema: "monitoring",
                 table: "monitors",
-                column: "application_id");
+                column: "instance_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_monitors_enabled_last_checked",

@@ -69,7 +69,7 @@ namespace Aethra.Modules.Services.Infrastructure.Migrations
                 {
                     id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     service_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    application_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    instance_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     resource_name = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     credentials_cipher = table.Column<byte[]>(type: "bytea", nullable: false),
                     permissions = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
@@ -115,10 +115,10 @@ namespace Aethra.Modules.Services.Infrastructure.Migrations
                 column: "service_id");
 
             migrationBuilder.CreateIndex(
-                name: "ux_service_bindings_app_service_active",
+                name: "ux_service_bindings_instance_service_active",
                 schema: "services",
                 table: "service_bindings",
-                columns: new[] { "application_id", "service_id" },
+                columns: new[] { "instance_id", "service_id" },
                 unique: true,
                 filter: "revoked_at IS NULL");
         }

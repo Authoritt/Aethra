@@ -12,7 +12,7 @@ namespace Aethra.Modules.Monitoring.UseCases.Queries;
 /// El status se acepta como string (case-insensitive) para que la UI no tenga que conocer el enum.
 /// </summary>
 public sealed record ListMonitorsQuery(
-    string? ApplicationId,
+    string? InstanceId,
     string? ProjectId,
     string? Status,
     bool? IsEnabled) : IQuery<IReadOnlyList<MonitorSummaryDto>>;
@@ -30,10 +30,10 @@ internal sealed class ListMonitorsHandler(MonitoringDbContext db)
         }
 
         var query = db.Monitors.AsNoTracking();
-        if (!string.IsNullOrWhiteSpace(request.ApplicationId))
+        if (!string.IsNullOrWhiteSpace(request.InstanceId))
         {
-            var app = request.ApplicationId;
-            query = query.Where(m => m.ApplicationId == app);
+            var ins = request.InstanceId;
+            query = query.Where(m => m.InstanceId == ins);
         }
         if (!string.IsNullOrWhiteSpace(request.ProjectId))
         {

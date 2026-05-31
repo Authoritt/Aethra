@@ -17,7 +17,7 @@ public static class MonitorsEndpoints
         var group = app.MapGroup("/api/monitors").WithTags("Monitoring").RequireAuthorization();
 
         group.MapGet("/", async (
-            [FromQuery(Name = "application_id")] string? applicationId,
+            [FromQuery(Name = "instance_id")] string? instanceId,
             [FromQuery(Name = "project_id")] string? projectId,
             [FromQuery] string? status,
             [FromQuery(Name = "enabled")] bool? enabled,
@@ -25,7 +25,7 @@ public static class MonitorsEndpoints
             CancellationToken ct) =>
         {
             var result = await mediator.Send(
-                new ListMonitorsQuery(applicationId, projectId, status, enabled), ct).ConfigureAwait(false);
+                new ListMonitorsQuery(instanceId, projectId, status, enabled), ct).ConfigureAwait(false);
             return ToResult(result);
         })
         .WithName("ListMonitors");
@@ -68,7 +68,7 @@ public static class MonitorsEndpoints
                 TimeoutMs: body.TimeoutMs,
                 Headers: body.Headers,
                 BodyTemplate: body.BodyTemplate,
-                ApplicationId: body.ApplicationId,
+                InstanceId: body.InstanceId,
                 ProjectId: body.ProjectId);
             var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
             return result.IsSuccess
@@ -95,8 +95,8 @@ public static class MonitorsEndpoints
                 ClearHeaders: body.ClearHeaders ?? false,
                 BodyTemplate: body.BodyTemplate,
                 ClearBodyTemplate: body.ClearBodyTemplate ?? false,
-                ApplicationId: body.ApplicationId,
-                ClearApplicationId: body.ClearApplicationId ?? false,
+                InstanceId: body.InstanceId,
+                ClearInstanceId: body.ClearInstanceId ?? false,
                 ProjectId: body.ProjectId,
                 ClearProjectId: body.ClearProjectId ?? false);
             var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
@@ -145,7 +145,7 @@ public static class MonitorsEndpoints
         int? TimeoutMs,
         IReadOnlyDictionary<string, string>? Headers,
         string? BodyTemplate,
-        string? ApplicationId,
+        string? InstanceId,
         string? ProjectId);
 
     public sealed record UpdateMonitorRequest(
@@ -159,8 +159,8 @@ public static class MonitorsEndpoints
         bool? ClearHeaders,
         string? BodyTemplate,
         bool? ClearBodyTemplate,
-        string? ApplicationId,
-        bool? ClearApplicationId,
+        string? InstanceId,
+        bool? ClearInstanceId,
         string? ProjectId,
         bool? ClearProjectId);
 

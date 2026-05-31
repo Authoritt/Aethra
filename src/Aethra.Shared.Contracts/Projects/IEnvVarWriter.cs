@@ -1,49 +1,59 @@
 namespace Aethra.Shared.Contracts.Projects;
 
 /// <summary>
-/// Permite a módulos externos (Services) **inyectar** env vars a nivel Application
-/// sin referenciar internals de Modules.Projects.
+/// Permite a módulos externos (Services, Mcp) inyectar env vars no-secretas a cualquier scope
+/// del modelo (Project, Template, Client, Instance) sin referenciar internals de Modules.Projects.
 ///
-/// Caso de uso F5: al crear un ServiceBinding, el provisioner genera credenciales y
-/// se las inyecta como env vars a la Application (DATABASE_URL, POSTGRES_*, REDIS_URL, etc.).
-/// Las variables marcadas con <c>isSecret=true</c> se cifran con DataProtection en
-/// Projects antes de persistirlas — el módulo externo no maneja el cifrado.
-///
-/// La implementación vive en Modules.Projects.Infrastructure y se registra en su <c>AddProjectsModule</c>.
+/// Para credenciales/secretos use <see cref="ISecretWriter"/> — las env vars planas viven en
+/// una tabla; los secrets viven en otra cifrada con DataProtection. F9.1 cableará ambas tablas
+/// y resoluciones.
 /// </summary>
 public interface IEnvVarWriter
 {
     /// <summary>
-    /// Upsert idempotente de un batch de env vars en una Application. Si una key ya existe
-    /// con el mismo <paramref name="source"/>, se sobrescribe. Keys de otras sources no se tocan
-    /// (un usuario manual no pierde su override).
+    /// Upsert idempotente de un batch de env vars en el <paramref name="scope"/> indicado.
+    /// Si una key ya existe con el mismo <paramref name="source"/>, se sobrescribe. Keys de
+    /// otras sources no se tocan (un usuario manual no pierde su override).
     /// </summary>
     /// <param name="source">
-    /// Origen lógico para auditoría y para revoke selectivo. Ej: <c>"binding:bnd_01H..."</c>.
+    /// Origen lógico para auditoría y revoke selectivo. Ej: <c>"binding:bnd_..."</c>.
     /// </param>
     Task UpsertManyAsync(
-        string applicationId,
+        EnvVarScope scope,
+        string scopeId,
         string source,
         IReadOnlyList<EnvVarUpsert> vars,
         CancellationToken ct);
 
     /// <summary>
-    /// Borra todas las env vars previamente inyectadas por una <paramref name="source"/> dada.
-    /// Útil al revocar un ServiceBinding: limpia DATABASE_URL/etc. inyectadas por ese binding.
+    /// Borra todas las env vars previamente inyectadas por una <paramref name="source"/> dada
+    /// dentro del <paramref name="scope"/>. Útil al revocar un ServiceBinding.
     /// </summary>
     Task RemoveBySourceAsync(
-        string applicationId,
+        EnvVarScope scope,
+        string scopeId,
         string source,
         CancellationToken ct);
 }
 
 /// <summary>
-/// Definición de una env var a inyectar. <paramref name="IsSecret"/> hace que Projects cifre
-/// el valor antes de persistirlo (oculto en UI, expuesto sólo al deployar).
+/// Scopes válidos para variables de entorno y secretos. Cada nivel resuelve en cascada:
+/// Instance &gt; Client &gt; Template &gt; Project (lo más específico gana).
+/// </summary>
+public enum EnvVarScope
+{
+    Project = 0,
+    Template = 1,
+    Client = 2,
+    Instance = 3,
+}
+
+/// <summary>
+/// Definición de una env var (no secreta) a inyectar. Para valores sensibles use
+/// <see cref="SecretUpsert"/> a través de <see cref="ISecretWriter"/>.
 /// </summary>
 public sealed record EnvVarUpsert(
     string Key,
     string Value,
     bool IsBuildTime,
-    bool IsRuntime,
-    bool IsSecret);
+    bool IsRuntime);

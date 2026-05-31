@@ -10,9 +10,9 @@ namespace Aethra.Modules.Mcp.Tools;
 public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller)
 {
     [McpServerTool(Name = "aethra_list_monitors", ReadOnly = true, OpenWorld = false)]
-    [Description("Lista monitores HTTP con filtros opcionales (application_id, project_id, status, is_enabled).")]
+    [Description("Lista monitores HTTP con filtros opcionales (instance_id, project_id, status, is_enabled).")]
     public async Task<object> ListAsync(
-        [Description("Filtro opcional por application_id.")] string? applicationId,
+        [Description("Filtro opcional por instance_id.")] string? instanceId,
         [Description("Filtro opcional por project_id.")] string? projectId,
         [Description("Filtro opcional por status ('Up', 'Down', 'Degraded', 'Unknown').")] string? status,
         [Description("Filtro opcional por is_enabled.")] bool? isEnabled,
@@ -22,7 +22,7 @@ public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller
         {
             return McpResponses.InsufficientScope(McpScopes.MonitoringRead);
         }
-        var q = new ListMonitorsQuery(applicationId, projectId, status, isEnabled);
+        var q = new ListMonitorsQuery(instanceId, projectId, status, isEnabled);
         var result = await mediator.Send(q, ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }

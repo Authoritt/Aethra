@@ -17,7 +17,7 @@ internal static class MonitorMapper
         IsEnabled: m.IsEnabled,
         LastCheckedAt: m.LastCheckedAt,
         ConsecutiveFailures: m.ConsecutiveFailures,
-        ApplicationId: m.ApplicationId,
+        InstanceId: m.InstanceId,
         ProjectId: m.ProjectId);
 
     public static MonitorDetailDto ToDetail(Monitor m) => new(
@@ -31,7 +31,7 @@ internal static class MonitorMapper
         TimeoutMs: m.TimeoutMs,
         Headers: m.Headers,
         BodyTemplate: m.BodyTemplate,
-        ApplicationId: m.ApplicationId,
+        InstanceId: m.InstanceId,
         ProjectId: m.ProjectId,
         IsEnabled: m.IsEnabled,
         Status: m.LastStatus.ToString(),

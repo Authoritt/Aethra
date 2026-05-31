@@ -54,7 +54,11 @@ internal sealed class RevokeBindingHandler(
         }
 
         binding.Revoke(clock.UtcNow);
-        await envVarWriter.RemoveBySourceAsync(binding.ApplicationId, $"binding:{binding.Id}", cancellationToken);
+        await envVarWriter.RemoveBySourceAsync(
+            EnvVarScope.Instance,
+            binding.InstanceId,
+            $"binding:{binding.Id}",
+            cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

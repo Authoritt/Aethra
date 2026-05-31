@@ -17,9 +17,9 @@ public sealed class NotesTools(IMediator mediator, IMcpCallerContext caller)
         string? Description);
 
     [McpServerTool(Name = "aethra_add_note", Destructive = false, Idempotent = false, OpenWorld = false)]
-    [Description("Crea una Note markdown asociada a un scope (Project/Environment/Application). Opcionalmente upserts pinned-facts en el mismo scope.")]
+    [Description("Crea una Note markdown asociada a un scope (Project/Template/Client/Instance). Opcionalmente upserts pinned-facts en el mismo scope.")]
     public async Task<object> AddNoteAsync(
-        [Description("Scope: 'Project', 'Environment' o 'Application'.")] string scopeType,
+        [Description("Scope: 'Project', 'Template', 'Client' o 'Instance'.")] string scopeType,
         [Description("ID del scope.")] string scopeId,
         [Description("Título de la nota.")] string title,
         [Description("Cuerpo markdown.")] string markdown,
@@ -33,7 +33,7 @@ public sealed class NotesTools(IMediator mediator, IMcpCallerContext caller)
         if (!Enum.TryParse<NoteScopeType>(scopeType, ignoreCase: true, out var scope) || !Enum.IsDefined(scope))
         {
             return McpResponses.Failure("note.invalid_scope",
-                $"scope_type='{scopeType}' inválido. Use Project, Environment o Application.",
+                $"scope_type='{scopeType}' inválido. Use Project, Template, Client o Instance.",
                 "validation");
         }
 

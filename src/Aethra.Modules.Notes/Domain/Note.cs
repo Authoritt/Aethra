@@ -4,7 +4,7 @@ using Aethra.Shared.Kernel.Domain;
 namespace Aethra.Modules.Notes.Domain;
 
 /// <summary>
-/// Nota markdown con scope polimórfico (Project/Environment/Application). El cuerpo es
+/// Nota markdown con scope polimórfico (Project/Template/Client/Instance). El cuerpo es
 /// markdown plano; el render se hace en el cliente. Puede tener imágenes adjuntas (owned
 /// entities <see cref="NoteImage"/>) cuyo binario vive fuera de BD via <see cref="INoteImageStore"/>.
 ///

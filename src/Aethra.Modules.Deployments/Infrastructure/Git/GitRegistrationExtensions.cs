@@ -1,27 +1,23 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Aethra.Modules.Deployments.Infrastructure.Git;
 
 /// <summary>
 /// Helpers DI para el subsistema de clones Git del módulo Deployments.
 ///
-/// Se llama desde <c>DeploymentsModule.AddDeploymentsModule</c>. Es idempotente:
-/// si el contenedor ya tiene un <see cref="IGitCloner"/> registrado (p.ej. un fake en tests),
-/// no lo sobreescribe.
+/// Estado F9.0 cleanup: stub. <c>IGitCloner</c> y su impl LibGit2Sharp fueron borrados como
+/// parte del refactor — F9.3 reintroducirá una abstracción nueva (probablemente delegada al
+/// satélite remoto en vez de clonar en el central). Mantenemos esta extensión vacía para que
+/// quien la llamase no rompa.
 /// </summary>
 public static class GitRegistrationExtensions
 {
     /// <summary>
-    /// Registra <see cref="IGitCloner"/> → <see cref="GitCloner"/> como singleton.
-    /// El cloner es stateless: cada clone se aísla en su propio directorio temporal,
-    /// por lo que no hay riesgo de compartir estado entre llamadas concurrentes.
+    /// No-op temporal. F9.3 registrará la nueva abstracción de clone Git.
     /// </summary>
     public static IServiceCollection AddAethraGit(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
-
-        services.TryAddSingleton<IGitCloner, GitCloner>();
         return services;
     }
 }

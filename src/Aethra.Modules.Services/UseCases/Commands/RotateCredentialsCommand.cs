@@ -56,7 +56,9 @@ internal sealed class RotateCredentialsHandler(
 
         // Reinyectar env vars (sobrescribe value de las que tenían password).
         var envVars = envVarMapper.Build(svc, binding, newCreds);
-        await envVarWriter.UpsertManyAsync(binding.ApplicationId,
+        await envVarWriter.UpsertManyAsync(
+            EnvVarScope.Instance,
+            binding.InstanceId,
             source: $"binding:{binding.Id}",
             vars: envVars,
             cancellationToken);

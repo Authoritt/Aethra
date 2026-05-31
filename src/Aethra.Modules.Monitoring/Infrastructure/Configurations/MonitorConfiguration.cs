@@ -83,7 +83,7 @@ internal sealed class MonitorConfiguration : IEntityTypeConfiguration<Monitor>
         builder.Ignore(m => m.Headers);
 
         builder.Property(m => m.BodyTemplate).HasColumnName("body_template").HasColumnType("text");
-        builder.Property(m => m.ApplicationId).HasColumnName("application_id").HasMaxLength(64);
+        builder.Property(m => m.InstanceId).HasColumnName("instance_id").HasMaxLength(64);
         builder.Property(m => m.ProjectId).HasColumnName("project_id").HasMaxLength(64);
         builder.Property(m => m.IsEnabled).HasColumnName("is_enabled").IsRequired();
 
@@ -101,7 +101,7 @@ internal sealed class MonitorConfiguration : IEntityTypeConfiguration<Monitor>
         // para tomar primero los que nunca se probaron o los más antiguos.
         builder.HasIndex(m => new { m.IsEnabled, m.LastCheckedAt })
             .HasDatabaseName("ix_monitors_enabled_last_checked");
-        builder.HasIndex(m => m.ApplicationId).HasDatabaseName("ix_monitors_application");
+        builder.HasIndex(m => m.InstanceId).HasDatabaseName("ix_monitors_instance");
         builder.HasIndex(m => m.ProjectId).HasDatabaseName("ix_monitors_project");
 
         builder.Ignore(m => m.DomainEvents);

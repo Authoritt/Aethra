@@ -27,8 +27,8 @@ public sealed record UpdateMonitorCommand(
     bool ClearHeaders,
     string? BodyTemplate,
     bool ClearBodyTemplate,
-    string? ApplicationId,
-    bool ClearApplicationId,
+    string? InstanceId,
+    bool ClearInstanceId,
     string? ProjectId,
     bool ClearProjectId) : ICommand<MonitorDetailDto>;
 
@@ -72,8 +72,8 @@ internal sealed class UpdateMonitorHandler(MonitoringDbContext db, IClock clock)
                 request.ClearHeaders,
                 request.BodyTemplate,
                 request.ClearBodyTemplate,
-                request.ApplicationId,
-                request.ClearApplicationId,
+                request.InstanceId,
+                request.ClearInstanceId,
                 request.ProjectId,
                 request.ClearProjectId,
                 clock.UtcNow);

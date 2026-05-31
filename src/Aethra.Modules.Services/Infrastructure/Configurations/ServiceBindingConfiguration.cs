@@ -36,7 +36,7 @@ internal sealed class ServiceBindingConfiguration : IEntityTypeConfiguration<Ser
             .HasForeignKey(b => b.ServiceId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.Property(b => b.ApplicationId).HasColumnName("application_id").HasMaxLength(64).IsRequired();
+        builder.Property(b => b.InstanceId).HasColumnName("instance_id").HasMaxLength(64).IsRequired();
         builder.Property(b => b.ResourceName).HasColumnName("resource_name").HasMaxLength(255).IsRequired();
 
         builder.Property(b => b.CredentialsCipher)
@@ -71,12 +71,12 @@ internal sealed class ServiceBindingConfiguration : IEntityTypeConfiguration<Ser
         builder.Property(b => b.RevokedAt).HasColumnName("revoked_at");
         builder.Property(b => b.LastRotatedAt).HasColumnName("last_rotated_at");
 
-        // Unicidad parcial: solo un binding activo por (application, service). Bindings revocados
+        // Unicidad parcial: solo un binding activo por (instance, service). Bindings revocados
         // se preservan para auditoria/rotacion historica, asi que filtramos por revoked_at IS NULL.
-        builder.HasIndex(b => new { b.ApplicationId, b.ServiceId })
+        builder.HasIndex(b => new { b.InstanceId, b.ServiceId })
             .IsUnique()
             .HasFilter("revoked_at IS NULL")
-            .HasDatabaseName("ux_service_bindings_app_service_active");
+            .HasDatabaseName("ux_service_bindings_instance_service_active");
 
         builder.Ignore(b => b.DomainEvents);
     }

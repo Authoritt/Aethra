@@ -40,7 +40,12 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         => _headers is null ? null : _headers.AsReadOnly();
 
     public string? BodyTemplate { get; private set; }
-    public string? ApplicationId { get; private set; }
+    /// <summary>
+    /// ID opcional de la <c>Instance</c> a la que pertenece este monitor (modelo F9). Permite
+    /// que un agregador "qué pasa con el tenant X" filtre por instance. Se mantiene como string
+    /// para no acoplar a internals de Modules.Projects.
+    /// </summary>
+    public string? InstanceId { get; private set; }
     public string? ProjectId { get; private set; }
     public bool IsEnabled { get; private set; }
 
@@ -61,7 +66,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         int timeoutMs,
         IReadOnlyDictionary<string, string>? headers,
         string? bodyTemplate,
-        string? applicationId,
+        string? instanceId,
         string? projectId,
         DateTimeOffset now) : base(id)
     {
@@ -74,7 +79,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         TimeoutMs = ClampTimeout(timeoutMs);
         _headers = headers is { Count: > 0 } ? new Dictionary<string, string>(headers, StringComparer.Ordinal) : null;
         BodyTemplate = bodyTemplate;
-        ApplicationId = applicationId;
+        InstanceId = instanceId;
         ProjectId = projectId;
         IsEnabled = true;
         CreatedAt = now;
@@ -98,7 +103,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         int timeoutMs,
         IReadOnlyDictionary<string, string>? headers,
         string? bodyTemplate,
-        string? applicationId,
+        string? instanceId,
         string? projectId,
         DateTimeOffset now)
     {
@@ -127,7 +132,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
             timeoutMs,
             headers,
             string.IsNullOrWhiteSpace(bodyTemplate) ? null : bodyTemplate,
-            string.IsNullOrWhiteSpace(applicationId) ? null : applicationId,
+            string.IsNullOrWhiteSpace(instanceId) ? null : instanceId,
             string.IsNullOrWhiteSpace(projectId) ? null : projectId,
             now);
         monitor.Raise(new MonitorCreatedEvent(monitor.Id, slug.Value, monitor.Url));
@@ -149,8 +154,8 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         bool clearHeaders,
         string? bodyTemplate,
         bool clearBodyTemplate,
-        string? applicationId,
-        bool clearApplicationId,
+        string? instanceId,
+        bool clearInstanceId,
         string? projectId,
         bool clearProjectId,
         DateTimeOffset now)
@@ -200,13 +205,13 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         {
             BodyTemplate = bodyTemplate;
         }
-        if (clearApplicationId)
+        if (clearInstanceId)
         {
-            ApplicationId = null;
+            InstanceId = null;
         }
-        else if (!string.IsNullOrWhiteSpace(applicationId))
+        else if (!string.IsNullOrWhiteSpace(instanceId))
         {
-            ApplicationId = applicationId;
+            InstanceId = instanceId;
         }
         if (clearProjectId)
         {

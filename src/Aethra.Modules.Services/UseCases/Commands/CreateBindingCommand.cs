@@ -17,7 +17,7 @@ namespace Aethra.Modules.Services.UseCases.Commands;
 
 public sealed record CreateBindingCommand(
     string ServiceId,
-    string ApplicationId,
+    string InstanceId,
     string? ResourceName,
     BindingPermissions Permissions,
     string? EnvVarPrefix,
@@ -28,7 +28,7 @@ public sealed class CreateBindingValidator : AbstractValidator<CreateBindingComm
     public CreateBindingValidator()
     {
         RuleFor(c => c.ServiceId).NotEmpty();
-        RuleFor(c => c.ApplicationId).NotEmpty();
+        RuleFor(c => c.InstanceId).NotEmpty();
         RuleFor(c => c.ResourceName)
             .Matches("^[a-zA-Z_][a-zA-Z0-9_]{0,62}$")
             .When(c => !string.IsNullOrWhiteSpace(c.ResourceName))
@@ -38,7 +38,7 @@ public sealed class CreateBindingValidator : AbstractValidator<CreateBindingComm
 
 internal sealed class CreateBindingHandler(
     ServicesDbContext db,
-    IApplicationLookup appLookup,
+    IInstanceLookup instanceLookup,
     IEnumerable<IServiceProvisioner> provisioners,
     IBindingCredentialsCodec bindingCodec,
     IEnvVarWriter envVarWriter,
@@ -61,23 +61,23 @@ internal sealed class CreateBindingHandler(
                 $"El servicio está en estado '{svc.Status}'. Debe estar 'Ready' para crear bindings.");
         }
 
-        var app = await appLookup.GetByIdAsync(request.ApplicationId, cancellationToken);
-        if (app is null)
+        var instance = await instanceLookup.GetByIdAsync(request.InstanceId, cancellationToken);
+        if (instance is null)
         {
-            return Error.NotFound("application.not_found", $"Application '{request.ApplicationId}' no existe.");
+            return Error.NotFound("instance.not_found", $"Instance '{request.InstanceId}' no existe.");
         }
 
-        // Si ya existe binding activo para (svc, app) — convención: uno solo activo a la vez.
+        // Convención: solo un binding activo por (svc, instance).
         var existing = await db.ServiceBindings.AnyAsync(
-            b => b.ServiceId == svc.Id && b.ApplicationId == request.ApplicationId && b.RevokedAt == null,
+            b => b.ServiceId == svc.Id && b.InstanceId == request.InstanceId && b.RevokedAt == null,
             cancellationToken);
         if (existing)
         {
             return Error.Conflict("binding.duplicate",
-                "Ya existe un binding activo para esta application+service. Revoca el anterior primero.");
+                "Ya existe un binding activo para esta instance+service. Revoca el anterior primero.");
         }
 
-        var resourceName = (request.ResourceName ?? app.Slug).Trim();
+        var resourceName = (request.ResourceName ?? instance.Slug).Trim();
         var username = $"{resourceName}_user";
         var password = CredentialsGenerator.GeneratePassword(32);
         var newCreds = new BindingCredentials(username, password);
@@ -86,7 +86,7 @@ internal sealed class CreateBindingHandler(
         ServiceBinding binding;
         try
         {
-            binding = ServiceBinding.Create(svc.Id, request.ApplicationId, resourceName, encrypted,
+            binding = ServiceBinding.Create(svc.Id, request.InstanceId, resourceName, encrypted,
                 request.Permissions, request.EnvVarPrefix, request.MigrationsHook, clock.UtcNow);
         }
         catch (ArgumentException ex)
@@ -112,15 +112,17 @@ internal sealed class CreateBindingHandler(
 
         db.ServiceBindings.Add(binding);
 
-        // Inyectar env vars en la Application (DATABASE_URL, *_USER, *_PASSWORD, etc.).
+        // Inyectar env vars en la Instance (DATABASE_URL, *_USER, *_PASSWORD, etc.).
         var envVars = envVarMapper.Build(svc, binding, newCreds);
-        await envVarWriter.UpsertManyAsync(request.ApplicationId,
+        await envVarWriter.UpsertManyAsync(
+            EnvVarScope.Instance,
+            request.InstanceId,
             source: $"binding:{binding.Id}",
             vars: envVars,
             cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return ServiceMappers.ToDto(binding, app.Slug);
+        return ServiceMappers.ToDto(binding, instance.Slug);
     }
 }

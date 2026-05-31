@@ -78,7 +78,7 @@ public static class ServicesEndpoints
                 }
                 hook = new MigrationsHook(h.Command, h.TimeoutSeconds, h.FailDeployOnError, runOn);
             }
-            var cmd = new CreateBindingCommand(serviceId, body.ApplicationId, body.ResourceName, perms,
+            var cmd = new CreateBindingCommand(serviceId, body.InstanceId, body.ResourceName, perms,
                 body.EnvVarPrefix, hook);
             var r = await m.Send(cmd, ct);
             return r.IsSuccess
@@ -106,7 +106,7 @@ public static class ServicesEndpoints
 
     public sealed record CreateServiceRequest(string TemplateId, string Slug, string Name, string TargetVmId, bool? ExposedExternally);
     public sealed record CreateBindingRequest(
-        string ApplicationId,
+        string InstanceId,
         string? ResourceName,
         string Permissions,
         string? EnvVarPrefix,

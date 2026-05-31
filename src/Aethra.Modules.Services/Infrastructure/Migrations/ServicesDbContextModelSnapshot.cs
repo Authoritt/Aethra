@@ -135,11 +135,11 @@ namespace Aethra.Modules.Services.Infrastructure.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("id");
 
-                    b.Property<string>("ApplicationId")
+                    b.Property<string>("InstanceId")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
-                        .HasColumnName("application_id");
+                        .HasColumnName("instance_id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -190,9 +190,9 @@ namespace Aethra.Modules.Services.Infrastructure.Migrations
 
                     b.HasIndex("ServiceId");
 
-                    b.HasIndex("ApplicationId", "ServiceId")
+                    b.HasIndex("InstanceId", "ServiceId")
                         .IsUnique()
-                        .HasDatabaseName("ux_service_bindings_app_service_active")
+                        .HasDatabaseName("ux_service_bindings_instance_service_active")
                         .HasFilter("revoked_at IS NULL");
 
                     b.ToTable("service_bindings", "services");

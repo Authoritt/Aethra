@@ -43,8 +43,8 @@ public sealed record ServiceTemplateDto(
 public sealed record ServiceBindingDto(
     string Id,
     string ServiceId,
-    string ApplicationId,
-    string? ApplicationSlug,
+    string InstanceId,
+    string? InstanceSlug,
     string ResourceName,
     string Permissions,
     string EnvVarPrefix,

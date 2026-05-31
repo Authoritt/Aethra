@@ -10,9 +10,9 @@ namespace Aethra.Modules.Mcp.Tools;
 public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller)
 {
     [McpServerTool(Name = "aethra_attach_domain", Destructive = false, Idempotent = false, OpenWorld = false)]
-    [Description("Adjunta un hostname a una Application: crea DNS record en Cloudflare (CNAME proxied), crea Route YARP y opcionalmente un Monitor HTTP. Cada paso devuelve su propio status.")]
+    [Description("Adjunta un hostname a una Instance: crea DNS record en Cloudflare (CNAME proxied), crea Route YARP y opcionalmente un Monitor HTTP. Cada paso devuelve su propio status.")]
     public async Task<object> AttachDomainAsync(
-        [Description("ID de la Application (formato 'app_...').")] string applicationId,
+        [Description("ID de la Instance (formato 'ins_...').")] string instanceId,
         [Description("Hostname público (FQDN).")] string hostname,
         [Description("ID interno de la zona Cloudflare (formato 'cfz_...'). Si null, se intenta resolver por sufijo del hostname.")] string? cloudflareZoneId,
         [Description("Si true, crea también un monitor HTTP para el hostname.")] bool createMonitor,
@@ -22,7 +22,7 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
         {
             return McpResponses.InsufficientScope(McpScopes.CloudflareWrite);
         }
-        var cmd = new AttachDomainCommand(applicationId, hostname, cloudflareZoneId, createMonitor);
+        var cmd = new AttachDomainCommand(instanceId, hostname, cloudflareZoneId, createMonitor);
         var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }

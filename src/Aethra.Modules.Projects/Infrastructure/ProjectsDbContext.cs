@@ -1,6 +1,3 @@
-using Aethra.Modules.Projects.Domain;
-using Aethra.Modules.Projects.Domain.EnvVars;
-using Aethra.Modules.Projects.Infrastructure.Configurations;
 using Aethra.Shared.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,23 +6,20 @@ namespace Aethra.Modules.Projects.Infrastructure;
 /// <summary>
 /// DbContext del módulo Projects. Schema PostgreSQL: <c>projects</c>.
 /// Hereda outbox_messages de la base.
+///
+/// Estado actual (F9.0 cleanup): vacío de DbSets. La sub-fase persistence reintroducirá los
+/// DbSets de Project + EnvironmentVariable + los aggregates de A1 (Template, Client, Instance)
+/// con sus respectivas configuraciones, y se regenerarán las migraciones desde cero.
 /// </summary>
 public sealed class ProjectsDbContext(DbContextOptions<ProjectsDbContext> options)
     : AethraModuleDbContext(options)
 {
     public override string SchemaName => "projects";
 
-    public DbSet<Project> Projects => Set<Project>();
-    public DbSet<Domain.Environment> Environments => Set<Domain.Environment>();
-    public DbSet<Application> Applications => Set<Application>();
-    public DbSet<EnvironmentVariable> EnvironmentVariables => Set<EnvironmentVariable>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        modelBuilder.ApplyConfiguration(new ProjectConfiguration());
-        modelBuilder.ApplyConfiguration(new EnvironmentConfiguration());
-        modelBuilder.ApplyConfiguration(new ApplicationConfiguration());
-        modelBuilder.ApplyConfiguration(new EnvironmentVariableConfiguration());
+        // F9.0 persistence sub-fase añadirá ApplyConfiguration() para Project, EnvironmentVariable,
+        // Template, Client, Instance y sus owned entities (TemplateSource, TemplateBuild, etc.).
     }
 }

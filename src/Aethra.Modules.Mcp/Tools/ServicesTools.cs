@@ -55,11 +55,11 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
     }
 
     [McpServerTool(Name = "aethra_bind_service", Destructive = false, Idempotent = false, OpenWorld = false)]
-    [Description("Crea un binding (Application ↔ ManagedService): provisiona credenciales y las inyecta como env vars (DATABASE_URL, etc).")]
+    [Description("Crea un binding (Instance ↔ ManagedService): provisiona credenciales y las inyecta como env vars (DATABASE_URL, etc).")]
     public async Task<object> BindServiceAsync(
-        [Description("ID de la Application.")] string applicationId,
+        [Description("ID de la Instance (formato 'ins_...').")] string instanceId,
         [Description("ID del ManagedService.")] string serviceId,
-        [Description("Nombre del recurso interno (DB name, namespace, etc.). Si null, se infiere del slug de la app.")] string? resourceName,
+        [Description("Nombre del recurso interno (DB name, namespace, etc.). Si null, se infiere del slug de la instance.")] string? resourceName,
         [Description("Permisos: 'Owner', 'ReadWrite', 'ReadOnly'. Default 'ReadWrite'.")] string? permissions,
         [Description("Prefijo opcional para los nombres de env vars (ej. 'DB_').")] string? envVarPrefix,
         CancellationToken ct)
@@ -79,7 +79,7 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
         // — se puede setear vía REST o en una iteración futura de la tool MCP (no bloquea binding).
         var cmd = new CreateBindingCommand(
             ServiceId: serviceId,
-            ApplicationId: applicationId,
+            InstanceId: instanceId,
             ResourceName: resourceName,
             Permissions: perm,
             EnvVarPrefix: envVarPrefix,

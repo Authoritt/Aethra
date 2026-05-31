@@ -33,10 +33,10 @@ namespace Aethra.Modules.Monitoring.Infrastructure.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("id");
 
-                    b.Property<string>("ApplicationId")
+                    b.Property<string>("InstanceId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
-                        .HasColumnName("application_id");
+                        .HasColumnName("instance_id");
 
                     b.Property<string>("BodyTemplate")
                         .HasColumnType("text")
@@ -116,8 +116,8 @@ namespace Aethra.Modules.Monitoring.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ApplicationId")
-                        .HasDatabaseName("ix_monitors_application");
+                    b.HasIndex("InstanceId")
+                        .HasDatabaseName("ix_monitors_instance");
 
                     b.HasIndex("ProjectId")
                         .HasDatabaseName("ix_monitors_project");

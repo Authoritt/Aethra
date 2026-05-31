@@ -15,7 +15,7 @@ public sealed record MonitorSummaryDto(
     bool IsEnabled,
     DateTimeOffset? LastCheckedAt,
     int ConsecutiveFailures,
-    string? ApplicationId,
+    string? InstanceId,
     string? ProjectId);
 
 /// <summary>
@@ -32,7 +32,7 @@ public sealed record MonitorDetailDto(
     int TimeoutMs,
     IReadOnlyDictionary<string, string>? Headers,
     string? BodyTemplate,
-    string? ApplicationId,
+    string? InstanceId,
     string? ProjectId,
     bool IsEnabled,
     string Status,

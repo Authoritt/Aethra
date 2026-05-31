@@ -11,7 +11,7 @@ namespace Aethra.Modules.Services.UseCases.Queries;
 public sealed record ListBindingsQuery(string ServiceId, bool IncludeRevoked = false)
     : IQuery<IReadOnlyList<ServiceBindingDto>>;
 
-internal sealed class ListBindingsHandler(ServicesDbContext db, IApplicationLookup appLookup)
+internal sealed class ListBindingsHandler(ServicesDbContext db, IInstanceLookup instanceLookup)
     : IQueryHandler<ListBindingsQuery, IReadOnlyList<ServiceBindingDto>>
 {
     public async Task<Result<IReadOnlyList<ServiceBindingDto>>> Handle(ListBindingsQuery request, CancellationToken cancellationToken)
@@ -24,12 +24,12 @@ internal sealed class ListBindingsHandler(ServicesDbContext db, IApplicationLook
         }
         var bindings = await q.OrderBy(b => b.CreatedAt).ToListAsync(cancellationToken);
 
-        // Enriquecer con slug (lookup por app). Pocas bindings esperadas → N+1 aceptable en MVP.
+        // Enriquecer con slug (lookup por instance). Pocas bindings esperadas → N+1 aceptable en MVP.
         var dtos = new List<ServiceBindingDto>(bindings.Count);
         foreach (var b in bindings)
         {
-            var app = await appLookup.GetByIdAsync(b.ApplicationId, cancellationToken);
-            dtos.Add(ServiceMappers.ToDto(b, app?.Slug));
+            var instance = await instanceLookup.GetByIdAsync(b.InstanceId, cancellationToken);
+            dtos.Add(ServiceMappers.ToDto(b, instance?.Slug));
         }
         return Result.Success<IReadOnlyList<ServiceBindingDto>>(dtos);
     }

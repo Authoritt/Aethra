@@ -15,7 +15,7 @@ using Microsoft.Extensions.Logging;
 namespace Aethra.Modules.Mcp.UseCases;
 
 /// <summary>
-/// Adjunta un dominio a una Application: crea el DNS record en Cloudflare (CNAME proxied),
+/// Adjunta un dominio a una Instance: crea el DNS record en Cloudflare (CNAME proxied),
 /// crea la Route YARP y opcionalmente un Monitor HTTP. Resultado idempotente best-effort:
 /// si el record ya existe, no aborta el route; si el route ya existe, no aborta el monitor.
 ///
@@ -23,13 +23,13 @@ namespace Aethra.Modules.Mcp.UseCases;
 /// que el módulo Mcp pueda referenciar otros.
 /// </summary>
 public sealed record AttachDomainCommand(
-    string ApplicationId,
+    string InstanceId,
     string Hostname,
     string? CloudflareZoneId,
     bool CreateMonitor) : ICommand<AttachDomainResult>;
 
 public sealed record AttachDomainResult(
-    string ApplicationId,
+    string InstanceId,
     string Hostname,
     AttachDomainStepResult Dns,
     AttachDomainStepResult Route,
@@ -44,16 +44,16 @@ public sealed record AttachDomainStepResult(
 
 internal sealed class AttachDomainHandler(
     IMediator mediator,
-    IApplicationLookup appLookup,
+    IInstanceLookup instanceLookup,
     ILogger<AttachDomainHandler> logger)
     : ICommandHandler<AttachDomainCommand, AttachDomainResult>
 {
     public async Task<Result<AttachDomainResult>> Handle(AttachDomainCommand request, CancellationToken cancellationToken)
     {
-        var app = await appLookup.GetByIdAsync(request.ApplicationId, cancellationToken).ConfigureAwait(false);
-        if (app is null)
+        var instance = await instanceLookup.GetByIdAsync(request.InstanceId, cancellationToken).ConfigureAwait(false);
+        if (instance is null)
         {
-            return Error.NotFound("application.not_found", $"Application '{request.ApplicationId}' no existe.");
+            return Error.NotFound("instance.not_found", $"Instance '{request.InstanceId}' no existe.");
         }
 
         var hostname = request.Hostname.Trim().ToLowerInvariant();
@@ -84,7 +84,7 @@ internal sealed class AttachDomainHandler(
                 Content: "proxy.aethra.local",  // CNAME al proxy — el operador puede ajustarlo después.
                 Ttl: 1,                         // 1 = "auto" en Cloudflare cuando proxied=true.
                 Proxied: true,
-                Comment: $"attach_domain by mcp for app {app.ApplicationId}");
+                Comment: $"attach_domain by mcp for instance {instance.InstanceId}");
 
             var dnsResult = await mediator.Send(dnsCmd, cancellationToken).ConfigureAwait(false);
             dnsStep = dnsResult.IsSuccess
@@ -99,7 +99,7 @@ internal sealed class AttachDomainHandler(
         }
 
         // -------- Paso 2: Route YARP --------
-        var backendUrl = BuildBackendUrl(app);
+        var backendUrl = BuildBackendUrl(instance);
         var routeCmd = new CreateRouteCommand(hostname, backendUrl, TlsEnabled: true);
         var routeResult = await mediator.Send(routeCmd, cancellationToken).ConfigureAwait(false);
         var routeStep = routeResult.IsSuccess
@@ -131,8 +131,8 @@ internal sealed class AttachDomainHandler(
                 TimeoutMs: 10000,
                 Headers: null,
                 BodyTemplate: null,
-                ApplicationId: app.ApplicationId,
-                ProjectId: app.ProjectId);
+                InstanceId: instance.InstanceId,
+                ProjectId: instance.ProjectId);
             var monitorResult = await mediator.Send(monitorCmd, cancellationToken).ConfigureAwait(false);
             monitorStep = monitorResult.IsSuccess
                 ? new AttachDomainStepResult(false, true, monitorResult.Value.Id, null, null)
@@ -140,7 +140,7 @@ internal sealed class AttachDomainHandler(
         }
 
         return new AttachDomainResult(
-            ApplicationId: app.ApplicationId,
+            InstanceId: instance.InstanceId,
             Hostname: hostname,
             Dns: dnsStep,
             Route: routeStep,
@@ -174,12 +174,12 @@ internal sealed class AttachDomainHandler(
         return match?.Id;
     }
 
-    private static string BuildBackendUrl(ApplicationForDeployView app)
+    private static string BuildBackendUrl(InstanceForDeployView instance)
     {
-        // Convención: el satélite expone el contenedor en su VM en el puerto declarado por la app.
+        // Convención: el satélite expone el contenedor en su VM en el puerto declarado.
         // Si no hay primary port, asumimos 8080 (default razonable).
-        var port = app.PrimaryContainerPort ?? 8080;
-        return $"http://{app.ContainerName}:{port}";
+        var port = instance.PrimaryContainerPort ?? 8080;
+        return $"http://{instance.ContainerName}:{port}";
     }
 
     private static string SafeSlug(string hostname)

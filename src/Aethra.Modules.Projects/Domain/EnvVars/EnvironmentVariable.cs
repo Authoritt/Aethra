@@ -3,26 +3,32 @@ using Aethra.Shared.Kernel.Domain;
 namespace Aethra.Modules.Projects.Domain.EnvVars;
 
 /// <summary>
-/// Variable de entorno con scope polimórfico. La misma tabla almacena variables a nivel
-/// Project, Environment y Application — se distingue por (<see cref="ScopeType"/>, <see cref="ScopeId"/>).
+/// Variable de entorno (no secreta) con scope polimórfico. La misma tabla almacena variables a
+/// nivel Project, Template, Client e Instance — se distingue por (<see cref="ScopeType"/>,
+/// <see cref="ScopeId"/>).
 ///
-/// Resolución (lo más cercano gana): Application &gt; Environment &gt; Project.
-/// Ver <see cref="EnvVarResolver"/>.
+/// Resolución (lo más cercano gana): Instance &gt; Client &gt; Template &gt; Project.
+/// Los secretos viven en una tabla separada (ver <c>ISecretWriter</c>) — esta clase NO porta
+/// el flag <c>IsSecret</c>: F9.0 simplifica el modelo dividiendo secretos en otra entidad.
 /// </summary>
 public sealed class EnvironmentVariable : Entity<EnvVarId>
 {
     public EnvScopeType ScopeType { get; private set; }
-    public string ScopeId { get; private set; }    // string para soportar IDs heterogéneos (prj_*, env_*, app_*)
+    /// <summary>
+    /// ID textual del scope. Heterogéneo: <c>prj_*</c>, <c>tpl_*</c>, <c>cli_*</c> o <c>ins_*</c>
+    /// según <see cref="ScopeType"/>. Mantener string evita FK polimórfico en BD.
+    /// </summary>
+    public string ScopeId { get; private set; }
     public string Key { get; private set; }
     public string Value { get; private set; }
     public bool IsBuildTime { get; private set; }
     public bool IsRuntime { get; private set; }
-    public bool IsSecret { get; private set; }
-    public bool IsLiteral { get; private set; }    // si true, no interpolar ${...} en el valor
+    /// <summary>Si <c>true</c>, no interpolar <c>${...}</c> en el valor.</summary>
+    public bool IsLiteral { get; private set; }
     public bool IsMultiline { get; private set; }
     /// <summary>
     /// Origen lógico de la variable. <c>null</c> = creada manualmente por usuario.
-    /// Valores conocidos: <c>"binding:bnd_..."</c> (inyectada por un ServiceBinding F5).
+    /// Valores conocidos: <c>"binding:bnd_..."</c> (inyectada por un ServiceBinding).
     /// Permite revoke selectivo sin pisar overrides manuales.
     /// </summary>
     public string? Source { get; private set; }
@@ -37,7 +43,6 @@ public sealed class EnvironmentVariable : Entity<EnvVarId>
         string value,
         bool isBuildTime,
         bool isRuntime,
-        bool isSecret,
         bool isLiteral,
         bool isMultiline,
         string? source,
@@ -49,7 +54,6 @@ public sealed class EnvironmentVariable : Entity<EnvVarId>
         Value = value;
         IsBuildTime = isBuildTime;
         IsRuntime = isRuntime;
-        IsSecret = isSecret;
         IsLiteral = isLiteral;
         IsMultiline = isMultiline;
         Source = source;
@@ -65,7 +69,6 @@ public sealed class EnvironmentVariable : Entity<EnvVarId>
         DateTimeOffset now,
         bool isBuildTime = true,
         bool isRuntime = true,
-        bool isSecret = false,
         bool isLiteral = false,
         bool isMultiline = false,
         string? source = null)
@@ -79,7 +82,6 @@ public sealed class EnvironmentVariable : Entity<EnvVarId>
             value ?? string.Empty,
             isBuildTime,
             isRuntime,
-            isSecret,
             isLiteral,
             isMultiline,
             source,
@@ -92,7 +94,7 @@ public sealed class EnvironmentVariable : Entity<EnvVarId>
         UpdatedAt = now;
     }
 
-    public void UpdateFlags(bool? isBuildTime, bool? isRuntime, bool? isSecret, bool? isLiteral, bool? isMultiline,
+    public void UpdateFlags(bool? isBuildTime, bool? isRuntime, bool? isLiteral, bool? isMultiline,
         DateTimeOffset now)
     {
         if (isBuildTime is not null)
@@ -102,10 +104,6 @@ public sealed class EnvironmentVariable : Entity<EnvVarId>
         if (isRuntime is not null)
         {
             IsRuntime = isRuntime.Value;
-        }
-        if (isSecret is not null)
-        {
-            IsSecret = isSecret.Value;
         }
         if (isLiteral is not null)
         {

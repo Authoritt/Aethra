@@ -2,26 +2,20 @@ using Aethra.Shared.Kernel.Domain;
 
 namespace Aethra.Modules.Projects.Domain.Events;
 
+/// <summary>
+/// Eventos de dominio del aggregate <c>Project</c>. Los aggregates hijos del modelo nuevo
+/// (Template, Client, Instance) emiten sus propios eventos en sus respectivas carpetas.
+/// </summary>
 public sealed record ProjectCreatedEvent(ProjectId ProjectId, string Slug, string Name) : DomainEvent;
 
 public sealed record ProjectRenamedEvent(ProjectId ProjectId, string OldName, string NewName) : DomainEvent;
 
-public sealed record ProjectDeletedEvent(ProjectId ProjectId) : DomainEvent;
-
-public sealed record EnvironmentAddedEvent(ProjectId ProjectId, EnvironmentId EnvironmentId, string Name) : DomainEvent;
-
-public sealed record EnvironmentRemovedEvent(ProjectId ProjectId, EnvironmentId EnvironmentId) : DomainEvent;
-
-public sealed record ApplicationCreatedEvent(
+/// <summary>
+/// La metadata visual del proyecto (descripción, color, icono) cambió. No incluye el nombre —
+/// para renombres se emite <see cref="ProjectRenamedEvent"/>.
+/// </summary>
+public sealed record ProjectAppearanceUpdatedEvent(
     ProjectId ProjectId,
-    EnvironmentId EnvironmentId,
-    ApplicationId ApplicationId,
-    string Slug,
-    string Name,
-    string GitRepoUrl,
-    string Branch
-) : DomainEvent;
-
-public sealed record ApplicationRenamedEvent(ApplicationId ApplicationId, string OldName, string NewName) : DomainEvent;
-
-public sealed record ApplicationDeletedEvent(ApplicationId ApplicationId) : DomainEvent;
+    string? Description,
+    string? Color,
+    string? Icon) : DomainEvent;

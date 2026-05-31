@@ -1,9 +1,4 @@
 using Aethra.Modules.Deployments.Infrastructure;
-using Aethra.Modules.Deployments.Infrastructure.Deploy;
-using Aethra.Modules.Deployments.Infrastructure.Git;
-using Aethra.Modules.Deployments.Infrastructure.Queue;
-using Aethra.Modules.Deployments.Presentation;
-using Aethra.Modules.Deployments.UseCases.Commands;
 using Aethra.Shared.Infrastructure.Modules;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -12,6 +7,17 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aethra.Modules.Deployments;
 
+/// <summary>
+/// Punto de entrada del módulo Deployments.
+///
+/// Estado F9.0 cleanup: el módulo está en stub. Solo registra el DbContext (vacío de DbSets,
+/// solo con outbox) para que MigrationsBootstrap no falle por ausencia y para reservar el
+/// schema en BD. Las dependencias DI (DeployOrchestrator, DeployWorker, IDeployJobQueue) se
+/// reintroducirán en F9.3/F9.4 sobre el nuevo modelo Build + DeployTask.
+///
+/// El handler de webhooks vive aquí (<c>Presentation.WebhookEndpoints</c>) pero está stubeado
+/// — devuelve 503 hasta que F9.3 cablee el nuevo lookup ITemplateLookup.
+/// </summary>
 public static class DeploymentsModule
 {
     public static IServiceCollection AddDeploymentsModule(this IServiceCollection services,
@@ -22,24 +28,13 @@ public static class DeploymentsModule
 
         services.AddAethraModuleDbContext<DeploymentsDbContext>(conn);
 
-        // Git clone wrapper (stateless, singleton). Lo usa DeployWorker para checkout antes del build.
-        services.AddAethraGit();
-
-        services.AddSingleton<IDeployJobQueue, InMemoryDeployJobQueue>();
-        services.AddScoped<IDeployOrchestrator, DeployOrchestrator>();
-        services.AddHostedService<DeployWorker>();
-
-        // IRemoteBuildExecutor: opcional en F4. Si nadie registra una implementación,
-        // el orquestador entra en modo "dry-run" (state machine completo, sin Docker real).
-        // F4.5 registrará LocalDockerExecutor o SatelliteRpcExecutor según target VM.
-
         return services;
     }
 
+    /// <summary>
+    /// Stub. F9.3 reintroducirá <c>MapWebhookEndpoints</c> y <c>MapDeploysEndpoints</c>
+    /// con la nueva surface API basada en Templates + Instances.
+    /// </summary>
     public static IEndpointRouteBuilder MapDeploymentsModuleEndpoints(this IEndpointRouteBuilder app)
-    {
-        app.MapWebhookEndpoints();
-        app.MapDeploysEndpoints();
-        return app;
-    }
+        => app;
 }
