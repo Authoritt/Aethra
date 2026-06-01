@@ -1,10 +1,8 @@
-using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.UseCases.Commands;
 using Aethra.Modules.Identity.UseCases.Queries;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Results;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -17,12 +15,12 @@ public static class ApiKeysEndpoints
     public static IEndpointRouteBuilder MapApiKeysEndpoints(this IEndpointRouteBuilder app)
     {
         // Gestión de API keys: SOLO via cookie. Una API key no puede crear otra API key.
+        // Usa la policy "CookieOnly" registrada en apps/api/Program.cs — pasar
+        // AuthenticationSchemes en un AuthorizeAttribute NO filtra el scheme cuando
+        // la default policy del host ya autenticó con cualquier otro scheme.
         var group = app.MapGroup("/api/identity/api-keys")
             .WithTags("Identity")
-            .RequireAuthorization(new AuthorizeAttribute
-            {
-                AuthenticationSchemes = ApiKeyAuthSchemes.CookieScheme,
-            });
+            .RequireAuthorization("CookieOnly");
 
         group.MapGet("/", async (IMediator m, CancellationToken ct) =>
             ToResult(await m.Send(new ListApiKeysQuery(), ct)))

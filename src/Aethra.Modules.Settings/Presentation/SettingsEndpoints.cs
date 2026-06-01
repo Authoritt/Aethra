@@ -8,7 +8,6 @@ using Aethra.Modules.Settings.UseCases.IntegrationCredentials.Queries;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Results;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -19,11 +18,11 @@ namespace Aethra.Modules.Settings.Presentation;
 public static class SettingsEndpoints
 {
     /// <summary>
-    /// Constante duplicada (NO referenciada) de <c>Aethra.Modules.Identity.Infrastructure.Authentication.ApiKeyAuthSchemes.CookieScheme</c>
-    /// para no acoplar este módulo a internals de Identity. El host (apps/api) registra
-    /// el cookie scheme con este mismo nombre en <c>AuthSchemes.Cookie</c>.
+    /// Nombre de la policy que el host registra en <c>apps/api/Program.cs</c> para
+    /// endpoints que SOLO deben aceptar autenticación por cookie (no API keys).
+    /// Duplicado intencionalmente para no acoplar este módulo a internals del host.
     /// </summary>
-    private const string CookieScheme = "aethra.cookie";
+    private const string CookieOnlyPolicy = "CookieOnly";
 
     public static IEndpointRouteBuilder MapSettingsEndpoints(this IEndpointRouteBuilder app)
     {
@@ -41,10 +40,7 @@ public static class SettingsEndpoints
     {
         var group = app.MapGroup("/api/settings/integrations")
             .WithTags("Settings")
-            .RequireAuthorization(new AuthorizeAttribute
-            {
-                AuthenticationSchemes = CookieScheme,
-            });
+            .RequireAuthorization(CookieOnlyPolicy);
 
         group.MapGet("/", async (IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new ListIntegrationCredentialsQuery(), ct)))

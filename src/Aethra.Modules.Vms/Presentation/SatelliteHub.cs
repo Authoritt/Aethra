@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Aethra.Modules.Vms.Authentication;
 using Aethra.Modules.Vms.Domain;
 using Aethra.Modules.Vms.Infrastructure;
+using Aethra.Shared.Contracts.Containers;
 using Aethra.Shared.Contracts.Vms;
 using Aethra.Shared.Infrastructure.Outbox;
 using Aethra.Shared.Kernel.Time;
@@ -12,6 +13,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Aethra.Modules.Vms.Presentation;
@@ -98,6 +100,86 @@ public sealed class SatelliteHub(
         await integrationBus.PublishAsync(
             new ContainersReportedEvent(vmId.ToString()!, snapshot),
             Context.ConnectionAborted);
+    }
+
+    // -------------------------------------------------------------------------
+    // Respuestas RPC del satélite (canal central → satélite → central). El satélite
+    // invoca estos métodos como callback al request original; cada uno resuelve el
+    // TaskCompletionSource pendiente registrado por SignalRSatelliteRpcClient.
+    // -------------------------------------------------------------------------
+
+    public Task BuildImageResponse(BuildImageResponse response)
+    {
+        Callbacks().CompleteRequest(response.CorrelationId, response);
+        return Task.CompletedTask;
+    }
+
+    public Task RunContainerResponse(RunContainerResponse response)
+    {
+        Callbacks().CompleteRequest(response.CorrelationId, response);
+        return Task.CompletedTask;
+    }
+
+    public Task StopContainerAck(string correlationId)
+    {
+        Callbacks().CompleteRequest(correlationId, new object());
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveContainerAck(string correlationId)
+    {
+        Callbacks().CompleteRequest(correlationId, new object());
+        return Task.CompletedTask;
+    }
+
+    public Task ListContainersResponse(ListContainersResponse response)
+    {
+        Callbacks().CompleteRequest(response.CorrelationId, response);
+        return Task.CompletedTask;
+    }
+
+    public Task RpcFailed(string correlationId, string errorMessage)
+    {
+        Callbacks().FailRequest(correlationId, new InvalidOperationException(errorMessage));
+        return Task.CompletedTask;
+    }
+
+    public Task LogChunkPush(LogChunk chunk)
+    {
+        Callbacks().PushLogChunk(chunk);
+        return Task.CompletedTask;
+    }
+
+    public Task LogStreamCompleted(string correlationId, string? errorMessage)
+    {
+        Callbacks().CompleteStream(
+            correlationId,
+            errorMessage is null ? null : new InvalidOperationException(errorMessage));
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Resuelve <see cref="ISatelliteRpcCallbacks"/> del scope del hub. Es opcional —
+    /// si el host no registró una implementación (modo dry-run F9.6) emitimos un warning y
+    /// descartamos el callback.</summary>
+    private ISatelliteRpcCallbacks Callbacks()
+    {
+        var callbacks = Context.GetHttpContext()?.RequestServices.GetService<ISatelliteRpcCallbacks>();
+        if (callbacks is null)
+        {
+            logger.LogWarning(
+                "ISatelliteRpcCallbacks no registrado; respuesta del satélite ignorada (modo dry-run).");
+            return NoopCallbacks.Instance;
+        }
+        return callbacks;
+    }
+
+    private sealed class NoopCallbacks : ISatelliteRpcCallbacks
+    {
+        public static readonly NoopCallbacks Instance = new();
+        public void CompleteRequest(string correlationId, object response) { }
+        public void FailRequest(string correlationId, Exception error) { }
+        public void PushLogChunk(LogChunk chunk) { }
+        public void CompleteStream(string correlationId, Exception? error = null) { }
     }
 
     private VmId? ResolveVmId()

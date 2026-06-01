@@ -102,6 +102,11 @@ builder.Services.AddScoped<IIdempotencyStore, EfIdempotencyStore>();
 // Shared.Contracts.Containers; el host registra la impl NotImplemented hasta F9.3.5.
 // Los orquestadores (Build, Deployment) lo inyectan y atrapan NotImplementedException
 // para seguir en modo dry-run.
+// TODO F9.6.5: reemplazar por SignalRSatelliteRpcClient (ya creado en
+// apps/api/Hubs/SignalRSatelliteRpcClient.cs) cuando el satélite implemente los
+// handlers de response (BuildImageResponse, RunContainerResponse, etc.) en su
+// HubConnection. El cliente SignalR debe registrarse como singleton implementando
+// ambos ISatelliteRpcClient e ISatelliteRpcCallbacks.
 // -----------------------------------------------------------------------------
 builder.Services.AddSingleton<Aethra.Shared.Contracts.Containers.ISatelliteRpcClient,
     NotImplementedSatelliteRpcClient>();
@@ -156,6 +161,15 @@ builder.Services.AddAuthorization(opts =>
             AuthSchemes.Cookie, AuthSchemes.ApiKey)
         .RequireAuthenticatedUser()
         .Build();
+    // Policy explícita para endpoints sensibles que NO deben aceptar API keys
+    // (gestión de api-keys, integraciones, etc.). Forzar AddAuthenticationSchemes en
+    // un AuthorizationPolicyBuilder hace que el middleware solo procese ese scheme
+    // — un RequireAuthorization(new AuthorizeAttribute { AuthenticationSchemes = ... })
+    // sobre un endpoint NO filtra realmente porque la default policy ya autenticó al
+    // usuario con cualquier scheme habilitado.
+    opts.AddPolicy("CookieOnly", p => p
+        .AddAuthenticationSchemes(AuthSchemes.Cookie)
+        .RequireAuthenticatedUser());
     opts.AddApiKeyScopePolicies();
 });
 

@@ -1,5 +1,6 @@
 using Aethra.Modules.Projects.Infrastructure;
 using Aethra.Modules.Projects.Infrastructure.Lookups;
+using Aethra.Modules.Projects.Presentation;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Infrastructure.Modules;
 using Microsoft.AspNetCore.Builder;
@@ -43,8 +44,8 @@ public static class ProjectsModule
     }
 
     /// <summary>
-    /// Stub. F9.5 reintroducirá endpoints REST sobre los nuevos commands/queries.
+    /// Mapea los endpoints REST del módulo (F9.5): projects, templates, clients, instances.
     /// </summary>
     public static IEndpointRouteBuilder MapProjectsModuleEndpoints(this IEndpointRouteBuilder app)
-        => app;
+        => app.MapProjectsEndpoints();
 }
