@@ -1,15 +1,20 @@
-using Aethra.Shared.Contracts.Containers;
-
-namespace Aethra.Api.Hubs;
+namespace Aethra.Shared.Contracts.Containers;
 
 /// <summary>
 /// Cliente RPC tipado del canal inverso central → satélite. Encapsula la lógica de
 /// resolver la <c>HubConnection</c> activa para un <c>vmId</c>, enviar el comando,
 /// esperar la respuesta correlacionada y mapear el resultado.
 /// <para>
-/// STUB de F9.2: las implementaciones reales con correlation tracking sobre
-/// <see cref="Microsoft.AspNetCore.SignalR.IHubContext{T}"/> se cablearán en F9.3.
-/// Por ahora cualquier llamada lanza <see cref="NotImplementedException"/>.
+/// Vive en <c>Shared.Contracts.Containers</c> (no en <c>apps/api</c>) porque los módulos
+/// (Deployments, Services) necesitan inyectarlo en sus orquestadores. La implementación
+/// concreta sigue viviendo en el host central, que es quien posee la
+/// <c>IHubContext&lt;SatelliteHub&gt;</c> de SignalR.
+/// </para>
+/// <para>
+/// STUB de F9.2/F9.3: las implementaciones reales con correlation tracking sobre
+/// <c>IHubContext</c> se cablearán en F9.3.5. Por ahora la implementación registrada
+/// (<c>NotImplementedSatelliteRpcClient</c>) lanza <see cref="NotImplementedException"/>
+/// en cada llamada; los orquestadores la atrapan y siguen en modo dry-run.
 /// </para>
 /// </summary>
 public interface ISatelliteRpcClient

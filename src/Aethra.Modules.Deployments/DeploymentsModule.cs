@@ -1,22 +1,30 @@
 using Aethra.Modules.Deployments.Infrastructure;
+using Aethra.Modules.Deployments.Infrastructure.Build;
+using Aethra.Modules.Deployments.Infrastructure.Deployment;
+using Aethra.Modules.Deployments.Presentation;
 using Aethra.Shared.Infrastructure.Modules;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Aethra.Modules.Deployments;
 
 /// <summary>
 /// Punto de entrada del módulo Deployments.
 ///
-/// Estado F9.0 cleanup: el módulo está en stub. Solo registra el DbContext (vacío de DbSets,
-/// solo con outbox) para que MigrationsBootstrap no falle por ausencia y para reservar el
-/// schema en BD. Las dependencias DI (DeployOrchestrator, DeployWorker, IDeployJobQueue) se
-/// reintroducirán en F9.3/F9.4 sobre el nuevo modelo Build + DeployTask.
+/// F9.3 entrega el pipeline completo en modo dry-run hasta F9.3.5/F9.4:
+/// <list type="bullet">
+///   <item><b>Build</b> (A7): cola in-process + orquestador + worker, endpoints <c>/api/builds</c>
+///         y webhook <c>/webhooks/git</c>.</item>
+///   <item><b>Deployment</b> (A8): cola in-process + orquestador + worker, endpoints
+///         <c>/api/deployments</c>. El subscriber <c>BuildCompletedHandler</c> hace fan-out
+///         a N Deployments cuando un Build completa (MediatR autoscan del ensamblado).</item>
+/// </list>
 ///
-/// El handler de webhooks vive aquí (<c>Presentation.WebhookEndpoints</c>) pero está stubeado
-/// — devuelve 503 hasta que F9.3 cablee el nuevo lookup ITemplateLookup.
+/// El atomic swap YARP se materializa via <c>DeploymentCompletedIntegrationEvent</c> al outbox;
+/// el módulo Proxy consume el evento y actualiza la Route en caliente.
 /// </summary>
 public static class DeploymentsModule
 {
@@ -28,13 +36,26 @@ public static class DeploymentsModule
 
         services.AddAethraModuleDbContext<DeploymentsDbContext>(conn);
 
+        // A7 — Build pipeline: cola in-process + orquestador scoped + worker BackgroundService.
+        services.AddSingleton<IBuildJobQueue, InMemoryBuildJobQueue>();
+        services.AddScoped<IBuildOrchestrator, BuildOrchestrator>();
+        services.AddHostedService<BuildWorker>();
+
+        // A8 — Deployment pipeline: cola in-process + orquestador scoped + worker BackgroundService.
+        // El BuildCompletedHandler se registra automáticamente vía MediatR autoscan en Program.cs
+        // (scanea todos los assemblies de Aethra.Modules.*).
+        services.AddSingleton<IDeploymentJobQueue, InMemoryDeploymentJobQueue>();
+        services.AddScoped<IDeploymentOrchestrator, DeploymentOrchestrator>();
+        services.AddHostedService<DeploymentWorker>();
+
         return services;
     }
 
-    /// <summary>
-    /// Stub. F9.3 reintroducirá <c>MapWebhookEndpoints</c> y <c>MapDeploysEndpoints</c>
-    /// con la nueva surface API basada en Templates + Instances.
-    /// </summary>
     public static IEndpointRouteBuilder MapDeploymentsModuleEndpoints(this IEndpointRouteBuilder app)
-        => app;
+    {
+        app.MapBuildEndpoints();
+        app.MapWebhookEndpoints();
+        app.MapDeploymentEndpoints();
+        return app;
+    }
 }

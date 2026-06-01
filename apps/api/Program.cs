@@ -98,6 +98,15 @@ builder.Services.AddDbContext<SharedDbContext>(o => o.UseNpgsql(aethraConnection
 builder.Services.AddScoped<IIdempotencyStore, EfIdempotencyStore>();
 
 // -----------------------------------------------------------------------------
+// SignalR central→satélite (stub F9.3): el cliente RPC tipado vive como contrato en
+// Shared.Contracts.Containers; el host registra la impl NotImplemented hasta F9.3.5.
+// Los orquestadores (Build, Deployment) lo inyectan y atrapan NotImplementedException
+// para seguir en modo dry-run.
+// -----------------------------------------------------------------------------
+builder.Services.AddSingleton<Aethra.Shared.Contracts.Containers.ISatelliteRpcClient,
+    NotImplementedSatelliteRpcClient>();
+
+// -----------------------------------------------------------------------------
 // Módulos — cada uno se hace cargo de su DbContext, handlers específicos y endpoints.
 // -----------------------------------------------------------------------------
 builder.Services

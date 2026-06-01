@@ -38,6 +38,14 @@ public sealed class GitHubPushPayload
             ? Ref["refs/heads/".Length..]
             : null;
 
+    /// <summary>
+    /// SHA del commit HEAD tras el push, resolviendo en este orden:
+    /// <c>after</c> (más fiable, viene incluso en push de tags) → <c>head_commit.id</c>
+    /// (fallback) → <c>null</c>. Los consumidores que necesiten un valor obligatorio
+    /// deben validar antes de encolar el build.
+    /// </summary>
+    public string? HeadSha => After ?? HeadCommit?.Id;
+
     public IReadOnlySet<string> AllAffectedPaths()
     {
         var paths = new HashSet<string>(StringComparer.Ordinal);

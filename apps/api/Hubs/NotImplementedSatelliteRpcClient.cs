@@ -3,14 +3,14 @@ using Aethra.Shared.Contracts.Containers;
 namespace Aethra.Api.Hubs;
 
 /// <summary>
-/// Implementación stub de <see cref="ISatelliteRpcClient"/> usada en F9.2 antes de
-/// que el central tenga el correlation tracking real (F9.3). Toda llamada lanza
-/// <see cref="NotImplementedException"/>; los call sites que necesiten ejercitar
-/// el flujo de deploy deben inyectar un fake/mock en sus tests hasta que F9.3 cierre.
+/// Implementación stub de <see cref="ISatelliteRpcClient"/> usada en F9.2/F9.3 antes de
+/// que el central tenga el correlation tracking real (F9.3.5). Toda llamada lanza
+/// <see cref="NotImplementedException"/>; los orquestadores (Build, Deployment) la atrapan
+/// y registran un log warn marcando que continúan en modo dry-run.
 /// </summary>
 public sealed class NotImplementedSatelliteRpcClient : ISatelliteRpcClient
 {
-    private const string Pending = "ISatelliteRpcClient: implementación real se entrega en F9.3.";
+    private const string Pending = "ISatelliteRpcClient: implementación real se entrega en F9.3.5.";
 
     public Task<BuildResult> SendBuildAsync(string vmId, BuildSpec spec, RegistryAuth? pushTo, CancellationToken ct)
         => throw new NotImplementedException(Pending);
