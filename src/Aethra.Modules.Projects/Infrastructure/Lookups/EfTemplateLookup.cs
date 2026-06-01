@@ -40,12 +40,11 @@ internal sealed class EfTemplateLookup(ProjectsDbContext db) : ITemplateLookup
     public async Task<TemplateForBuildView?> GetByIdAsync(string templateId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(templateId);
-        // El Id se persiste como string (ValueConverter). Comparamos su <c>ToString()</c>
-        // para no acoplar el contrato cross-module al value-object TemplateId.
-        var t = await db.Templates
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id.ToString() == templateId, ct)
-            .ConfigureAwait(false);
+        // El Id se persiste como string (ValueConverter). Materializamos AsEnumerable porque
+        // EF no traduce `Id.ToString() == arg` con el ValueConverter activo. Cardinalidad baja
+        // por GetByIdAsync (un único lookup), aceptable.
+        var all = await db.Templates.AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
+        var t = all.FirstOrDefault(x => x.Id.ToString() == templateId);
         return t is null ? null : Project(t);
     }
 

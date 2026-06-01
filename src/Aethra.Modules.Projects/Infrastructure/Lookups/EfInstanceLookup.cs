@@ -21,11 +21,9 @@ internal sealed class EfInstanceLookup(ProjectsDbContext db) : IInstanceLookup
     public async Task<InstanceForDeployView?> GetByIdAsync(string instanceId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(instanceId);
-        var inst = await db.Instances
-            .AsNoTracking()
-            .Include(i => i.Ports)
-            .FirstOrDefaultAsync(i => i.Id.ToString() == instanceId, ct)
-            .ConfigureAwait(false);
+        // EF no traduce `Id.ToString() == arg` con ValueConverter activo. Materializamos.
+        var all = await db.Instances.AsNoTracking().Include(i => i.Ports).ToListAsync(ct).ConfigureAwait(false);
+        var inst = all.FirstOrDefault(i => i.Id.ToString() == instanceId);
         if (inst is null)
         {
             return null;
@@ -38,15 +36,14 @@ internal sealed class EfInstanceLookup(ProjectsDbContext db) : IInstanceLookup
         string templateId, bool autoDeployOnly, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(templateId);
-        var query = db.Instances
-            .AsNoTracking()
-            .Include(i => i.Ports)
-            .Where(i => i.TemplateId.ToString() == templateId);
+        var allList = await db.Instances.AsNoTracking().Include(i => i.Ports)
+            .ToListAsync(ct).ConfigureAwait(false);
+        IEnumerable<Instance> query = allList.Where(i => i.TemplateId.ToString() == templateId);
         if (autoDeployOnly)
         {
             query = query.Where(i => i.AutoDeployOnNewBuild);
         }
-        var list = await query.ToListAsync(ct).ConfigureAwait(false);
+        var list = query.ToList();
         if (list.Count == 0)
         {
             return Array.Empty<InstanceForDeployView>();
@@ -60,12 +57,9 @@ internal sealed class EfInstanceLookup(ProjectsDbContext db) : IInstanceLookup
         string clientId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(clientId);
-        var list = await db.Instances
-            .AsNoTracking()
-            .Include(i => i.Ports)
-            .Where(i => i.ClientId.ToString() == clientId)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var all = await db.Instances.AsNoTracking().Include(i => i.Ports)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var list = all.Where(i => i.ClientId.ToString() == clientId).ToList();
         if (list.Count == 0)
         {
             return Array.Empty<InstanceForDeployView>();

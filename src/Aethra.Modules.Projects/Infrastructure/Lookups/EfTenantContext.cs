@@ -16,14 +16,12 @@ internal sealed class EfTenantContext(ProjectsDbContext db) : ITenantContext
     public async Task<string?> GetClientIdForInstanceAsync(string instanceId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(instanceId);
-        // ClientId tiene un ValueConverter a string, por eso proyectamos al string ya convertido
-        // dejando que EF haga la traducción en SQL. Si la Instance no existe, FirstOrDefaultAsync
-        // devuelve null (string default).
-        return await db.Instances
-            .AsNoTracking()
-            .Where(i => i.Id.ToString() == instanceId)
-            .Select(i => i.ClientId.ToString())
-            .FirstOrDefaultAsync(ct)
-            .ConfigureAwait(false);
+        // EF Core 10 no traduce `Id.ToString() == arg` con ValueConverter activo.
+        // Materializamos solo (Id, ClientId) y resolvemos en memoria.
+        var pairs = await db.Instances.AsNoTracking()
+            .Select(i => new { i.Id, i.ClientId })
+            .ToListAsync(ct).ConfigureAwait(false);
+        var match = pairs.FirstOrDefault(p => p.Id.ToString() == instanceId);
+        return match is null ? null : match.ClientId.ToString();
     }
 }
