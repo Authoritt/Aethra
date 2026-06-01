@@ -9,15 +9,12 @@ namespace Aethra.Satellite.Workers;
 /// Registra en el <see cref="HubConnection"/> los handlers de los comandos que el central
 /// invoca sobre el satélite vía SignalR (canal inverso).
 /// <para>
-/// Patrón: el central llama <c>connection.InvokeAsync&lt;TResult&gt;("Comando", request)</c>
-/// contra <em>su lado del hub</em> (es decir, el cliente — el satélite — que tiene
-/// <c>.On&lt;TReq, TResult&gt;(...)</c> registrado). Para los comandos void (Stop/Remove)
-/// usamos <c>.On&lt;TReq&gt;(...)</c> y el satélite responde con un ACK vacío.
-/// </para>
-/// <para>
-/// Para <c>StreamLogs</c> usamos <c>HubConnection.On(..., IAsyncEnumerable&lt;LogChunk&gt;)</c>
-/// que SignalR mapea al cliente como un stream. El central debe invocarlo con
-/// <c>connection.StreamAsync&lt;LogChunk&gt;("StreamLogs", request)</c>.
+/// Patrón (F9.8C): el central manda un <c>SendAsync("BuildImage", req)</c> (fire-and-forget)
+/// con un <c>CorrelationId</c>; el satélite ejecuta el comando contra <see cref="IContainerRuntime"/>
+/// y devuelve la respuesta invocando un método del hub (<c>BuildImageResponse</c>,
+/// <c>RpcFailed</c>, <c>LogChunkPush</c>, etc.) que correlaciona contra el
+/// <c>TaskCompletionSource</c> pendiente en el central. Si el runtime lanza, capturamos y
+/// reportamos <c>RpcFailed</c> al central — el satélite NO se desconecta del hub.
 /// </para>
 /// </summary>
 public sealed class SatelliteCommandHandler(
@@ -31,89 +28,155 @@ public sealed class SatelliteCommandHandler(
     /// </summary>
     public void Register(HubConnection connection)
     {
-        // BuildImage: petición → resultado con logs y ID.
-        connection.On<BuildImageRequest, BuildImageResponse>("BuildImage", async (req) =>
+        // BuildImage: build + optional push. La respuesta se invoca explícitamente al hub
+        // como `BuildImageResponse`; en error invocamos `RpcFailed`.
+        connection.On<BuildImageRequest>("BuildImage", async (req) =>
         {
-            logger.LogInformation("Central → BuildImage (corr={Corr}, image={Image})",
-                req.CorrelationId, req.Spec.ImageRef);
-            var build = await runtime.BuildImageAsync(req.Spec, CancellationToken.None);
-
-            // Si el central pidió push tras build y el build fue exitoso, pusheamos.
-            if (build.Success && req.PushTo is { } pushAuth)
+            await HandleAsync(connection, req.CorrelationId, "BuildImage", async () =>
             {
-                var push = await runtime.PushImageAsync(req.Spec.ImageRef, pushAuth, CancellationToken.None);
-                if (!push.Success)
-                {
-                    var logs = build.LogLines.ToList();
-                    logs.Add($"PUSH ERROR: {push.ErrorMessage}");
-                    return new BuildImageResponse(
-                        req.CorrelationId,
-                        new BuildResult(Success: false, build.ImageId, push.ErrorMessage, logs));
-                }
-            }
+                logger.LogInformation("Central → BuildImage (corr={Corr}, image={Image})",
+                    req.CorrelationId, req.Spec.ImageRef);
+                var build = await runtime.BuildImageAsync(req.Spec, CancellationToken.None);
 
-            return new BuildImageResponse(req.CorrelationId, build);
+                // Push opcional tras build exitoso.
+                if (build.Success && req.PushTo is { } pushAuth)
+                {
+                    var push = await runtime.PushImageAsync(req.Spec.ImageRef, pushAuth, CancellationToken.None);
+                    if (!push.Success)
+                    {
+                        var logs = build.LogLines.ToList();
+                        logs.Add($"PUSH ERROR: {push.ErrorMessage}");
+                        build = new BuildResult(Success: false, build.ImageId, push.ErrorMessage, logs);
+                    }
+                }
+
+                await connection.InvokeAsync(
+                    "BuildImageResponse",
+                    new BuildImageResponse(req.CorrelationId, build),
+                    CancellationToken.None);
+            });
         });
 
         // RunContainer: pull (si hace falta) + create + start.
-        connection.On<RunContainerRequest, RunContainerResponse>("RunContainer", async (req) =>
+        connection.On<RunContainerRequest>("RunContainer", async (req) =>
         {
-            logger.LogInformation("Central → RunContainer (corr={Corr}, name={Name})",
-                req.CorrelationId, req.Spec.ContainerName);
-            if (req.PullFrom is not null)
+            await HandleAsync(connection, req.CorrelationId, "RunContainer", async () =>
             {
-                await runtime.PullImageAsync(req.Spec.ImageRef, req.PullFrom, CancellationToken.None);
-            }
-            var result = await runtime.RunContainerAsync(req.Spec, CancellationToken.None);
-            return new RunContainerResponse(req.CorrelationId, result);
+                logger.LogInformation("Central → RunContainer (corr={Corr}, name={Name})",
+                    req.CorrelationId, req.Spec.ContainerName);
+                if (req.PullFrom is not null)
+                {
+                    await runtime.PullImageAsync(req.Spec.ImageRef, req.PullFrom, CancellationToken.None);
+                }
+                var result = await runtime.RunContainerAsync(req.Spec, CancellationToken.None);
+                await connection.InvokeAsync(
+                    "RunContainerResponse",
+                    new RunContainerResponse(req.CorrelationId, result),
+                    CancellationToken.None);
+            });
         });
 
-        // StopContainer: comando void (sin resultado). El central usa InvokeAsync sin <TResult>.
+        // StopContainer: ack vacío en éxito.
         connection.On<StopContainerRequest>("StopContainer", async (req) =>
         {
-            logger.LogInformation("Central → StopContainer (corr={Corr}, name={Name})",
-                req.CorrelationId, req.ContainerNameOrId);
-            await runtime.StopContainerAsync(req.ContainerNameOrId, CancellationToken.None);
+            await HandleAsync(connection, req.CorrelationId, "StopContainer", async () =>
+            {
+                logger.LogInformation("Central → StopContainer (corr={Corr}, name={Name})",
+                    req.CorrelationId, req.ContainerNameOrId);
+                await runtime.StopContainerAsync(req.ContainerNameOrId, CancellationToken.None);
+                await connection.InvokeAsync(
+                    "StopContainerAck", req.CorrelationId, CancellationToken.None);
+            });
         });
 
-        // RemoveContainer: comando void.
+        // RemoveContainer: ack vacío en éxito.
         connection.On<RemoveContainerRequest>("RemoveContainer", async (req) =>
         {
-            logger.LogInformation("Central → RemoveContainer (corr={Corr}, name={Name}, force={Force})",
-                req.CorrelationId, req.ContainerNameOrId, req.Force);
-            await runtime.RemoveContainerAsync(req.ContainerNameOrId, req.Force, CancellationToken.None);
+            await HandleAsync(connection, req.CorrelationId, "RemoveContainer", async () =>
+            {
+                logger.LogInformation("Central → RemoveContainer (corr={Corr}, name={Name}, force={Force})",
+                    req.CorrelationId, req.ContainerNameOrId, req.Force);
+                await runtime.RemoveContainerAsync(req.ContainerNameOrId, req.Force, CancellationToken.None);
+                await connection.InvokeAsync(
+                    "RemoveContainerAck", req.CorrelationId, CancellationToken.None);
+            });
         });
 
-        // StreamLogs: el central llama StreamAsync<LogChunk>("StreamLogs", req)
-        // y consume el IAsyncEnumerable que devolvemos aquí.
-        connection.On<StreamLogsRequest, IAsyncEnumerable<LogChunk>>("StreamLogs", (req) =>
+        // StreamLogs: por cada línea del runtime invocamos LogChunkPush; al cerrarse el stream,
+        // invocamos LogStreamCompleted con un null errorMessage en éxito.
+        connection.On<StreamLogsRequest>("StreamLogs", async (req) =>
         {
             logger.LogInformation("Central → StreamLogs (corr={Corr}, name={Name}, tail={Tail})",
                 req.CorrelationId, req.ContainerNameOrId, req.TailLines);
-            return StreamLogsWithCorrelationAsync(req, CancellationToken.None);
+            string? errorMessage = null;
+            try
+            {
+                await foreach (var line in runtime.StreamLogsAsync(
+                    req.ContainerNameOrId, req.TailLines, CancellationToken.None))
+                {
+                    await connection.InvokeAsync(
+                        "LogChunkPush",
+                        new LogChunk(req.CorrelationId, DateTimeOffset.UtcNow, line),
+                        CancellationToken.None);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "StreamLogs falló (corr={Corr})", req.CorrelationId);
+                errorMessage = $"{ex.GetType().Name}: {ex.Message}";
+            }
+            try
+            {
+                await connection.InvokeAsync(
+                    "LogStreamCompleted", req.CorrelationId, errorMessage, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "No se pudo notificar LogStreamCompleted (corr={Corr})", req.CorrelationId);
+            }
         });
 
         // ListContainers.
-        connection.On<ListContainersRequest, ListContainersResponse>("ListContainers", async (req) =>
+        connection.On<ListContainersRequest>("ListContainers", async (req) =>
         {
-            logger.LogDebug("Central → ListContainers (corr={Corr})", req.CorrelationId);
-            var containers = await runtime.ListContainersAsync(CancellationToken.None);
-            return new ListContainersResponse(req.CorrelationId, containers);
+            await HandleAsync(connection, req.CorrelationId, "ListContainers", async () =>
+            {
+                logger.LogDebug("Central → ListContainers (corr={Corr})", req.CorrelationId);
+                var containers = await runtime.ListContainersAsync(CancellationToken.None);
+                await connection.InvokeAsync(
+                    "ListContainersResponse",
+                    new ListContainersResponse(req.CorrelationId, containers),
+                    CancellationToken.None);
+            });
         });
     }
 
     /// <summary>
-    /// Envuelve el stream de líneas crudas del runtime en <see cref="LogChunk"/> con el
-    /// <c>CorrelationId</c> del request original para que el central pueda multiplexar
-    /// varios streams concurrentes sobre la misma conexión.
+    /// Envuelve la ejecución de <paramref name="action"/> con captura de excepciones del runtime.
+    /// En error, intenta notificar al central con <c>RpcFailed</c> y NO desconecta el hub.
     /// </summary>
-    private async IAsyncEnumerable<LogChunk> StreamLogsWithCorrelationAsync(
-        StreamLogsRequest req,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    private async Task HandleAsync(
+        HubConnection connection, string correlationId, string method, Func<Task> action)
     {
-        await foreach (var line in runtime.StreamLogsAsync(req.ContainerNameOrId, req.TailLines, ct))
+        try
         {
-            yield return new LogChunk(req.CorrelationId, DateTimeOffset.UtcNow, line);
+            await action();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Comando {Method} (corr={Corr}) falló en el satélite", method, correlationId);
+            try
+            {
+                var errorMessage = $"runtime_unavailable: {ex.GetType().Name}: {ex.Message}";
+                await connection.InvokeAsync(
+                    "RpcFailed", correlationId, errorMessage, CancellationToken.None);
+            }
+            catch (Exception notifyEx)
+            {
+                logger.LogWarning(notifyEx,
+                    "No se pudo notificar RpcFailed al central (corr={Corr}); el central caerá en timeout.",
+                    correlationId);
+            }
         }
     }
 }

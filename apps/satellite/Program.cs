@@ -13,10 +13,18 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddSerilog((sp, lc) => lc.ReadFrom.Configuration(builder.Configuration));
 
+// F9.8C: leemos la config desde la sección `Satellite:` de appsettings (o equivalente) y
+// permitimos override vía env vars. Esto facilita el smoke test local (que pone valores en
+// appsettings.Development.json) sin tener que setear env vars en la sesión del shell.
 builder.Services.Configure<SatelliteOptions>(opts =>
 {
-    opts.CentralUrl = Environment.GetEnvironmentVariable("AETHRA_CENTRAL_URL") ?? "http://localhost:5080";
-    opts.Token = Environment.GetEnvironmentVariable("AETHRA_SATELLITE_TOKEN") ?? string.Empty;
+    var section = builder.Configuration.GetSection("Satellite");
+    opts.CentralUrl = Environment.GetEnvironmentVariable("AETHRA_CENTRAL_URL")
+        ?? section["CentralUrl"]
+        ?? "http://localhost:5080";
+    opts.Token = Environment.GetEnvironmentVariable("AETHRA_SATELLITE_TOKEN")
+        ?? section["Token"]
+        ?? string.Empty;
     if (int.TryParse(
             Environment.GetEnvironmentVariable("AETHRA_METRICS_INTERVAL_SECONDS"),
             NumberStyles.Integer,
@@ -25,7 +33,13 @@ builder.Services.Configure<SatelliteOptions>(opts =>
     {
         opts.MetricsIntervalSeconds = interval;
     }
-    opts.BufferPath = Environment.GetEnvironmentVariable("AETHRA_SATELLITE_BUFFER_PATH");
+    else if (int.TryParse(section["MetricsIntervalSeconds"], NumberStyles.Integer,
+        CultureInfo.InvariantCulture, out var cfgInterval))
+    {
+        opts.MetricsIntervalSeconds = cfgInterval;
+    }
+    opts.BufferPath = Environment.GetEnvironmentVariable("AETHRA_SATELLITE_BUFFER_PATH")
+        ?? section["BufferPath"];
 });
 
 // Elegimos probe según OS. Linux → /proc real; otros → BCL cross-platform (Windows dev).
