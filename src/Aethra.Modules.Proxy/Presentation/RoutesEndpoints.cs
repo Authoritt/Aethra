@@ -12,12 +12,16 @@ namespace Aethra.Modules.Proxy.Presentation;
 
 public static class RoutesEndpoints
 {
+    private const string ScopeRead = "scope:proxy:read";
+    private const string ScopeWrite = "scope:proxy:write";
+
     public static IEndpointRouteBuilder MapRoutesEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/proxy/routes").WithTags("Proxy").RequireAuthorization();
+        var group = app.MapGroup("/api/proxy/routes").WithTags("Proxy");
 
         group.MapGet("/", async (IMediator mediator, CancellationToken ct) =>
             ToResult(await mediator.Send(new ListRoutesQuery(), ct)))
+            .RequireAuthorization(ScopeRead)
             .WithName("ListRoutes");
 
         group.MapPost("/", async ([FromBody] CreateRouteRequest body, IMediator mediator, CancellationToken ct) =>
@@ -26,6 +30,7 @@ public static class RoutesEndpoints
             var r = await mediator.Send(cmd, ct);
             return r.IsSuccess ? Results.Created($"/api/proxy/routes/{r.Value.Id}", r.Value) : MapError(r.Error);
         })
+        .RequireAuthorization(ScopeWrite)
         .WithName("CreateRoute");
 
         group.MapDelete("/{routeId}", async (string routeId, IMediator mediator, CancellationToken ct) =>
@@ -33,6 +38,7 @@ public static class RoutesEndpoints
             var r = await mediator.Send(new DeleteRouteCommand(routeId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         })
+        .RequireAuthorization(ScopeWrite)
         .WithName("DeleteRoute");
 
         return app;

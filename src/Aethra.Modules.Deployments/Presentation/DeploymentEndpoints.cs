@@ -17,11 +17,15 @@ namespace Aethra.Modules.Deployments.Presentation;
 /// </summary>
 public static class DeploymentEndpoints
 {
+    // Lecturas → 'deployments:read'. Mutaciones (trigger/cancel/promote) → 'deployments:trigger'.
+    // 'deployments:write' queda reservado para CRUD futuro de la entidad Deployment (no usado hoy).
+    private const string ScopeRead = "scope:deployments:read";
+    private const string ScopeTrigger = "scope:deployments:trigger";
+
     public static IEndpointRouteBuilder MapDeploymentEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/deployments")
-            .WithTags("Deployments")
-            .RequireAuthorization();
+            .WithTags("Deployments");
 
         group.MapGet("/instances/{instanceId}", async (
             string instanceId,
@@ -30,6 +34,7 @@ public static class DeploymentEndpoints
             CancellationToken ct) =>
             ToResult(await mediator.Send(new ListDeploymentsQuery(instanceId, limit ?? 50), ct)
                 .ConfigureAwait(false)))
+            .RequireAuthorization(ScopeRead)
             .WithName("ListDeployments");
 
         group.MapGet("/{deploymentId}", async (
@@ -38,6 +43,7 @@ public static class DeploymentEndpoints
             CancellationToken ct) =>
             ToResult(await mediator.Send(new GetDeploymentByIdQuery(deploymentId), ct)
                 .ConfigureAwait(false)))
+            .RequireAuthorization(ScopeRead)
             .WithName("GetDeployment");
 
         group.MapGet("/{deploymentId}/logs", async (
@@ -47,6 +53,7 @@ public static class DeploymentEndpoints
             CancellationToken ct) =>
             ToResult(await mediator.Send(new GetDeploymentLogsQuery(deploymentId, since ?? 0), ct)
                 .ConfigureAwait(false)))
+            .RequireAuthorization(ScopeRead)
             .WithName("GetDeploymentLogs");
 
         group.MapPost("/builds/{buildId}/instances/{instanceId}/trigger", async (
@@ -65,6 +72,7 @@ public static class DeploymentEndpoints
                 ? Results.Created($"/api/deployments/{r.Value.Id}", r.Value)
                 : MapError(r.Error);
         })
+        .RequireAuthorization(ScopeTrigger)
         .WithName("TriggerDeployment");
 
         group.MapPost("/{deploymentId}/cancel", async (
@@ -76,6 +84,7 @@ public static class DeploymentEndpoints
                 .ConfigureAwait(false);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         })
+        .RequireAuthorization(ScopeTrigger)
         .WithName("CancelDeployment");
 
         group.MapPost("/{deploymentId}/promote/{toInstanceId}", async (
@@ -94,6 +103,7 @@ public static class DeploymentEndpoints
                 ? Results.Created($"/api/deployments/{r.Value.Id}", r.Value)
                 : MapError(r.Error);
         })
+        .RequireAuthorization(ScopeTrigger)
         .WithName("PromoteDeployment");
 
         return app;

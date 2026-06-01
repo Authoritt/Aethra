@@ -13,20 +13,27 @@ namespace Aethra.Modules.Services.Presentation;
 
 public static class ServicesEndpoints
 {
+    // Bindings forman parte del dominio Services — reusamos sus scopes.
+    private const string ScopeRead = "scope:services:read";
+    private const string ScopeWrite = "scope:services:write";
+
     public static IEndpointRouteBuilder MapServicesEndpoints(this IEndpointRouteBuilder app)
     {
-        var services = app.MapGroup("/api/services").WithTags("Services").RequireAuthorization();
+        var services = app.MapGroup("/api/services").WithTags("Services");
 
         services.MapGet("/templates", async (IMediator m, CancellationToken ct) =>
             ToResult(await m.Send(new ListTemplatesQuery(), ct)))
+            .RequireAuthorization(ScopeRead)
             .WithName("ListServiceTemplates");
 
         services.MapGet("/", async (IMediator m, CancellationToken ct) =>
             ToResult(await m.Send(new ListServicesQuery(), ct)))
+            .RequireAuthorization(ScopeRead)
             .WithName("ListServices");
 
         services.MapGet("/{serviceId}", async (string serviceId, IMediator m, CancellationToken ct) =>
             ToResult(await m.Send(new GetServiceByIdQuery(serviceId), ct)))
+            .RequireAuthorization(ScopeRead)
             .WithName("GetService");
 
         services.MapPost("/", async ([FromBody] CreateServiceRequest body, IMediator m, CancellationToken ct) =>
@@ -41,17 +48,22 @@ public static class ServicesEndpoints
             return r.IsSuccess
                 ? Results.Created($"/api/services/{r.Value.Id}", r.Value)
                 : MapError(r.Error);
-        }).WithName("CreateServiceFromTemplate");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("CreateServiceFromTemplate");
 
         services.MapDelete("/{serviceId}", async (string serviceId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new DeleteServiceCommand(serviceId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("DeleteService");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("DeleteService");
 
         services.MapGet("/{serviceId}/bindings", async (string serviceId, [FromQuery] bool? includeRevoked,
             IMediator m, CancellationToken ct) =>
             ToResult(await m.Send(new ListBindingsQuery(serviceId, includeRevoked ?? false), ct)))
+            .RequireAuthorization(ScopeRead)
             .WithName("ListBindings");
 
         services.MapPost("/{serviceId}/bindings", async (string serviceId, [FromBody] CreateBindingRequest body,
@@ -84,22 +96,28 @@ public static class ServicesEndpoints
             return r.IsSuccess
                 ? Results.Created($"/api/bindings/{r.Value.Id}", r.Value)
                 : MapError(r.Error);
-        }).WithName("CreateBinding");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("CreateBinding");
 
         // Standalone bindings endpoints (acción independiente del service path).
-        var bindings = app.MapGroup("/api/bindings").WithTags("Services").RequireAuthorization();
+        var bindings = app.MapGroup("/api/bindings").WithTags("Services");
 
         bindings.MapDelete("/{bindingId}", async (string bindingId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new RevokeBindingCommand(bindingId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("RevokeBinding");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("RevokeBinding");
 
         bindings.MapPost("/{bindingId}/rotate", async (string bindingId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new RotateCredentialsCommand(bindingId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("RotateBindingCredentials");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("RotateBindingCredentials");
 
         return app;
     }

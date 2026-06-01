@@ -78,17 +78,21 @@ public static class SettingsEndpoints
         }).WithName("RotateIntegrationCredential");
     }
 
+    // Scopes para domains/environments. Integrations sigue requiriendo CookieOnly aparte.
+    private const string ScopeSettingsRead = "scope:settings:read";
+    private const string ScopeSettingsWrite = "scope:settings:write";
+
     // ----------------------------------------------------------------------------
-    // Base domains. Auth policy default (cookie o api key) — son metadata, no secretos.
+    // Base domains. Son metadata (no secretos) pero impactan la config de proxy/TLS.
     // ----------------------------------------------------------------------------
     private static void MapDomainsEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/settings/domains")
-            .WithTags("Settings")
-            .RequireAuthorization();
+            .WithTags("Settings");
 
         group.MapGet("/", async (IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new ListBaseDomainsQuery(), ct)))
+            .RequireAuthorization(ScopeSettingsRead)
             .WithName("ListBaseDomains");
 
         group.MapPost("/", async ([FromBody] CreateBaseDomainRequest body, IMediator m, CancellationToken ct) =>
@@ -97,25 +101,33 @@ public static class SettingsEndpoints
             return r.IsSuccess
                 ? Results.Created($"/api/settings/domains/{r.Value.Id}", r.Value)
                 : MapError(r.Error);
-        }).WithName("CreateBaseDomain");
+        })
+        .RequireAuthorization(ScopeSettingsWrite)
+        .WithName("CreateBaseDomain");
 
         group.MapPost("/{baseDomainId}/activate", async (string baseDomainId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new ActivateBaseDomainCommand(baseDomainId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("ActivateBaseDomain");
+        })
+        .RequireAuthorization(ScopeSettingsWrite)
+        .WithName("ActivateBaseDomain");
 
         group.MapPost("/{baseDomainId}/wildcard-configured", async (string baseDomainId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new MarkWildcardConfiguredCommand(baseDomainId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("MarkBaseDomainWildcardConfigured");
+        })
+        .RequireAuthorization(ScopeSettingsWrite)
+        .WithName("MarkBaseDomainWildcardConfigured");
 
         group.MapDelete("/{baseDomainId}", async (string baseDomainId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new DeleteBaseDomainCommand(baseDomainId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("DeleteBaseDomain");
+        })
+        .RequireAuthorization(ScopeSettingsWrite)
+        .WithName("DeleteBaseDomain");
     }
 
     // ----------------------------------------------------------------------------
@@ -124,11 +136,11 @@ public static class SettingsEndpoints
     private static void MapEnvironmentsEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/settings/environments")
-            .WithTags("Settings")
-            .RequireAuthorization();
+            .WithTags("Settings");
 
         group.MapGet("/", async (IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new ListEnvironmentDefinitionsQuery(), ct)))
+            .RequireAuthorization(ScopeSettingsRead)
             .WithName("ListEnvironmentDefinitions");
 
         group.MapPost("/", async ([FromBody] CreateEnvironmentDefinitionRequest body, IMediator m, CancellationToken ct) =>
@@ -137,19 +149,25 @@ public static class SettingsEndpoints
             return r.IsSuccess
                 ? Results.Created($"/api/settings/environments/{r.Value.Id}", r.Value)
                 : MapError(r.Error);
-        }).WithName("CreateEnvironmentDefinition");
+        })
+        .RequireAuthorization(ScopeSettingsWrite)
+        .WithName("CreateEnvironmentDefinition");
 
         group.MapDelete("/{environmentId}", async (string environmentId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new DeleteEnvironmentDefinitionCommand(environmentId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("DeleteEnvironmentDefinition");
+        })
+        .RequireAuthorization(ScopeSettingsWrite)
+        .WithName("DeleteEnvironmentDefinition");
 
         group.MapPost("/reorder", async ([FromBody] ReorderEnvironmentDefinitionsRequest body, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new ReorderEnvironmentDefinitionsCommand(body.Ids), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("ReorderEnvironmentDefinitions");
+        })
+        .RequireAuthorization(ScopeSettingsWrite)
+        .WithName("ReorderEnvironmentDefinitions");
     }
 
     // ---------------------- Request DTOs ----------------------

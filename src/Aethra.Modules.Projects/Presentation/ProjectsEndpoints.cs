@@ -35,12 +35,18 @@ public static class ProjectsEndpoints
     // -------------------------------------------------------------------------
     // Projects
     // -------------------------------------------------------------------------
+    // Scope policies. Templates/Clients/Instances forman parte del dominio Projects —
+    // usamos el mismo par de scopes para todo (consistente con McpScopes.ProjectsRead/Write).
+    private const string ScopeProjectsRead = "scope:projects:read";
+    private const string ScopeProjectsWrite = "scope:projects:write";
+
     private static void MapProjects(IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/projects").WithTags("Projects").RequireAuthorization();
+        var group = app.MapGroup("/api/projects").WithTags("Projects");
 
         group.MapGet("/", async (IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new ListProjectsQuery(), ct)))
+            .RequireAuthorization(ScopeProjectsRead)
             .WithName("ListProjects");
 
         group.MapPost("/", async ([FromBody] CreateProjectRequest body, IMediator m, CancellationToken ct) =>
@@ -50,10 +56,13 @@ public static class ProjectsEndpoints
             return r.IsSuccess
                 ? Results.Created($"/api/projects/{r.Value.id}", r.Value)
                 : MapError(r.Error);
-        }).WithName("CreateProject");
+        })
+        .RequireAuthorization(ScopeProjectsWrite)
+        .WithName("CreateProject");
 
         group.MapGet("/{id}", async (string id, IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new GetProjectByIdQuery(id), ct)))
+            .RequireAuthorization(ScopeProjectsRead)
             .WithName("GetProject");
     }
 
@@ -65,7 +74,7 @@ public static class ProjectsEndpoints
         app.MapGet("/api/projects/{projectId}/templates",
                 async (string projectId, IMediator m, CancellationToken ct) =>
                     ToResult(await m.Send(new ListTemplatesQuery(projectId), ct)))
-            .WithTags("Templates").RequireAuthorization().WithName("ListTemplates");
+            .WithTags("Templates").RequireAuthorization(ScopeProjectsRead).WithName("ListTemplates");
 
         app.MapPost("/api/projects/{projectId}/templates", async (
             string projectId,
@@ -92,11 +101,11 @@ public static class ProjectsEndpoints
             return r.IsSuccess
                 ? Results.Created($"/api/templates/{r.Value.id}", r.Value)
                 : MapError(r.Error);
-        }).WithTags("Templates").RequireAuthorization().WithName("CreateTemplate");
+        }).WithTags("Templates").RequireAuthorization(ScopeProjectsWrite).WithName("CreateTemplate");
 
         app.MapGet("/api/templates/{id}", async (string id, IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new GetTemplateByIdQuery(id), ct)))
-            .WithTags("Templates").RequireAuthorization().WithName("GetTemplate");
+            .WithTags("Templates").RequireAuthorization(ScopeProjectsRead).WithName("GetTemplate");
     }
 
     // -------------------------------------------------------------------------
@@ -107,7 +116,7 @@ public static class ProjectsEndpoints
         app.MapGet("/api/projects/{projectId}/clients",
                 async (string projectId, IMediator m, CancellationToken ct) =>
                     ToResult(await m.Send(new ListClientsQuery(projectId), ct)))
-            .WithTags("Clients").RequireAuthorization().WithName("ListClients");
+            .WithTags("Clients").RequireAuthorization(ScopeProjectsRead).WithName("ListClients");
 
         app.MapPost("/api/projects/{projectId}/clients", async (
             string projectId,
@@ -126,11 +135,11 @@ public static class ProjectsEndpoints
             return r.IsSuccess
                 ? Results.Created($"/api/clients/{r.Value.id}", r.Value)
                 : MapError(r.Error);
-        }).WithTags("Clients").RequireAuthorization().WithName("CreateClient");
+        }).WithTags("Clients").RequireAuthorization(ScopeProjectsWrite).WithName("CreateClient");
 
         app.MapGet("/api/clients/{id}", async (string id, IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new GetClientByIdQuery(id), ct)))
-            .WithTags("Clients").RequireAuthorization().WithName("GetClient");
+            .WithTags("Clients").RequireAuthorization(ScopeProjectsRead).WithName("GetClient");
     }
 
     // -------------------------------------------------------------------------
@@ -141,7 +150,7 @@ public static class ProjectsEndpoints
         app.MapGet("/api/templates/{templateId}/instances",
                 async (string templateId, IMediator m, CancellationToken ct) =>
                     ToResult(await m.Send(new ListInstancesQuery(templateId), ct)))
-            .WithTags("Instances").RequireAuthorization().WithName("ListInstances");
+            .WithTags("Instances").RequireAuthorization(ScopeProjectsRead).WithName("ListInstances");
 
         app.MapPost("/api/templates/{templateId}/instances", async (
             string templateId,
@@ -163,11 +172,11 @@ public static class ProjectsEndpoints
             return r.IsSuccess
                 ? Results.Created($"/api/instances/{r.Value.id}", r.Value)
                 : MapError(r.Error);
-        }).WithTags("Instances").RequireAuthorization().WithName("CreateInstance");
+        }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("CreateInstance");
 
         app.MapGet("/api/instances/{id}", async (string id, IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new GetInstanceByIdQuery(id), ct)))
-            .WithTags("Instances").RequireAuthorization().WithName("GetInstance");
+            .WithTags("Instances").RequireAuthorization(ScopeProjectsRead).WithName("GetInstance");
 
         app.MapPost("/api/instances/{id}/custom-domain", async (
             string id,
@@ -177,7 +186,7 @@ public static class ProjectsEndpoints
         {
             var r = await m.Send(new SetCustomDomainCommand(id, body.CustomDomain), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithTags("Instances").RequireAuthorization().WithName("SetInstanceCustomDomain");
+        }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("SetInstanceCustomDomain");
     }
 
     // -------------------------------------------------------------------------

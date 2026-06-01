@@ -156,6 +156,10 @@ public sealed class ApiKey : AggregateRoot<ApiKeyId>
         "vms:write",
         "notes:read",
         "notes:write",
+        "proxy:read",
+        "proxy:write",
+        "settings:read",
+        "settings:write",
         "context:read",
         AdminScope,
     };

@@ -36,9 +36,13 @@ public static class NotesEndpoints
         "image/gif",
     };
 
+    // Pinned-facts comparten dominio con notes (se almacenan/leen vinculados a la misma jerarquía).
+    private const string ScopeRead = "scope:notes:read";
+    private const string ScopeWrite = "scope:notes:write";
+
     public static IEndpointRouteBuilder MapNotesEndpoints(this IEndpointRouteBuilder app)
     {
-        var notes = app.MapGroup("/api/notes").WithTags("Notes").RequireAuthorization();
+        var notes = app.MapGroup("/api/notes").WithTags("Notes");
 
         notes.MapGet("/", async (
             [FromQuery(Name = "scope_type")] string scopeType,
@@ -52,7 +56,9 @@ public static class NotesEndpoints
             }
             var r = await mediator.Send(new ListNotesQuery(scope, scopeId), ct);
             return ToResult(r);
-        }).WithName("ListNotes");
+        })
+        .RequireAuthorization(ScopeRead)
+        .WithName("ListNotes");
 
         notes.MapPost("/", async ([FromBody] CreateNoteRequest body, IMediator mediator, CancellationToken ct) =>
         {
@@ -65,10 +71,13 @@ public static class NotesEndpoints
             return r.IsSuccess
                 ? Results.Created($"/api/notes/{r.Value.Id}", r.Value)
                 : MapError(r.Error);
-        }).WithName("CreateNote");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("CreateNote");
 
         notes.MapGet("/{noteId}", async (string noteId, IMediator mediator, CancellationToken ct) =>
             ToResult(await mediator.Send(new GetNoteByIdQuery(noteId), ct)))
+            .RequireAuthorization(ScopeRead)
             .WithName("GetNote");
 
         notes.MapPatch("/{noteId}", async (
@@ -79,13 +88,17 @@ public static class NotesEndpoints
         {
             var r = await mediator.Send(new UpdateNoteCommand(noteId, body.Title, body.MarkdownBody), ct);
             return ToResult(r);
-        }).WithName("UpdateNote");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("UpdateNote");
 
         notes.MapDelete("/{noteId}", async (string noteId, IMediator mediator, CancellationToken ct) =>
         {
             var r = await mediator.Send(new DeleteNoteCommand(noteId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("DeleteNote");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("DeleteNote");
 
         notes.MapPost("/{noteId}/pin", async (
             string noteId,
@@ -95,7 +108,9 @@ public static class NotesEndpoints
         {
             var r = await mediator.Send(new PinNoteCommand(noteId, body.Pinned), ct);
             return ToResult(r);
-        }).WithName("PinNote");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("PinNote");
 
         notes.MapPost("/{noteId}/images", async (
             string noteId,
@@ -141,6 +156,7 @@ public static class NotesEndpoints
                 ? Results.Created($"/api/notes/{noteId}/images/{r.Value.ImageId:N}", r.Value)
                 : MapError(r.Error);
         })
+        .RequireAuthorization(ScopeWrite)
         .WithName("UploadNoteImage")
         .DisableAntiforgery();
 
@@ -152,9 +168,13 @@ public static class NotesEndpoints
         {
             var r = await mediator.Send(new DeleteNoteImageCommand(noteId, imageId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("DeleteNoteImage");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("DeleteNoteImage");
 
         // Servir el binario. Cache-Control: privado por 1h.
+        // El browser hace fetch con cookie credentials cuando un <img src> apunta acá —
+        // ScopeRead lo cubre porque las sesiones cookie pasan cualquier policy de scope.
         notes.MapGet("/images/{imageId:guid}", async (
             Guid imageId,
             NotesDbContext db,
@@ -187,11 +207,12 @@ public static class NotesEndpoints
                 fileDownloadName: image.OriginalFilename,
                 enableRangeProcessing: true);
         })
+        .RequireAuthorization(ScopeRead)
         .WithName("GetNoteImage")
         .WithMetadata(new ResponseCacheAttribute { Duration = 3600, Location = ResponseCacheLocation.Client });
 
         // ----------- Pinned Facts -----------
-        var facts = app.MapGroup("/api/pinned-facts").WithTags("Notes").RequireAuthorization();
+        var facts = app.MapGroup("/api/pinned-facts").WithTags("Notes");
 
         facts.MapGet("/", async (
             [FromQuery(Name = "scope_type")] string scopeType,
@@ -206,7 +227,9 @@ public static class NotesEndpoints
             }
             var q = new ListPinnedFactsQuery(scope, scopeId, reveal ?? false);
             return ToResult(await mediator.Send(q, ct));
-        }).WithName("ListPinnedFacts");
+        })
+        .RequireAuthorization(ScopeRead)
+        .WithName("ListPinnedFacts");
 
         facts.MapPut("/", async ([FromBody] UpsertPinnedFactRequest body, IMediator mediator, CancellationToken ct) =>
         {
@@ -223,13 +246,17 @@ public static class NotesEndpoints
                 Description: body.Description);
             var r = await mediator.Send(cmd, ct);
             return ToResult(r);
-        }).WithName("UpsertPinnedFact");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("UpsertPinnedFact");
 
         facts.MapDelete("/{factId}", async (string factId, IMediator mediator, CancellationToken ct) =>
         {
             var r = await mediator.Send(new DeletePinnedFactCommand(factId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("DeletePinnedFact");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("DeletePinnedFact");
 
         return app;
     }

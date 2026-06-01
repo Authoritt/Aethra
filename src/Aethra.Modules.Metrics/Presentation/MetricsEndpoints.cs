@@ -10,15 +10,18 @@ namespace Aethra.Modules.Metrics.Presentation;
 
 public static class MetricsEndpoints
 {
+    private const string ScopeRead = "scope:metrics:read";
+
     public static IEndpointRouteBuilder MapMetricsEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/metrics").WithTags("Metrics").RequireAuthorization();
+        var group = app.MapGroup("/api/metrics").WithTags("Metrics");
 
         group.MapGet("/vms/{vmId}/latest", async (string vmId, int? limit, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(new GetLatestMetricsQuery(vmId, limit ?? 60), ct);
             return ToResult(result);
         })
+        .RequireAuthorization(ScopeRead)
         .WithName("GetLatestVmMetrics")
         .WithDescription("Últimas N muestras de métricas de una VM (cronológico ascendente).");
 

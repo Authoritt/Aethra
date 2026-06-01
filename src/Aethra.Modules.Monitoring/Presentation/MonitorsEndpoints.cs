@@ -12,9 +12,12 @@ namespace Aethra.Modules.Monitoring.Presentation;
 
 public static class MonitorsEndpoints
 {
+    private const string ScopeRead = "scope:monitoring:read";
+    private const string ScopeWrite = "scope:monitoring:write";
+
     public static IEndpointRouteBuilder MapMonitorsEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/monitors").WithTags("Monitoring").RequireAuthorization();
+        var group = app.MapGroup("/api/monitors").WithTags("Monitoring");
 
         group.MapGet("/", async (
             [FromQuery(Name = "instance_id")] string? instanceId,
@@ -28,6 +31,7 @@ public static class MonitorsEndpoints
                 new ListMonitorsQuery(instanceId, projectId, status, enabled), ct).ConfigureAwait(false);
             return ToResult(result);
         })
+        .RequireAuthorization(ScopeRead)
         .WithName("ListMonitors");
 
         group.MapGet("/overview", async (IMediator mediator, CancellationToken ct) =>
@@ -35,6 +39,7 @@ public static class MonitorsEndpoints
             var result = await mediator.Send(new GetMonitorSummaryQuery(), ct).ConfigureAwait(false);
             return ToResult(result);
         })
+        .RequireAuthorization(ScopeRead)
         .WithName("GetMonitorOverview");
 
         group.MapGet("/{monitorId}", async (string monitorId, IMediator mediator, CancellationToken ct) =>
@@ -42,6 +47,7 @@ public static class MonitorsEndpoints
             var result = await mediator.Send(new GetMonitorByIdQuery(monitorId), ct).ConfigureAwait(false);
             return ToResult(result);
         })
+        .RequireAuthorization(ScopeRead)
         .WithName("GetMonitorById");
 
         group.MapGet("/{monitorId}/checks", async (
@@ -54,6 +60,7 @@ public static class MonitorsEndpoints
                 new ListMonitorChecksQuery(monitorId, limit ?? 100), ct).ConfigureAwait(false);
             return ToResult(result);
         })
+        .RequireAuthorization(ScopeRead)
         .WithName("ListMonitorChecks");
 
         group.MapPost("/", async ([FromBody] CreateMonitorRequest body, IMediator mediator, CancellationToken ct) =>
@@ -75,6 +82,7 @@ public static class MonitorsEndpoints
                 ? Results.Created($"/api/monitors/{result.Value.Id}", result.Value)
                 : MapError(result.Error);
         })
+        .RequireAuthorization(ScopeWrite)
         .WithName("CreateMonitor");
 
         group.MapPatch("/{monitorId}", async (
@@ -102,6 +110,7 @@ public static class MonitorsEndpoints
             var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
             return ToResult(result);
         })
+        .RequireAuthorization(ScopeWrite)
         .WithName("UpdateMonitor");
 
         group.MapDelete("/{monitorId}", async (string monitorId, IMediator mediator, CancellationToken ct) =>
@@ -109,6 +118,7 @@ public static class MonitorsEndpoints
             var result = await mediator.Send(new DeleteMonitorCommand(monitorId), ct).ConfigureAwait(false);
             return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
         })
+        .RequireAuthorization(ScopeWrite)
         .WithName("DeleteMonitor");
 
         group.MapPost("/{monitorId}/enable", async (string monitorId, IMediator mediator, CancellationToken ct) =>
@@ -116,6 +126,7 @@ public static class MonitorsEndpoints
             var result = await mediator.Send(new EnableMonitorCommand(monitorId), ct).ConfigureAwait(false);
             return ToResult(result);
         })
+        .RequireAuthorization(ScopeWrite)
         .WithName("EnableMonitor");
 
         group.MapPost("/{monitorId}/disable", async (string monitorId, IMediator mediator, CancellationToken ct) =>
@@ -123,6 +134,7 @@ public static class MonitorsEndpoints
             var result = await mediator.Send(new DisableMonitorCommand(monitorId), ct).ConfigureAwait(false);
             return ToResult(result);
         })
+        .RequireAuthorization(ScopeWrite)
         .WithName("DisableMonitor");
 
         group.MapPost("/{monitorId}/trigger", async (string monitorId, IMediator mediator, CancellationToken ct) =>
@@ -130,6 +142,7 @@ public static class MonitorsEndpoints
             var result = await mediator.Send(new TriggerMonitorCheckCommand(monitorId), ct).ConfigureAwait(false);
             return ToResult(result);
         })
+        .RequireAuthorization(ScopeWrite)
         .WithName("TriggerMonitorCheck");
 
         return app;

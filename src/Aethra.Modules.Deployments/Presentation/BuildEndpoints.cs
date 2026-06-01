@@ -17,9 +17,15 @@ namespace Aethra.Modules.Deployments.Presentation;
 /// </summary>
 public static class BuildEndpoints
 {
+    // Builds son parte del pipeline de Deployments — reusamos su catálogo de scopes.
+    // Trigger/Cancel exigen 'deployments:trigger' (la acción que afecta workloads); las
+    // listas/logs sólo 'deployments:read'.
+    private const string ScopeRead = "scope:deployments:read";
+    private const string ScopeTrigger = "scope:deployments:trigger";
+
     public static IEndpointRouteBuilder MapBuildEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/builds").WithTags("Deployments").RequireAuthorization();
+        var group = app.MapGroup("/api/builds").WithTags("Deployments");
 
         group.MapGet("/templates/{templateId}", async (
             string templateId,
@@ -27,6 +33,7 @@ public static class BuildEndpoints
             IMediator mediator,
             CancellationToken ct) =>
             ToResult(await mediator.Send(new ListBuildsQuery(templateId, limit ?? 50), ct).ConfigureAwait(false)))
+            .RequireAuthorization(ScopeRead)
             .WithName("ListBuilds");
 
         group.MapGet("/{buildId}", async (
@@ -34,6 +41,7 @@ public static class BuildEndpoints
             IMediator mediator,
             CancellationToken ct) =>
             ToResult(await mediator.Send(new GetBuildByIdQuery(buildId), ct).ConfigureAwait(false)))
+            .RequireAuthorization(ScopeRead)
             .WithName("GetBuild");
 
         group.MapGet("/{buildId}/logs", async (
@@ -42,6 +50,7 @@ public static class BuildEndpoints
             IMediator mediator,
             CancellationToken ct) =>
             ToResult(await mediator.Send(new GetBuildLogsQuery(buildId, since ?? 0), ct).ConfigureAwait(false)))
+            .RequireAuthorization(ScopeRead)
             .WithName("GetBuildLogs");
 
         group.MapPost("/templates/{templateId}/trigger", async (
@@ -61,6 +70,7 @@ public static class BuildEndpoints
                 ? Results.Created($"/api/builds/{r.Value.Id}", r.Value)
                 : MapError(r.Error);
         })
+        .RequireAuthorization(ScopeTrigger)
         .WithName("TriggerBuild");
 
         group.MapPost("/{buildId}/cancel", async (
@@ -71,6 +81,7 @@ public static class BuildEndpoints
             var r = await mediator.Send(new CancelBuildCommand(buildId), ct).ConfigureAwait(false);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         })
+        .RequireAuthorization(ScopeTrigger)
         .WithName("CancelBuild");
 
         return app;

@@ -14,16 +14,21 @@ namespace Aethra.Modules.Cloudflare.Presentation;
 
 public static class CloudflareEndpoints
 {
+    private const string ScopeRead = "scope:cloudflare:read";
+    private const string ScopeWrite = "scope:cloudflare:write";
+
     public static IEndpointRouteBuilder MapCloudflareEndpoints(this IEndpointRouteBuilder app)
     {
-        var zones = app.MapGroup("/api/cloudflare/zones").WithTags("Cloudflare").RequireAuthorization();
+        var zones = app.MapGroup("/api/cloudflare/zones").WithTags("Cloudflare");
 
         zones.MapGet("/", async (IMediator m, CancellationToken ct) =>
             ToResult(await m.Send(new ListZonesQuery(), ct)))
+            .RequireAuthorization(ScopeRead)
             .WithName("ListCloudflareZones");
 
         zones.MapGet("/{zoneId}", async (string zoneId, IMediator m, CancellationToken ct) =>
             ToResult(await m.Send(new GetZoneByIdQuery(zoneId), ct)))
+            .RequireAuthorization(ScopeRead)
             .WithName("GetCloudflareZone");
 
         zones.MapPost("/", async ([FromBody] RegisterZoneRequest body, IMediator m, CancellationToken ct) =>
@@ -32,19 +37,25 @@ public static class CloudflareEndpoints
             return r.IsSuccess
                 ? Results.Created($"/api/cloudflare/zones/{r.Value.Id}", r.Value)
                 : MapError(r.Error);
-        }).WithName("RegisterCloudflareZone");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("RegisterCloudflareZone");
 
         zones.MapDelete("/{zoneId}", async (string zoneId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new DeleteZoneCommand(zoneId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("DeleteCloudflareZone");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("DeleteCloudflareZone");
 
         zones.MapPost("/{zoneId}/sync", async (string zoneId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new SyncZoneCommand(zoneId), ct);
             return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
-        }).WithName("SyncCloudflareZone");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("SyncCloudflareZone");
 
         zones.MapPost("/{zoneId}/rotate-token", async (
             string zoneId,
@@ -54,10 +65,13 @@ public static class CloudflareEndpoints
         {
             var r = await m.Send(new RotateZoneTokenCommand(zoneId, body.ApiToken), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("RotateCloudflareZoneToken");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("RotateCloudflareZoneToken");
 
         zones.MapGet("/{zoneId}/records", async (string zoneId, IMediator m, CancellationToken ct) =>
             ToResult(await m.Send(new ListDnsRecordsQuery(zoneId), ct)))
+            .RequireAuthorization(ScopeRead)
             .WithName("ListCloudflareDnsRecords");
 
         zones.MapPost("/{zoneId}/records", async (
@@ -78,9 +92,11 @@ public static class CloudflareEndpoints
             return r.IsSuccess
                 ? Results.Created($"/api/cloudflare/records/{r.Value.Id}", r.Value)
                 : MapError(r.Error);
-        }).WithName("CreateCloudflareDnsRecord");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("CreateCloudflareDnsRecord");
 
-        var records = app.MapGroup("/api/cloudflare/records").WithTags("Cloudflare").RequireAuthorization();
+        var records = app.MapGroup("/api/cloudflare/records").WithTags("Cloudflare");
 
         records.MapPatch("/{recordId}", async (
             string recordId,
@@ -91,13 +107,17 @@ public static class CloudflareEndpoints
             var r = await m.Send(
                 new UpdateDnsRecordCommand(recordId, body.Content, body.Ttl, body.Proxied, body.Comment), ct);
             return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
-        }).WithName("UpdateCloudflareDnsRecord");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("UpdateCloudflareDnsRecord");
 
         records.MapDelete("/{recordId}", async (string recordId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new DeleteDnsRecordCommand(recordId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
-        }).WithName("DeleteCloudflareDnsRecord");
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("DeleteCloudflareDnsRecord");
 
         return app;
     }
