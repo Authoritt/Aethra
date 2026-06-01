@@ -43,7 +43,19 @@ public sealed class DatabaseProxyConfigProvider : IProxyConfigProvider
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ProxyDbContext>();
-        var routes = db.Routes.AsNoTracking().ToList();
+        List<Domain.Route> routes;
+        try
+        {
+            routes = db.Routes.AsNoTracking().ToList();
+        }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P01")
+        {
+            // Tabla aún no existe (primera ejecución antes de aplicar migraciones).
+            // YARP igual necesita un IProxyConfigProvider válido — devolvemos vacío.
+            // Un Reload() posterior tras migrate+cualquier route create reanima la config.
+            _logger.LogInformation("proxy.routes no existe aún (pre-migración). Arrancando con config vacía.");
+            return new InMemoryConfig([], []);
+        }
 
         var yarpRoutes = new List<RouteConfig>(routes.Count);
         var yarpClusters = new List<ClusterConfig>(routes.Count);

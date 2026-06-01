@@ -86,7 +86,9 @@ builder.Services.AddValidatorsFromAssemblies(moduleAssemblies);
 // -----------------------------------------------------------------------------
 // Outbox: bus in-memory. El dispatcher por módulo se registra dentro de cada AddXModule.
 // -----------------------------------------------------------------------------
-builder.Services.AddSingleton<IIntegrationEventBus, InMemoryIntegrationEventBus>();
+// Scoped: resuelve IMediator del scope del dispatcher del módulo, no del root.
+// Sin esto, MediatR no puede resolver handlers cross-module que dependen de DbContexts scoped.
+builder.Services.AddScoped<IIntegrationEventBus, InMemoryIntegrationEventBus>();
 builder.Services.Configure<OutboxDispatcherOptions>(builder.Configuration.GetSection("Outbox"));
 
 // -----------------------------------------------------------------------------

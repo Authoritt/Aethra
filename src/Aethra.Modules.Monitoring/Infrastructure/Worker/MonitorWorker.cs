@@ -127,7 +127,7 @@ public sealed class MonitorWorker(
         var sp = scope.ServiceProvider;
         var db = sp.GetRequiredService<MonitoringDbContext>();
         var probe = sp.GetRequiredService<IMonitorProbe>();
-        var outbox = sp.GetRequiredService<IOutboxWriter>();
+        var outbox = sp.GetRequiredService<IOutboxWriter<MonitoringDbContext>>();
 
         var monitor = await db.Monitors.FirstOrDefaultAsync(m => m.Id == monitorId, ct).ConfigureAwait(false);
         if (monitor is null)

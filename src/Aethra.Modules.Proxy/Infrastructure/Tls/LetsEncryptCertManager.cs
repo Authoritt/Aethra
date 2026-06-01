@@ -47,7 +47,7 @@ public sealed class LetsEncryptCertManager : ICertManager
 
     private readonly ICertificateStore _store;
     private readonly IAcmeChallengeStore _challenges;
-    private readonly IOutboxWriter _outbox;
+    private readonly IOutboxWriter<ProxyDbContext> _outbox;
     private readonly IDataProtector _pfxProtector;
     private readonly IDataProtector _accountProtector;
     private readonly TlsOptions _options;
@@ -57,7 +57,7 @@ public sealed class LetsEncryptCertManager : ICertManager
     public LetsEncryptCertManager(
         ICertificateStore store,
         IAcmeChallengeStore challenges,
-        IOutboxWriter outbox,
+        IOutboxWriter<ProxyDbContext> outbox,
         IDataProtectionProvider dataProtection,
         IOptions<TlsOptions> options,
         ILogger<LetsEncryptCertManager> logger,

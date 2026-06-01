@@ -65,7 +65,7 @@ internal sealed class CreateInstanceHandler(
     IClock clock,
     IEnvironmentCatalog environmentCatalog,
     IBaseDomainProvider baseDomainProvider,
-    IOutboxWriter outbox)
+    IOutboxWriter<ProjectsDbContext> outbox)
     : ICommandHandler<CreateInstanceCommand, InstanceDetail>
 {
     public async Task<Result<InstanceDetail>> Handle(CreateInstanceCommand request, CancellationToken cancellationToken)

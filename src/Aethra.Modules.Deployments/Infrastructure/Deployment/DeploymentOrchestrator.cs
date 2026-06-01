@@ -40,7 +40,7 @@ public sealed class DeploymentOrchestrator(
     IIntegrationCredentialResolver credentialResolver,
     IBaseDomainProvider baseDomainProvider,
     ISatelliteRpcClient satelliteClient,
-    IOutboxWriter outbox,
+    IOutboxWriter<DeploymentsDbContext> outbox,
     IClock clock,
     ILogger<DeploymentOrchestrator> logger) : IDeploymentOrchestrator
 {

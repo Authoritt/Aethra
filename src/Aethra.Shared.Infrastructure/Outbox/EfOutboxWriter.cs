@@ -9,7 +9,7 @@ namespace Aethra.Shared.Infrastructure.Outbox;
 /// dentro de la misma transacción del TransactionBehavior, lo que garantiza que
 /// el evento se publica si y solo si el cambio de estado persiste.
 /// </summary>
-public sealed class EfOutboxWriter<TDbContext>(TDbContext dbContext) : IOutboxWriter
+public sealed class EfOutboxWriter<TDbContext>(TDbContext dbContext) : IOutboxWriter<TDbContext>
     where TDbContext : AethraModuleDbContext
 {
     public Task EnqueueAsync(IIntegrationEvent @event, CancellationToken ct)

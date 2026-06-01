@@ -30,7 +30,7 @@ public sealed class BuildOrchestrator(
     DeploymentsDbContext db,
     ITemplateLookup templateLookup,
     ISatelliteRpcClient satelliteClient,
-    IOutboxWriter outbox,
+    IOutboxWriter<DeploymentsDbContext> outbox,
     IIntegrationCredentialResolver credentialResolver,
     IClock clock,
     ILogger<BuildOrchestrator> logger) : IBuildOrchestrator

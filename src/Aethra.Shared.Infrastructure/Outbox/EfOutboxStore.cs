@@ -7,7 +7,7 @@ namespace Aethra.Shared.Infrastructure.Outbox;
 /// Lectura del outbox por el dispatcher. Cada módulo tiene su propio
 /// <see cref="AethraModuleDbContext"/> y, por ende, su propia tabla.
 /// </summary>
-public sealed class EfOutboxStore<TDbContext>(TDbContext dbContext) : IOutboxStore
+public sealed class EfOutboxStore<TDbContext>(TDbContext dbContext) : IOutboxStore<TDbContext>
     where TDbContext : AethraModuleDbContext
 {
     public async Task<IReadOnlyList<OutboxMessage>> FetchPendingAsync(int batchSize, CancellationToken ct)

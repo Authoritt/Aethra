@@ -24,7 +24,7 @@ public sealed record TriggerMonitorCheckCommand(string MonitorId) : ICommand<Mon
 internal sealed class TriggerMonitorCheckHandler(
     MonitoringDbContext db,
     IMonitorProbe probe,
-    IOutboxWriter outbox,
+    IOutboxWriter<MonitoringDbContext> outbox,
     IClock clock)
     : ICommandHandler<TriggerMonitorCheckCommand, MonitorCheckDto>
 {

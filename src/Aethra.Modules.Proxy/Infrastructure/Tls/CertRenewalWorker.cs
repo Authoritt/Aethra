@@ -73,7 +73,7 @@ public sealed class CertRenewalWorker(
         using var scope = scopeFactory.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<ICertificateStore>();
         var manager = scope.ServiceProvider.GetRequiredService<ICertManager>();
-        var outbox = scope.ServiceProvider.GetRequiredService<IOutboxWriter>();
+        var outbox = scope.ServiceProvider.GetRequiredService<IOutboxWriter<ProxyDbContext>>();
 
         var now = clock.GetUtcNow();
         var due = await store.ListIssuedDueForRenewalAsync(now, ct).ConfigureAwait(false);

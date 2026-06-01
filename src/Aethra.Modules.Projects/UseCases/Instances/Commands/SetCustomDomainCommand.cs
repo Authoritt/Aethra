@@ -26,7 +26,7 @@ internal sealed class SetCustomDomainHandler(
     ProjectsDbContext db,
     IClock clock,
     IBaseDomainProvider baseDomainProvider,
-    IOutboxWriter outbox)
+    IOutboxWriter<ProjectsDbContext> outbox)
     : ICommandHandler<SetCustomDomainCommand>
 {
     public async Task<Result> Handle(SetCustomDomainCommand request, CancellationToken cancellationToken)

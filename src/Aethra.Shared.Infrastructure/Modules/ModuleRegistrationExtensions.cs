@@ -36,8 +36,8 @@ public static class ModuleRegistrationExtensions
             configure?.Invoke(options);
         });
 
-        services.AddScoped<IOutboxWriter, EfOutboxWriter<TDbContext>>();
-        services.AddScoped<IOutboxStore, EfOutboxStore<TDbContext>>();
+        services.AddScoped<IOutboxWriter<TDbContext>, EfOutboxWriter<TDbContext>>();
+        services.AddScoped<IOutboxStore<TDbContext>, EfOutboxStore<TDbContext>>();
 
         services.AddHostedService<ModuleOutboxDispatcherHost<TDbContext>>();
 
@@ -75,7 +75,7 @@ internal sealed class ModuleOutboxDispatcherHost<TDbContext>(
             try
             {
                 using var scope = scopeFactory.CreateScope();
-                var store = scope.ServiceProvider.GetRequiredService<IOutboxStore>();
+                var store = scope.ServiceProvider.GetRequiredService<IOutboxStore<TDbContext>>();
                 var bus = scope.ServiceProvider.GetRequiredService<IIntegrationEventBus>();
                 var batch = await store.FetchPendingAsync(options.Value.BatchSize, stoppingToken).ConfigureAwait(false);
 
