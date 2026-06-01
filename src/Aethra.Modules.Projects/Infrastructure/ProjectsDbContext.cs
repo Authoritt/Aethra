@@ -1,3 +1,9 @@
+using Aethra.Modules.Projects.Domain;
+using Aethra.Modules.Projects.Domain.Clients;
+using Aethra.Modules.Projects.Domain.EnvVars;
+using Aethra.Modules.Projects.Domain.Instances;
+using Aethra.Modules.Projects.Domain.Templates;
+using Aethra.Modules.Projects.Infrastructure.Configurations;
 using Aethra.Shared.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -5,21 +11,30 @@ namespace Aethra.Modules.Projects.Infrastructure;
 
 /// <summary>
 /// DbContext del módulo Projects. Schema PostgreSQL: <c>projects</c>.
-/// Hereda outbox_messages de la base.
+/// Hereda <c>outbox_messages</c> de la base.
 ///
-/// Estado actual (F9.0 cleanup): vacío de DbSets. La sub-fase persistence reintroducirá los
-/// DbSets de Project + EnvironmentVariable + los aggregates de A1 (Template, Client, Instance)
-/// con sus respectivas configuraciones, y se regenerarán las migraciones desde cero.
+/// F9.0 persistence sub-fase: cablea los aggregates Project + Template + Client + Instance +
+/// EnvironmentVariable. Los IDs (Template/Client/Instance) son value-object converters declarados
+/// inline en cada <c>IEntityTypeConfiguration</c> para mantener proximidad con el mapeo.
 /// </summary>
 public sealed class ProjectsDbContext(DbContextOptions<ProjectsDbContext> options)
     : AethraModuleDbContext(options)
 {
     public override string SchemaName => "projects";
 
+    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<Template> Templates => Set<Template>();
+    public DbSet<Client> Clients => Set<Client>();
+    public DbSet<Instance> Instances => Set<Instance>();
+    public DbSet<EnvironmentVariable> EnvironmentVariables => Set<EnvironmentVariable>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        // F9.0 persistence sub-fase añadirá ApplyConfiguration() para Project, EnvironmentVariable,
-        // Template, Client, Instance y sus owned entities (TemplateSource, TemplateBuild, etc.).
+        modelBuilder.ApplyConfiguration(new ProjectConfiguration());
+        modelBuilder.ApplyConfiguration(new TemplateConfiguration());
+        modelBuilder.ApplyConfiguration(new ClientConfiguration());
+        modelBuilder.ApplyConfiguration(new InstanceConfiguration());
+        modelBuilder.ApplyConfiguration(new EnvironmentVariableConfiguration());
     }
 }
