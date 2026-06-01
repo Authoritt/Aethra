@@ -43,6 +43,13 @@ public sealed class SatelliteHub(
         logger.LogInformation("Satélite conectado para VM {VmId} con connectionId={Conn}",
             vmId, Context.ConnectionId);
         await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(vmId.Value));
+
+        // F9.8C: registro de conexión central → satélite (vmId → connectionId) para que
+        // SignalRSatelliteRpcClient pueda chequear "está conectado?" antes de mandar comandos.
+        var registry = Context.GetHttpContext()?.RequestServices
+            .GetService<Aethra.Shared.Contracts.Containers.ISatelliteConnectionRegistry>();
+        registry?.Register(vmId.Value.ToString()!, Context.ConnectionId);
+
         await base.OnConnectedAsync();
     }
 
@@ -51,6 +58,12 @@ public sealed class SatelliteHub(
         var vmId = ResolveVmId();
         if (vmId is not null)
         {
+            // F9.8C: desregistrar antes de hacer el resto para que cualquier RPC en vuelo
+            // detecte rápidamente que el satélite ya no está disponible.
+            var registry = Context.GetHttpContext()?.RequestServices
+                .GetService<Aethra.Shared.Contracts.Containers.ISatelliteConnectionRegistry>();
+            registry?.Unregister(vmId.Value.ToString()!, Context.ConnectionId);
+
             var vm = await db.Vms.FindAsync([vmId], Context.ConnectionAborted);
             if (vm is not null)
             {

@@ -30,6 +30,7 @@ public sealed class BuildOrchestrator(
     DeploymentsDbContext db,
     ITemplateLookup templateLookup,
     ISatelliteRpcClient satelliteClient,
+    ISatelliteConnectionRegistry satelliteRegistry,
     IOutboxWriter<DeploymentsDbContext> outbox,
     IIntegrationCredentialResolver credentialResolver,
     IClock clock,
@@ -102,33 +103,69 @@ public sealed class BuildOrchestrator(
             }
 
             var shortSha = build.GitSha.Length >= 7 ? build.GitSha[..7] : build.GitSha;
-            var placeholderImageRef = $"dry-run-image:{template.Slug}-{shortSha}";
+            var placeholderImageRef = $"aethra-image:{template.Slug}-{shortSha}";
 
+            // F9.8C: el build necesita un satélite connecté para ejecutar BuildImage real.
+            // F9.4/F9.5 cablearán routing por VM/Cluster; por ahora elegimos cualquier satélite
+            // conectado (single-VM smoke). Si ninguno está conectado, falla con errorCode estable.
+            var targetVmId = satelliteRegistry.ConnectedVmIds.FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(targetVmId))
+            {
+                FailAndPersist(build, "no_satellite",
+                    "No hay satélite conectado al central. Verificar que el satélite esté corriendo "
+                    + "y que su token sea válido.");
+                await PersistAndPublishFailureAsync(build, ct).ConfigureAwait(false);
+                return;
+            }
+
+            build.AppendLog(BuildLogLevel.Info, "building",
+                $"Despachando BuildImage al satélite vmId={targetVmId}",
+                clock.UtcNow);
+
+            BuildResult buildResult;
             try
             {
-                // Construimos un BuildSpec representativo aunque el satélite lance.
                 var spec = new BuildSpec(
                     ImageRef: placeholderImageRef,
                     BuildContextTarGz: Array.Empty<byte>(),
                     DockerfilePath: template.DockerfilePath,
                     BuildArgs: new Dictionary<string, string>(),
                     BuildSecrets: null);
-                // vmId vacío: F9.3.5 introducirá el routing por VM. El stub ignora el valor.
-                var _ = await satelliteClient
-                    .SendBuildAsync(vmId: string.Empty, spec: spec, pushTo: null, ct: ct)
+                buildResult = await satelliteClient
+                    .SendBuildAsync(vmId: targetVmId, spec: spec, pushTo: null, ct: ct)
                     .ConfigureAwait(false);
             }
-            catch (NotImplementedException)
+            catch (SatelliteNotConnectedException ex)
             {
-                build.AppendLog(BuildLogLevel.Warn, "building",
-                    "satellite RPC pendiente F9.3.5: continuamos en dry-run",
-                    clock.UtcNow);
+                FailAndPersist(build, "no_satellite", ex.Message);
+                await PersistAndPublishFailureAsync(build, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (TimeoutException ex)
+            {
+                FailAndPersist(build, "satellite_timeout", ex.Message);
+                await PersistAndPublishFailureAsync(build, ct).ConfigureAwait(false);
+                return;
+            }
+
+            // Persistir los logs que devolvió el runtime (Docker/Podman) si los hay.
+            foreach (var line in buildResult.LogLines)
+            {
+                build.AppendLog(BuildLogLevel.Info, "building", line, clock.UtcNow);
+            }
+
+            if (!buildResult.Success)
+            {
+                FailAndPersist(build, "runtime_failed",
+                    buildResult.ErrorMessage ?? "Build falló en el satélite sin mensaje.");
+                await PersistAndPublishFailureAsync(build, ct).ConfigureAwait(false);
+                return;
             }
 
             // === Push ===
             build.Transition(BuildStatus.Pushing, clock.UtcNow);
             build.AppendLog(BuildLogLevel.Info, "pushing",
-                $"dry-run: push simulado a registry interno → {placeholderImageRef}",
+                $"Imagen construida: {placeholderImageRef} (imageId={buildResult.ImageId})",
                 clock.UtcNow);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
@@ -147,7 +184,7 @@ public sealed class BuildOrchestrator(
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
             logger.LogInformation(
-                "Build {Id} (template={Template}, sha={Sha}) completado en dry-run ({Ms} ms)",
+                "Build {Id} (template={Template}, sha={Sha}) completado en {Ms} ms",
                 build.Id, build.TemplateId, shortSha, totalStopwatch.ElapsedMilliseconds);
         }
         catch (OperationCanceledException)

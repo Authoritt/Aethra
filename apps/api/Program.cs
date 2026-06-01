@@ -100,18 +100,20 @@ builder.Services.AddDbContext<SharedDbContext>(o => o.UseNpgsql(aethraConnection
 builder.Services.AddScoped<IIdempotencyStore, EfIdempotencyStore>();
 
 // -----------------------------------------------------------------------------
-// SignalR central→satélite (stub F9.3): el cliente RPC tipado vive como contrato en
-// Shared.Contracts.Containers; el host registra la impl NotImplemented hasta F9.3.5.
-// Los orquestadores (Build, Deployment) lo inyectan y atrapan NotImplementedException
-// para seguir en modo dry-run.
-// TODO F9.6.5: reemplazar por SignalRSatelliteRpcClient (ya creado en
-// apps/api/Hubs/SignalRSatelliteRpcClient.cs) cuando el satélite implemente los
-// handlers de response (BuildImageResponse, RunContainerResponse, etc.) en su
-// HubConnection. El cliente SignalR debe registrarse como singleton implementando
-// ambos ISatelliteRpcClient e ISatelliteRpcCallbacks.
+// SignalR central→satélite (F9.8C): RPC real con correlation tracking.
+//   - SatelliteConnectionRegistry: in-memory map vmId → connectionId (registrado
+//     por SatelliteHub.OnConnected/Disconnected).
+//   - SignalRSatelliteRpcClient: implementa ISatelliteRpcClient (lo usan los
+//     orquestadores) e ISatelliteRpcCallbacks (lo invoca SatelliteHub al recibir
+//     respuestas del satélite). Singleton para compartir el dict de pendientes.
 // -----------------------------------------------------------------------------
-builder.Services.AddSingleton<Aethra.Shared.Contracts.Containers.ISatelliteRpcClient,
-    NotImplementedSatelliteRpcClient>();
+builder.Services.AddSingleton<Aethra.Shared.Contracts.Containers.ISatelliteConnectionRegistry,
+    SatelliteConnectionRegistry>();
+builder.Services.AddSingleton<SignalRSatelliteRpcClient>();
+builder.Services.AddSingleton<Aethra.Shared.Contracts.Containers.ISatelliteRpcClient>(
+    sp => sp.GetRequiredService<SignalRSatelliteRpcClient>());
+builder.Services.AddSingleton<Aethra.Shared.Contracts.Containers.ISatelliteRpcCallbacks>(
+    sp => sp.GetRequiredService<SignalRSatelliteRpcClient>());
 
 // -----------------------------------------------------------------------------
 // Módulos — cada uno se hace cargo de su DbContext, handlers específicos y endpoints.

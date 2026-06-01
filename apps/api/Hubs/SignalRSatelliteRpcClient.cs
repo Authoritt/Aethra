@@ -31,8 +31,10 @@ namespace Aethra.Api.Hubs;
 public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteRpcCallbacks
 {
     private readonly IHubContext<SatelliteHub> _hub;
+    private readonly ISatelliteConnectionRegistry _registry;
     private readonly ILogger<SignalRSatelliteRpcClient> _logger;
-    private readonly TimeSpan _timeout;
+    private readonly TimeSpan _defaultTimeout;
+    private readonly TimeSpan _buildTimeout;
 
     /// <summary>Requests Task-based (build, run, stop, remove, list). Resueltas en <see cref="CompleteRequest"/>.</summary>
     private readonly ConcurrentDictionary<string, TaskCompletionSource<object?>> _pending = new();
@@ -42,12 +44,18 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
 
     public SignalRSatelliteRpcClient(
         IHubContext<SatelliteHub> hub,
+        ISatelliteConnectionRegistry registry,
         IConfiguration cfg,
         ILogger<SignalRSatelliteRpcClient> logger)
     {
         _hub = hub;
+        _registry = registry;
         _logger = logger;
-        _timeout = TimeSpan.FromSeconds(cfg.GetValue("Satellite:RpcTimeoutSeconds", 600));
+        // Default timeout corto (60s) para Stop/Remove/Run/List/Push/Pull. Build se sobreescribe
+        // arriba porque clonar + buildear puede tardar varios minutos. Configurable vía
+        // Satellite:RpcTimeoutSeconds (default) y Satellite:BuildTimeoutSeconds (builds).
+        _defaultTimeout = TimeSpan.FromSeconds(cfg.GetValue("Satellite:RpcTimeoutSeconds", 60));
+        _buildTimeout = TimeSpan.FromSeconds(cfg.GetValue("Satellite:BuildTimeoutSeconds", 900));
     }
 
     // -------------------------------------------------------------------------
@@ -60,7 +68,7 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
         var correlationId = NewCorrelationId();
         var resp = await SendAndAwaitAsync<BuildImageResponse>(
             vmId, correlationId, "BuildImage",
-            new BuildImageRequest(correlationId, spec, pushTo), ct).ConfigureAwait(false);
+            new BuildImageRequest(correlationId, spec, pushTo), _buildTimeout, ct).ConfigureAwait(false);
         return resp.Result;
     }
 
@@ -70,7 +78,7 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
         var correlationId = NewCorrelationId();
         var resp = await SendAndAwaitAsync<RunContainerResponse>(
             vmId, correlationId, "RunContainer",
-            new RunContainerRequest(correlationId, spec, pullFrom), ct).ConfigureAwait(false);
+            new RunContainerRequest(correlationId, spec, pullFrom), _defaultTimeout, ct).ConfigureAwait(false);
         return resp.Result;
     }
 
@@ -79,7 +87,7 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
         var correlationId = NewCorrelationId();
         await SendAndAwaitAsync<object>(
             vmId, correlationId, "StopContainer",
-            new StopContainerRequest(correlationId, containerNameOrId), ct).ConfigureAwait(false);
+            new StopContainerRequest(correlationId, containerNameOrId), _defaultTimeout, ct).ConfigureAwait(false);
     }
 
     public async Task SendRemoveAsync(
@@ -88,7 +96,7 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
         var correlationId = NewCorrelationId();
         await SendAndAwaitAsync<object>(
             vmId, correlationId, "RemoveContainer",
-            new RemoveContainerRequest(correlationId, containerNameOrId, force), ct)
+            new RemoveContainerRequest(correlationId, containerNameOrId, force), _defaultTimeout, ct)
             .ConfigureAwait(false);
     }
 
@@ -98,7 +106,7 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
         var correlationId = NewCorrelationId();
         var resp = await SendAndAwaitAsync<ListContainersResponse>(
             vmId, correlationId, "ListContainers",
-            new ListContainersRequest(correlationId), ct).ConfigureAwait(false);
+            new ListContainersRequest(correlationId), _defaultTimeout, ct).ConfigureAwait(false);
         return resp.Containers;
     }
 
@@ -110,6 +118,9 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
         string vmId, string containerNameOrId, int tailLines,
         [EnumeratorCancellation] CancellationToken ct)
     {
+        var connectionId = _registry.GetConnectionId(vmId)
+            ?? throw new SatelliteNotConnectedException(vmId);
+
         var correlationId = NewCorrelationId();
         var channel = Channel.CreateUnbounded<LogChunk>(new UnboundedChannelOptions
         {
@@ -126,7 +137,7 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
         try
         {
             var req = new StreamLogsRequest(correlationId, containerNameOrId, tailLines);
-            await _hub.Clients.Group(GroupNameForVm(vmId))
+            await _hub.Clients.Client(connectionId)
                 .SendAsync("StreamLogs", req, ct).ConfigureAwait(false);
 
             await foreach (var chunk in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
@@ -194,9 +205,15 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
     // -------------------------------------------------------------------------
 
     private async Task<TResponse> SendAndAwaitAsync<TResponse>(
-        string vmId, string correlationId, string method, object payload, CancellationToken ct)
+        string vmId, string correlationId, string method, object payload,
+        TimeSpan timeout, CancellationToken ct)
         where TResponse : class
     {
+        // Pre-check: si el satélite no está conectado, fallar rápido en lugar de esperar
+        // al timeout. El registry se mantiene actualizado por SatelliteHub.OnConnected/Disconnected.
+        var connectionId = _registry.GetConnectionId(vmId)
+            ?? throw new SatelliteNotConnectedException(vmId);
+
         var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!_pending.TryAdd(correlationId, tcs))
         {
@@ -206,19 +223,23 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
 
         try
         {
-            await _hub.Clients.Group(GroupNameForVm(vmId))
+            // Apuntamos directamente al connectionId del satélite. Esto evita race-conditions
+            // con el Groups (el satélite puede haberse unido al grupo pero la membresía aún
+            // no haberse propagado en backplanes) y nos permite distinguir "no conectado" de
+            // "conectado pero ocupado".
+            await _hub.Clients.Client(connectionId)
                 .SendAsync(method, payload, ct).ConfigureAwait(false);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            var timeoutTask = Task.Delay(_timeout, timeoutCts.Token);
+            var timeoutTask = Task.Delay(timeout, timeoutCts.Token);
             var completed = await Task.WhenAny(tcs.Task, timeoutTask).ConfigureAwait(false);
             if (completed != tcs.Task)
             {
                 _logger.LogWarning(
                     "Timeout {Seconds}s esperando respuesta del satélite para vmId={VmId} method={Method} correlationId={CorrelationId}.",
-                    _timeout.TotalSeconds, vmId, method, correlationId);
+                    timeout.TotalSeconds, vmId, method, correlationId);
                 throw new TimeoutException(
-                    $"Satélite {vmId} no respondió en {_timeout.TotalSeconds}s a {method}.");
+                    $"Satélite {vmId} no respondió en {timeout.TotalSeconds}s a {method}.");
             }
 
             // Cancelar el delay para liberar recursos del timer.
@@ -245,6 +266,4 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
     }
 
     private static string NewCorrelationId() => Guid.NewGuid().ToString("N");
-
-    private static string GroupNameForVm(string vmId) => $"vm:{vmId}";
 }

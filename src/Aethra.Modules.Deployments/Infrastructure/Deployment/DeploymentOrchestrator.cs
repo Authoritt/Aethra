@@ -234,10 +234,15 @@ public sealed class DeploymentOrchestrator(
                 $"Contenedor levantado por satélite: {result.ContainerId}", clock.UtcNow);
             return result.ContainerId;
         }
+        catch (SatelliteNotConnectedException ex)
+        {
+            // Propagar para que RunAsync marque el deployment como Failed con errorCode estable.
+            throw new InvalidOperationException($"no_satellite: {ex.Message}", ex);
+        }
         catch (NotImplementedException)
         {
             deployment.AppendLog(DeploymentLogLevel.Warn, "starting",
-                "satellite RPC pendiente F9.3.5: simulamos container id estable para el deployment",
+                "satellite RPC stub: simulamos container id estable para el deployment",
                 clock.UtcNow);
             // ID determinista basado en el deployment para que el resto del flujo funcione.
             return $"dry-run-{deployment.Id}".ToLowerInvariant();

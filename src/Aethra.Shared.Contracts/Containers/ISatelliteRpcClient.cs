@@ -11,10 +11,10 @@ namespace Aethra.Shared.Contracts.Containers;
 /// <c>IHubContext&lt;SatelliteHub&gt;</c> de SignalR.
 /// </para>
 /// <para>
-/// STUB de F9.2/F9.3: las implementaciones reales con correlation tracking sobre
-/// <c>IHubContext</c> se cablearán en F9.3.5. Por ahora la implementación registrada
-/// (<c>NotImplementedSatelliteRpcClient</c>) lanza <see cref="NotImplementedException"/>
-/// en cada llamada; los orquestadores la atrapan y siguen en modo dry-run.
+/// F9.8C: implementación real con correlation tracking sobre <c>IHubContext</c>
+/// (<c>SignalRSatelliteRpcClient</c>). Si no hay satélite conectado lanza
+/// <see cref="SatelliteNotConnectedException"/>; los orquestadores la mapean a un
+/// <c>errorCode</c> estable.
 /// </para>
 /// </summary>
 public interface ISatelliteRpcClient
