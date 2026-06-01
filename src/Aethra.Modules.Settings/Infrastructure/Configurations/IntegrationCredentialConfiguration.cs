@@ -80,7 +80,7 @@ internal sealed class IntegrationCredentialConfiguration : IEntityTypeConfigurat
         builder.Ignore(c => c.DomainEvents);
     }
 
-    private static IReadOnlyDictionary<string, string>? DeserializeMetadata(string? raw)
+    private static Dictionary<string, string>? DeserializeMetadata(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
         {

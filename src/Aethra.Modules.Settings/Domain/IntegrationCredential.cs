@@ -165,7 +165,7 @@ public sealed class IntegrationCredential : AggregateRoot<IntegrationCredentialI
         }
     }
 
-    private static IReadOnlyDictionary<string, string>? NormalizeMetadata(IReadOnlyDictionary<string, string>? metadata)
+    private static Dictionary<string, string>? NormalizeMetadata(IReadOnlyDictionary<string, string>? metadata)
     {
         if (metadata is null || metadata.Count == 0)
         {
