@@ -1,5 +1,5 @@
-using Aethra.Satellite.Docker;
-using Aethra.Shared.Contracts.Deployments;
+using Aethra.Satellite.Containers;
+using Aethra.Shared.Contracts.Containers;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 
@@ -16,12 +16,12 @@ namespace Aethra.Satellite.Workers;
 /// </para>
 /// <para>
 /// Para <c>StreamLogs</c> usamos <c>HubConnection.On(..., IAsyncEnumerable&lt;LogChunk&gt;)</c>
-/// vía <see cref="ChannelReader{T}"/>, que SignalR mapea al cliente como un stream.
-/// El central debe invocarlo con <c>connection.StreamAsync&lt;LogChunk&gt;("StreamLogs", request)</c>.
+/// que SignalR mapea al cliente como un stream. El central debe invocarlo con
+/// <c>connection.StreamAsync&lt;LogChunk&gt;("StreamLogs", request)</c>.
 /// </para>
 /// </summary>
 public sealed class SatelliteCommandHandler(
-    IDockerClient docker,
+    IContainerRuntime runtime,
     ILogger<SatelliteCommandHandler> logger)
 {
     /// <summary>
@@ -32,46 +32,88 @@ public sealed class SatelliteCommandHandler(
     public void Register(HubConnection connection)
     {
         // BuildImage: petición → resultado con logs y ID.
-        connection.On<BuildImageRequest, BuildImageResult>("BuildImage", async (req) =>
+        connection.On<BuildImageRequest, BuildImageResponse>("BuildImage", async (req) =>
         {
-            logger.LogInformation("Central → BuildImage (job={Job}, tag={Tag})", req.BuildJobId, req.ImageTag);
-            return await docker.BuildImageAsync(req, CancellationToken.None);
+            logger.LogInformation("Central → BuildImage (corr={Corr}, image={Image})",
+                req.CorrelationId, req.Spec.ImageRef);
+            var build = await runtime.BuildImageAsync(req.Spec, CancellationToken.None);
+
+            // Si el central pidió push tras build y el build fue exitoso, pusheamos.
+            if (build.Success && req.PushTo is { } pushAuth)
+            {
+                var push = await runtime.PushImageAsync(req.Spec.ImageRef, pushAuth, CancellationToken.None);
+                if (!push.Success)
+                {
+                    var logs = build.LogLines.ToList();
+                    logs.Add($"PUSH ERROR: {push.ErrorMessage}");
+                    return new BuildImageResponse(
+                        req.CorrelationId,
+                        new BuildResult(Success: false, build.ImageId, push.ErrorMessage, logs));
+                }
+            }
+
+            return new BuildImageResponse(req.CorrelationId, build);
         });
 
         // RunContainer: pull (si hace falta) + create + start.
-        connection.On<RunContainerRequest, RunContainerResult>("RunContainer", async (req) =>
+        connection.On<RunContainerRequest, RunContainerResponse>("RunContainer", async (req) =>
         {
-            logger.LogInformation("Central → RunContainer (job={Job}, name={Name})", req.DeployJobId, req.ContainerName);
-            return await docker.RunContainerAsync(req, CancellationToken.None);
+            logger.LogInformation("Central → RunContainer (corr={Corr}, name={Name})",
+                req.CorrelationId, req.Spec.ContainerName);
+            if (req.PullFrom is not null)
+            {
+                await runtime.PullImageAsync(req.Spec.ImageRef, req.PullFrom, CancellationToken.None);
+            }
+            var result = await runtime.RunContainerAsync(req.Spec, CancellationToken.None);
+            return new RunContainerResponse(req.CorrelationId, result);
         });
 
         // StopContainer: comando void (sin resultado). El central usa InvokeAsync sin <TResult>.
         connection.On<StopContainerRequest>("StopContainer", async (req) =>
         {
-            logger.LogInformation("Central → StopContainer (name={Name})", req.ContainerName);
-            await docker.StopContainerAsync(req, CancellationToken.None);
+            logger.LogInformation("Central → StopContainer (corr={Corr}, name={Name})",
+                req.CorrelationId, req.ContainerNameOrId);
+            await runtime.StopContainerAsync(req.ContainerNameOrId, CancellationToken.None);
         });
 
         // RemoveContainer: comando void.
         connection.On<RemoveContainerRequest>("RemoveContainer", async (req) =>
         {
-            logger.LogInformation("Central → RemoveContainer (name={Name})", req.ContainerName);
-            await docker.RemoveContainerAsync(req, CancellationToken.None);
+            logger.LogInformation("Central → RemoveContainer (corr={Corr}, name={Name}, force={Force})",
+                req.CorrelationId, req.ContainerNameOrId, req.Force);
+            await runtime.RemoveContainerAsync(req.ContainerNameOrId, req.Force, CancellationToken.None);
         });
 
         // StreamLogs: el central llama StreamAsync<LogChunk>("StreamLogs", req)
         // y consume el IAsyncEnumerable que devolvemos aquí.
         connection.On<StreamLogsRequest, IAsyncEnumerable<LogChunk>>("StreamLogs", (req) =>
         {
-            logger.LogInformation("Central → StreamLogs (name={Name}, follow={Follow})", req.ContainerName, req.Follow);
-            return docker.StreamLogsAsync(req, CancellationToken.None);
+            logger.LogInformation("Central → StreamLogs (corr={Corr}, name={Name}, tail={Tail})",
+                req.CorrelationId, req.ContainerNameOrId, req.TailLines);
+            return StreamLogsWithCorrelationAsync(req, CancellationToken.None);
         });
 
-        // ListContainers: ignoramos el record vacío del request (sirve como marcador del comando).
-        connection.On<ListContainersRequest, IReadOnlyList<ContainerSummary>>("ListContainers", async (_) =>
+        // ListContainers.
+        connection.On<ListContainersRequest, ListContainersResponse>("ListContainers", async (req) =>
         {
-            logger.LogDebug("Central → ListContainers");
-            return await docker.ListContainersAsync(CancellationToken.None);
+            logger.LogDebug("Central → ListContainers (corr={Corr})", req.CorrelationId);
+            var containers = await runtime.ListContainersAsync(CancellationToken.None);
+            return new ListContainersResponse(req.CorrelationId, containers);
         });
+    }
+
+    /// <summary>
+    /// Envuelve el stream de líneas crudas del runtime en <see cref="LogChunk"/> con el
+    /// <c>CorrelationId</c> del request original para que el central pueda multiplexar
+    /// varios streams concurrentes sobre la misma conexión.
+    /// </summary>
+    private async IAsyncEnumerable<LogChunk> StreamLogsWithCorrelationAsync(
+        StreamLogsRequest req,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        await foreach (var line in runtime.StreamLogsAsync(req.ContainerNameOrId, req.TailLines, ct))
+        {
+            yield return new LogChunk(req.CorrelationId, DateTimeOffset.UtcNow, line);
+        }
     }
 }

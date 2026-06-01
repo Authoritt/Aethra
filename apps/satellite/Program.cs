@@ -1,7 +1,10 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Aethra.Satellite;
 using Aethra.Satellite.Buffer;
-using Aethra.Satellite.Docker;
+using Aethra.Satellite.Containers;
+using Aethra.Satellite.Containers.Docker;
+using Aethra.Satellite.Containers.Podman;
 using Aethra.Satellite.Probes;
 using Aethra.Satellite.Workers;
 using Serilog;
@@ -14,7 +17,11 @@ builder.Services.Configure<SatelliteOptions>(opts =>
 {
     opts.CentralUrl = Environment.GetEnvironmentVariable("AETHRA_CENTRAL_URL") ?? "http://localhost:5080";
     opts.Token = Environment.GetEnvironmentVariable("AETHRA_SATELLITE_TOKEN") ?? string.Empty;
-    if (int.TryParse(Environment.GetEnvironmentVariable("AETHRA_METRICS_INTERVAL_SECONDS"), out var interval))
+    if (int.TryParse(
+            Environment.GetEnvironmentVariable("AETHRA_METRICS_INTERVAL_SECONDS"),
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var interval))
     {
         opts.MetricsIntervalSeconds = interval;
     }
@@ -35,23 +42,23 @@ builder.Services.AddSingleton<IMetricsProbe>(sp =>
 // (patrón "replication" de Netdata).
 builder.Services.AddSingleton<ISnapshotBuffer, SqliteSnapshotBuffer>();
 
-// Cliente Docker: si el socket/named-pipe está montado usamos Docker.DotNet;
-// si no, fallback que loguea y devuelve "no disponible" (dev/tests sin Docker).
-builder.Services.AddSingleton<IDockerClient>(sp =>
+// Container runtime: selector configurable Satellite:ContainerRuntime = "docker" | "podman".
+// docker → Docker.DotNet contra el socket local (unix o named pipe).
+// podman → wrapper sobre el CLI podman.
+var runtimeKind = (builder.Configuration["Satellite:ContainerRuntime"] ?? "docker").ToLowerInvariant();
+switch (runtimeKind)
 {
-    var hasDockerSocket = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-        ? Directory.Exists(@"\\.\pipe\docker_engine")
-        : File.Exists("/var/run/docker.sock");
-
-    if (hasDockerSocket)
-    {
-        return new DockerDotNetClient(sp.GetRequiredService<ILogger<DockerDotNetClient>>());
-    }
-
-    var lg = sp.GetRequiredService<ILogger<DockerNotAvailableClient>>();
-    lg.LogWarning("Socket Docker no detectado; usando DockerNotAvailableClient (modo dev/sin-docker).");
-    return new DockerNotAvailableClient(lg);
-});
+    case "docker":
+        builder.Services.AddSingleton<IContainerRuntime, DockerContainerRuntime>();
+        break;
+    case "podman":
+        builder.Services.Configure<PodmanOptions>(builder.Configuration.GetSection("Satellite:Podman"));
+        builder.Services.AddSingleton<IContainerRuntime, PodmanContainerRuntime>();
+        break;
+    default:
+        throw new InvalidOperationException(
+            $"Container runtime no soportado: '{runtimeKind}'. Valores válidos: 'docker', 'podman'.");
+}
 
 builder.Services.AddSingleton<SatelliteCommandHandler>();
 
