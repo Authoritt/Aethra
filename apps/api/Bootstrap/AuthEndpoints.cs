@@ -48,6 +48,10 @@ public static class AuthEndpoints
         })
         .WithName("Logout");
 
+        // /auth/me reporta la sesión humana (cookie). Si una API key consulta este
+        // endpoint, los claims emitidos por el handler de API key no coinciden con la
+        // shape esperada (Email + scope=admin) y filtraría metadata interna — por eso
+        // restringimos a cookie únicamente vía la policy "CookieOnly".
         group.MapGet("/me", (HttpContext http) =>
         {
             if (http.User.Identity?.IsAuthenticated != true)
@@ -60,7 +64,8 @@ public static class AuthEndpoints
                 scopes = http.User.FindAll("scope").Select(c => c.Value),
             });
         })
-        .WithName("Me");
+        .WithName("Me")
+        .RequireAuthorization("CookieOnly");
 
         return app;
     }
