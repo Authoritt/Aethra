@@ -47,6 +47,7 @@ public sealed class SatelliteTokenAuthHandler(
 
     private string? ResolveToken()
     {
+        // 1) Header explícito X-Satellite-Token (curl, tests, scripts).
         if (Context.Request.Headers.TryGetValue(SatelliteAuthSchemes.TokenHeader, out var header))
         {
             var value = header.ToString();
@@ -55,7 +56,22 @@ public sealed class SatelliteTokenAuthHandler(
                 return value;
             }
         }
-        // SignalR WebSocket: el cliente JS y .NET ponen el token en query string `access_token`.
+        // 2) SignalR HTTP negotiate: el cliente .NET pone el token en Authorization: Bearer
+        //    (vía HubConnectionBuilder().WithUrl(..., http => http.AccessTokenProvider = ...)).
+        if (Context.Request.Headers.TryGetValue("Authorization", out var authHeader))
+        {
+            var value = authHeader.ToString();
+            if (value.StartsWith("Bearer ", StringComparison.Ordinal))
+            {
+                var token = value["Bearer ".Length..].Trim();
+                if (!string.IsNullOrWhiteSpace(token))
+                {
+                    return token;
+                }
+            }
+        }
+        // 3) SignalR WebSocket: el upgrade no permite headers custom, así que el cliente lo pasa
+        //    como query string `access_token`.
         if (Context.Request.Query.TryGetValue(SatelliteAuthSchemes.QueryParam, out var q))
         {
             var value = q.ToString();
