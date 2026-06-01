@@ -56,6 +56,24 @@ export default async function SettingsPage() {
             available
           />
           <SettingsCard
+            href="/settings/integrations"
+            title="Integraciones (credenciales)"
+            description="Credenciales centralizadas (Cloudflare, GitHub PAT, SMTP, registries) que otros modulos resuelven por nombre."
+            available
+          />
+          <SettingsCard
+            href="/settings/domains"
+            title="Base domain (wildcard)"
+            description="FQDN bajo el cual Aethra construye los hostnames. Solo uno activo a la vez, con flag de wildcard DNS confirmado."
+            available
+          />
+          <SettingsCard
+            href="/settings/environments"
+            title="Ambientes"
+            description="Catalogo de ambientes validos (production, staging, preview...). Otros modulos validan slugs contra esta lista."
+            available
+          />
+          <SettingsCard
             href="/settings"
             title="Perfil"
             description="Email, nombre y preferencias de cuenta."

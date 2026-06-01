@@ -480,3 +480,74 @@ export interface CreateApiKeyRequest {
   scopes: string[];
   expires_at?: string | null;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Settings (F9.1) — integrations, base domains, environments                 */
+/* -------------------------------------------------------------------------- */
+/* Convención: PascalCase en C# → camelCase en JSON (default de minimal APIs   */
+/* de .NET 10). Por eso aquí usamos camelCase tal cual lo serializa la API.    */
+
+export type IntegrationCredentialType =
+  | "Cloudflare"
+  | "GitHubPat"
+  | "Smtp"
+  | "Registry"
+  | "GenericApiKey";
+
+export interface IntegrationCredentialDto {
+  id: string;
+  name: string;
+  type: IntegrationCredentialType;
+  displayName: string;
+  description: string | null;
+  metadata: Record<string, string> | null;
+  createdAt: string;
+  rotatedAt: string | null;
+  lastUsedAt: string | null;
+}
+
+export interface CreateIntegrationCredentialRequest {
+  name: string;
+  type: IntegrationCredentialType;
+  displayName: string;
+  plainValue: string;
+  metadata?: Record<string, string> | null;
+  description?: string | null;
+}
+
+export interface RotateIntegrationCredentialRequest {
+  newPlainValue: string;
+}
+
+export interface BaseDomainDto {
+  id: string;
+  hostname: string;
+  cloudflareZoneId: string | null;
+  wildcardConfigured: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateBaseDomainRequest {
+  hostname: string;
+  cloudflareZoneId?: string | null;
+}
+
+export interface EnvironmentDefinitionDto {
+  id: string;
+  slug: string;
+  displayName: string;
+  order: number;
+  createdAt: string;
+}
+
+export interface CreateEnvironmentDefinitionRequest {
+  slug: string;
+  displayName: string;
+  order?: number | null;
+}
+
+export interface ReorderEnvironmentDefinitionsRequest {
+  ids: string[];
+}
