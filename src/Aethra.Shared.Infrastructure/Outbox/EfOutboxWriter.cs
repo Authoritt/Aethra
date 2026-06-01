@@ -5,9 +5,10 @@ using Aethra.Shared.Kernel.Domain;
 namespace Aethra.Shared.Infrastructure.Outbox;
 
 /// <summary>
-/// Escribe integration events al outbox del módulo emisor. Se llama desde handlers
-/// dentro de la misma transacción del TransactionBehavior, lo que garantiza que
-/// el evento se publica si y solo si el cambio de estado persiste.
+/// Escribe integration events al outbox del módulo emisor. Se llama desde handlers que hacen
+/// <c>SaveChangesAsync</c> sobre su propio DbContext al final del Handle: el registro del
+/// outbox se persiste en la misma llamada a <c>SaveChangesAsync</c> que el cambio de estado,
+/// lo que garantiza que el evento se publica si y solo si el cambio persiste.
 /// </summary>
 public sealed class EfOutboxWriter<TDbContext>(TDbContext dbContext) : IOutboxWriter<TDbContext>
     where TDbContext : AethraModuleDbContext

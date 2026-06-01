@@ -31,8 +31,9 @@ public static class ProjectsModule
         services.AddAethraModuleDbContext<ProjectsDbContext>(conn);
 
         // Read-models y writers cross-module (Shared.Contracts). Todos resuelven contra el
-        // ProjectsDbContext del scope corriente — el TransactionBehavior del caller agrupa
-        // los cambios del writer dentro de su transacción.
+        // ProjectsDbContext del scope corriente. Cada writer llama SaveChangesAsync por sí
+        // mismo: no hay transacción cross-DbContext entre el caller (p.ej. ServicesDbContext)
+        // y este ProjectsDbContext, así que invocar el writer ES un punto-de-no-retorno.
         services.AddScoped<ITemplateLookup, EfTemplateLookup>();
         services.AddScoped<IInstanceLookup, EfInstanceLookup>();
         services.AddScoped<ITenantContext, EfTenantContext>();

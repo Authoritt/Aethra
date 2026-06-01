@@ -17,9 +17,12 @@ namespace Aethra.Modules.Projects.Infrastructure.Lookups;
 /// </para>
 ///
 /// <para>
-/// NO se ejecuta <c>SaveChangesAsync</c> dentro del writer: el caller (usualmente un handler
-/// con <c>TransactionBehavior</c> activo) consolida los cambios en una sola transacción para
-/// que el outbox y el cambio de estado se commiteen atómicamente.
+/// <b>Semántica de persistencia:</b> cada método público llama
+/// <c>SaveChangesAsync</c> al final sobre el <c>ProjectsDbContext</c>. Esto significa que
+/// invocar el writer ES un punto-de-no-retorno: una vez retorna, los cambios están en BD.
+/// Los handlers que llaman al writer deben asegurarse de que el resto de su trabajo (en su
+/// propio DbContext) ya esté listo para persistir, dado que NO existe transacción
+/// cross-DbContext y por tanto no hay rollback automático si su SaveChanges posterior falla.
 /// </para>
 /// </summary>
 internal sealed class EfEnvVarWriter(ProjectsDbContext db, IClock clock) : IEnvVarWriter
@@ -76,6 +79,12 @@ internal sealed class EfEnvVarWriter(ProjectsDbContext db, IClock clock) : IEnvV
                 db.EnvironmentVariables.Add(fresh);
             }
         }
+
+        // Persistimos directamente: no existe TransactionBehavior global que cubra el
+        // ProjectsDbContext del caller (Services/Mcp llaman desde su propio handler con su
+        // propio DbContext). Si no se hace SaveChanges aquí, las env vars de un binding nunca
+        // alcanzarían la BD.
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     public async Task RemoveBySourceAsync(
@@ -96,6 +105,10 @@ internal sealed class EfEnvVarWriter(ProjectsDbContext db, IClock clock) : IEnvV
             return;
         }
         db.EnvironmentVariables.RemoveRange(toDelete);
+
+        // Persistimos directamente. Ver nota en UpsertManyAsync sobre la ausencia de
+        // TransactionBehavior global.
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>

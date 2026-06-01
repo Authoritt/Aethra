@@ -10,8 +10,9 @@ namespace Aethra.Shared.Infrastructure.Modules;
 
 /// <summary>
 /// Helpers para que cada módulo registre su DbContext + outbox writer/store + dispatcher
-/// con una sola llamada. El <c>TransactionBehavior</c> se registra por módulo como subclase
-/// concreta (no se puede parcial-aplicar un open generic de 3 a 2 type-params en .NET DI).
+/// con una sola llamada. F9.9: el <c>TransactionBehavior</c> NO se registra en este modelo
+/// (no hay transacciones cross-DbContext en el monolith modular); cada writer cross-module
+/// llama <c>SaveChangesAsync</c> internamente sobre su propio <c>DbContext</c>.
 /// </summary>
 public static class ModuleRegistrationExtensions
 {

@@ -7,6 +7,13 @@ namespace Aethra.Shared.Contracts.Projects;
 /// Para credenciales/secretos use <see cref="ISecretWriter"/> — las env vars planas viven en
 /// una tabla; los secrets viven en otra cifrada con DataProtection. F9.1 cableará ambas tablas
 /// y resoluciones.
+///
+/// <para>
+/// <b>Semántica de persistencia:</b> las implementaciones llaman <c>SaveChangesAsync</c>
+/// internamente sobre su propio <c>DbContext</c> (Projects). Invocar este writer ES un
+/// punto-de-no-retorno: una vez retorna, los cambios están en BD. No hay rollback
+/// cross-DbContext si el caller falla después, porque cada módulo tiene su propio contexto.
+/// </para>
 /// </summary>
 public interface IEnvVarWriter
 {
@@ -14,6 +21,7 @@ public interface IEnvVarWriter
     /// Upsert idempotente de un batch de env vars en el <paramref name="scope"/> indicado.
     /// Si una key ya existe con el mismo <paramref name="source"/>, se sobrescribe. Keys de
     /// otras sources no se tocan (un usuario manual no pierde su override).
+    /// Persiste los cambios antes de retornar.
     /// </summary>
     /// <param name="source">
     /// Origen lógico para auditoría y revoke selectivo. Ej: <c>"binding:bnd_..."</c>.
@@ -28,6 +36,7 @@ public interface IEnvVarWriter
     /// <summary>
     /// Borra todas las env vars previamente inyectadas por una <paramref name="source"/> dada
     /// dentro del <paramref name="scope"/>. Útil al revocar un ServiceBinding.
+    /// Persiste los cambios antes de retornar.
     /// </summary>
     Task RemoveBySourceAsync(
         EnvVarScope scope,

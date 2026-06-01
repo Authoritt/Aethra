@@ -13,6 +13,17 @@ namespace Aethra.Shared.Infrastructure.Pipelines;
 /// - Solo aplica a ICommand / ICommand&lt;T&gt; — las queries NO entran.
 /// - Cada modulo registra su propio DbContext y este behavior se resuelve via DI por modulo
 ///   (Aethra.Shared.Infrastructure.Pipelines.TransactionBehavior&lt;TRequest, TResponse, TDbContext&gt;).
+///
+/// <para>
+/// <b>NOTA F9.9:</b> esta clase NO está registrada en DI en ningún módulo actualmente. Se
+/// mantiene como referencia para un futuro escenario donde un solo módulo tenga su propio
+/// <c>DbContext</c> y quiera transaccionalidad por handler. El modelo actual (modular monolith
+/// con un <c>DbContext</c> por módulo) no permite transacciones cross-DbContext sin
+/// distributed transactions, así que cada writer cross-module (<c>EfEnvVarWriter</c>,
+/// <c>EfSecretWriter</c>) llama <c>SaveChangesAsync</c> por sí mismo. Si en el futuro un
+/// módulo quiere atomicidad fuerte sobre su propio DbContext, basta con registrar
+/// <c>typeof(TransactionBehavior&lt;,,&gt;)</c> cerrado con su DbContext en el pipeline.
+/// </para>
 /// </summary>
 public sealed class TransactionBehavior<TRequest, TResponse, TDbContext>(
     TDbContext dbContext,

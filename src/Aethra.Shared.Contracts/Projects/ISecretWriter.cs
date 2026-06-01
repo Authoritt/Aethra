@@ -7,12 +7,20 @@ namespace Aethra.Shared.Contracts.Projects;
 ///
 /// F9.1 reescribirá la implementación para que use una tabla separada de la de env vars
 /// planas — diseño explícito para reducir el blast-radius de un leak de la tabla principal.
+///
+/// <para>
+/// <b>Semántica de persistencia:</b> las implementaciones llaman <c>SaveChangesAsync</c>
+/// internamente sobre su propio <c>DbContext</c> (Projects). Invocar este writer ES un
+/// punto-de-no-retorno: una vez retorna, los cambios están en BD. No hay rollback
+/// cross-DbContext si el caller falla después.
+/// </para>
 /// </summary>
 public interface ISecretWriter
 {
     /// <summary>
     /// Upsert idempotente de un batch de secretos en el <paramref name="scope"/> indicado.
     /// Los <see cref="SecretUpsert.PlainValue"/> se cifran antes de persistirse.
+    /// Persiste los cambios antes de retornar.
     /// </summary>
     Task UpsertManyAsync(
         EnvVarScope scope,
@@ -24,6 +32,7 @@ public interface ISecretWriter
     /// <summary>
     /// Borra todos los secretos previamente inyectados por una <paramref name="source"/> dada
     /// dentro del <paramref name="scope"/>. Útil al revocar un ServiceBinding.
+    /// Persiste los cambios antes de retornar.
     /// </summary>
     Task RemoveBySourceAsync(
         EnvVarScope scope,

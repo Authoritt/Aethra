@@ -31,9 +31,10 @@ namespace Aethra.Modules.Proxy.Infrastructure.Handlers;
 /// </list>
 ///
 /// <para>
-/// La operación se hace en una sola transacción del <c>ProxyDbContext</c> (gracias al
-/// <c>TransactionBehavior</c> a nivel de pipeline). Si el SaveChanges falla, el reload no se
-/// ejecuta y la actualización del proxy queda como no-op.
+/// La operación se hace con un único <c>SaveChangesAsync</c> al final del handler sobre el
+/// <c>ProxyDbContext</c> (no hay <c>TransactionBehavior</c> registrado en el modelo modular
+/// monolith de Aethra). Si el SaveChanges falla, el reload no se ejecuta y la actualización
+/// del proxy queda como no-op.
 /// </para>
 /// </summary>
 internal sealed class DeploymentCompletedHandler(
