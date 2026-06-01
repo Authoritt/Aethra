@@ -1,6 +1,7 @@
 using Aethra.Modules.Notes.Application.Dtos;
 using Aethra.Modules.Notes.Domain;
 using Aethra.Modules.Notes.Infrastructure;
+using Aethra.Shared.Contracts.Notes;
 using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Kernel.Results;
 using Microsoft.EntityFrameworkCore;

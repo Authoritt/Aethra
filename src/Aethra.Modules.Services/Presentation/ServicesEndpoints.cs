@@ -1,6 +1,7 @@
 using Aethra.Modules.Services.Domain;
 using Aethra.Modules.Services.UseCases.Commands;
 using Aethra.Modules.Services.UseCases.Queries;
+using Aethra.Shared.Contracts.Services;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Results;
 using MediatR;

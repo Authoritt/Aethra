@@ -1,4 +1,5 @@
 using Aethra.Modules.Identity.Domain;
+using Aethra.Shared.Contracts.Authentication;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Aethra.Modules.Identity.Infrastructure.Authentication;

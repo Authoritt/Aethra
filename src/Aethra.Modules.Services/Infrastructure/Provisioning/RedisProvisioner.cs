@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Aethra.Modules.Services.Domain;
+using Aethra.Shared.Contracts.Services;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 

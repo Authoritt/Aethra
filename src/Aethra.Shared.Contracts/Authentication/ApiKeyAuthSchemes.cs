@@ -1,10 +1,11 @@
-namespace Aethra.Modules.Identity.Infrastructure.Authentication;
+namespace Aethra.Shared.Contracts.Authentication;
 
 /// <summary>
 /// Constantes del esquema de auth de API keys. El nombre real del scheme está en
 /// <c>Aethra.Api.Bootstrap.AuthSchemes.ApiKey</c> y se pasa al handler durante el
 /// registro — esta clase solo expone los nombres de claims y headers que el handler
-/// produce/consume, para que otros módulos los referencien sin acoplarse al host.
+/// produce/consume, para que otros módulos los referencien sin acoplarse al host ni
+/// al ensamblado de <c>Aethra.Modules.Identity</c>.
 /// </summary>
 public static class ApiKeyAuthSchemes
 {
@@ -26,4 +27,12 @@ public static class ApiKeyAuthSchemes
     /// Debe coincidir con la constante del host (<c>Aethra.Api.Bootstrap.AuthSchemes.Cookie</c>).
     /// </summary>
     public const string CookieScheme = "aethra.cookie";
+
+    /// <summary>
+    /// Scope wildcard. Equivale a tener todos los scopes — una API key con este claim,
+    /// o una sesión cookie autenticada, pasa cualquier policy <c>scope:&lt;name&gt;</c>.
+    /// Replica de <c>Aethra.Modules.Identity.Domain.ApiKey.AdminScope</c> para que módulos
+    /// externos no dependan del aggregate.
+    /// </summary>
+    public const string AdminScope = "*";
 }

@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using Aethra.Modules.Mcp.Security;
 using Aethra.Modules.Notes.Application.Commands;
-using Aethra.Modules.Notes.Domain;
+using Aethra.Shared.Contracts.Notes;
 using MediatR;
 using ModelContextProtocol.Server;
 

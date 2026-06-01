@@ -1,4 +1,5 @@
 using Aethra.Modules.Notes.Domain.Events;
+using Aethra.Shared.Contracts.Notes;
 using Aethra.Shared.Kernel.Domain;
 
 namespace Aethra.Modules.Notes.Domain;

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
+using Aethra.Shared.Contracts.Authentication;
 using Aethra.Shared.Kernel.Time;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;

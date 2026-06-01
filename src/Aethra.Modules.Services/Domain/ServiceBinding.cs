@@ -1,4 +1,5 @@
 using Aethra.Modules.Services.Domain.Events;
+using Aethra.Shared.Contracts.Services;
 using Aethra.Shared.Kernel.Domain;
 
 namespace Aethra.Modules.Services.Domain;

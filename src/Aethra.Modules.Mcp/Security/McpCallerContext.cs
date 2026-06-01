@@ -1,6 +1,5 @@
 using System.Security.Claims;
-using Aethra.Modules.Identity.Domain;
-using Aethra.Modules.Identity.Infrastructure.Authentication;
+using Aethra.Shared.Contracts.Authentication;
 using Microsoft.AspNetCore.Http;
 
 namespace Aethra.Modules.Mcp.Security;
@@ -48,7 +47,7 @@ internal sealed class HttpMcpCallerContext(IHttpContextAccessor accessor) : IMcp
         // Si el principal está autenticado por cookie y no hay claims de scope, se trata como admin.
         if (scopes.Count == 0 && string.IsNullOrEmpty(id))
         {
-            scopes.Add(ApiKey.AdminScope);
+            scopes.Add(ApiKeyAuthSchemes.AdminScope);
         }
         return (id, source, scopes);
     }
@@ -59,6 +58,6 @@ internal sealed class HttpMcpCallerContext(IHttpContextAccessor accessor) : IMcp
     public bool HasScope(string scope)
     {
         var s = Resolve().Scopes;
-        return s.Contains(ApiKey.AdminScope) || s.Contains(scope);
+        return s.Contains(ApiKeyAuthSchemes.AdminScope) || s.Contains(scope);
     }
 }

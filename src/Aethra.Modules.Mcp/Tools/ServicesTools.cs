@@ -1,8 +1,8 @@
 using System.ComponentModel;
 using Aethra.Modules.Mcp.Security;
-using Aethra.Modules.Services.Domain;
 using Aethra.Modules.Services.UseCases.Commands;
 using Aethra.Modules.Services.UseCases.Queries;
+using Aethra.Shared.Contracts.Services;
 using MediatR;
 using ModelContextProtocol.Server;
 

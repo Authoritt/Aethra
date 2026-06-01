@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Aethra.Modules.Services.Domain;
+using Aethra.Shared.Contracts.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Aethra.Modules.Services.Infrastructure.Provisioning;

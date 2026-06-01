@@ -2,6 +2,7 @@ using Aethra.Modules.Notes.Application.Commands;
 using Aethra.Modules.Notes.Application.Queries;
 using Aethra.Modules.Notes.Domain;
 using Aethra.Modules.Notes.Infrastructure;
+using Aethra.Shared.Contracts.Notes;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Ids;
 using Aethra.Shared.Kernel.Results;
