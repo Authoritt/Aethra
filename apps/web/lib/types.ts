@@ -551,3 +551,224 @@ export interface CreateEnvironmentDefinitionRequest {
 export interface ReorderEnvironmentDefinitionsRequest {
   ids: string[];
 }
+
+/* -------------------------------------------------------------------------- */
+/* Multi-tenant (F9.5) — Projects/Templates/Clients/Instances + Build/Deploy  */
+/* -------------------------------------------------------------------------- */
+/* Convencion: PascalCase en C# -> camelCase en JSON. Estos DTOs replican los  */
+/* contratos REST del backend (agente A10).                                    */
+
+export interface ProjectSummaryV2 {
+  id: string;
+  slug: string;
+  name: string;
+  color: string;
+  icon: string;
+  createdAt: string;
+}
+
+export interface ProjectDetailV2 extends ProjectSummaryV2 {
+  description: string | null;
+  updatedAt: string;
+  templateCount: number;
+  clientCount: number;
+}
+
+export interface CreateProjectV2Request {
+  slug: string;
+  name: string;
+  description?: string | null;
+  color?: string;
+  icon?: string;
+}
+
+export type BuildType = "Dockerfile" | "DockerCompose" | "Nixpacks";
+
+export interface TemplateBuildArg {
+  key: string;
+  value: string;
+}
+
+export interface TemplateSummary {
+  id: string;
+  projectId: string;
+  slug: string;
+  name: string;
+  gitRepoUrl: string;
+  branch: string;
+  instanceCount: number;
+}
+
+export interface TemplateDetail extends TemplateSummary {
+  description: string | null;
+  source: {
+    gitRepoUrl: string;
+    branch: string;
+    baseDirectory: string;
+    watchPaths: string[];
+  };
+  build: {
+    buildType: BuildType;
+    dockerfilePath: string | null;
+    composeFilePath: string | null;
+    buildArgs: TemplateBuildArg[];
+  };
+  webhookSecret?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTemplateRequest {
+  slug: string;
+  name: string;
+  description?: string | null;
+  source: {
+    gitRepoUrl: string;
+    branch: string;
+    baseDirectory: string;
+    watchPaths: string[];
+  };
+  build: {
+    buildType: BuildType;
+    dockerfilePath?: string | null;
+    composeFilePath?: string | null;
+    buildArgs: TemplateBuildArg[];
+  };
+}
+
+export interface RotateWebhookSecretResponse {
+  webhookSecret: string;
+}
+
+export interface ClientSummary {
+  id: string;
+  projectId: string;
+  slug: string;
+  displayName: string;
+  instanceCount: number;
+}
+
+export interface ClientDetail extends ClientSummary {
+  description: string | null;
+  contactEmail: string | null;
+  billingTag: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateClientRequest {
+  slug: string;
+  displayName: string;
+  description?: string | null;
+  contactEmail?: string | null;
+  billingTag?: string | null;
+}
+
+export type PortProtocol = "Tcp" | "Udp";
+
+export interface InstancePort {
+  containerPort: number;
+  hostPort: number | null;
+  protocol: PortProtocol;
+}
+
+export interface InstanceVolume {
+  name: string;
+  containerPath: string;
+  readOnly: boolean;
+}
+
+export interface InstanceHealthcheck {
+  test: string[];
+  intervalSeconds: number;
+  retries: number;
+  timeoutSeconds: number | null;
+  startPeriodSeconds: number | null;
+}
+
+export interface InstanceSummary {
+  id: string;
+  templateId: string;
+  clientId: string;
+  slug: string;
+  environment: string;
+  targetVmId: string;
+  containerName: string;
+  autoDeployOnNewBuild: boolean;
+  autoHostname: string | null;
+  customDomain: string | null;
+}
+
+export interface InstanceDetail extends InstanceSummary {
+  ports: InstancePort[];
+  volumes: InstanceVolume[];
+  healthcheck: InstanceHealthcheck | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateInstanceRequest {
+  clientId: string;
+  slug: string;
+  environment: string;
+  targetVmId: string;
+  ports: InstancePort[];
+  volumes: InstanceVolume[];
+  healthcheck?: InstanceHealthcheck | null;
+  autoDeployOnNewBuild: boolean;
+  customDomain?: string | null;
+}
+
+export interface SetCustomDomainRequest {
+  customDomain: string | null;
+}
+
+export interface SetCustomDomainResponse {
+  customDomain: string | null;
+}
+
+export interface BuildSummary {
+  id: string;
+  templateId: string;
+  gitSha: string;
+  gitRef: string;
+  trigger: string;
+  status: string;
+  createdAt: string;
+  finishedAt: string | null;
+  imageRef: string | null;
+}
+
+export interface BuildDetail extends BuildSummary {
+  triggeredBy: string | null;
+  startedAt: string | null;
+  buildDurationMs: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+}
+
+export interface BuildLogChunk {
+  seq: number;
+  timestamp: string;
+  stream: string;
+  line: string;
+}
+
+export interface DeploymentSummary {
+  id: string;
+  buildId: string;
+  instanceId: string;
+  trigger: string;
+  status: string;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+export interface DeploymentDetail extends DeploymentSummary {
+  newImageRef: string;
+  oldImageRef: string | null;
+  newContainerId: string | null;
+  oldContainerId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+}
