@@ -64,10 +64,9 @@ internal sealed class SetCustomDomainHandler(
         }
 
         instance.SetCustomDomain(normalizedDomain, clock.UtcNow);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        // Emitir eventos según transición. El template se carga sólo si vamos a emitir un
-        // CustomDomainRequestedEvent (necesitamos PrimaryPort que está en la propia Instance).
+        // Outbox: encolar events antes del SaveChanges para commit atómico (ver
+        // CreateInstanceCommand para el rationale).
         int? primaryPort = instance.Ports.Count > 0 ? instance.Ports[0].ContainerPort.Value : null;
         var baseDomain = await baseDomainProvider.GetActiveAsync(cancellationToken).ConfigureAwait(false);
         var cloudflareZoneId = baseDomain?.CloudflareZoneId;
@@ -90,6 +89,8 @@ internal sealed class SetCustomDomainHandler(
                 PrimaryPort: primaryPort,
                 RequestedAt: clock.UtcNow), cancellationToken).ConfigureAwait(false);
         }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         // Nota: el handler de Proxy ya conoce ContainerName/PrimaryPort desde el evento de
         // Provisioned previo; el evento CustomDomainRequested transporta sólo el hostname nuevo

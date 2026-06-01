@@ -23,8 +23,9 @@ internal sealed class RotateCredentialsHandler(
 {
     public async Task<Result> Handle(RotateCredentialsCommand request, CancellationToken cancellationToken)
     {
-        var binding = await db.ServiceBindings
-            .FirstOrDefaultAsync(b => b.Id.ToString() == request.BindingId, cancellationToken);
+        // EF Core 10 no traduce `Id.ToString() == arg` con ValueConverter activo.
+        var bindingsList = await db.ServiceBindings.ToListAsync(cancellationToken);
+        var binding = bindingsList.FirstOrDefault(b => b.Id.ToString() == request.BindingId);
         if (binding is null)
         {
             return Error.NotFound("binding.not_found", $"Binding '{request.BindingId}' no existe.");

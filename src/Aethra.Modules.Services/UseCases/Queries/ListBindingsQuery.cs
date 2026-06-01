@@ -16,13 +16,15 @@ internal sealed class ListBindingsHandler(ServicesDbContext db, IInstanceLookup 
 {
     public async Task<Result<IReadOnlyList<ServiceBindingDto>>> Handle(ListBindingsQuery request, CancellationToken cancellationToken)
     {
-        var q = db.ServiceBindings.AsNoTracking()
-            .Where(b => b.ServiceId.ToString() == request.ServiceId);
+        // EF Core 10 no traduce `Id.ToString() == arg` con ValueConverter activo.
+        var allBindings = await db.ServiceBindings.AsNoTracking().ToListAsync(cancellationToken);
+        IEnumerable<Aethra.Modules.Services.Domain.ServiceBinding> filtered =
+            allBindings.Where(b => b.ServiceId.ToString() == request.ServiceId);
         if (!request.IncludeRevoked)
         {
-            q = q.Where(b => b.RevokedAt == null);
+            filtered = filtered.Where(b => b.RevokedAt == null);
         }
-        var bindings = await q.OrderBy(b => b.CreatedAt).ToListAsync(cancellationToken);
+        var bindings = filtered.OrderBy(b => b.CreatedAt).ToList();
 
         // Enriquecer con slug (lookup por instance). Pocas bindings esperadas → N+1 aceptable en MVP.
         var dtos = new List<ServiceBindingDto>(bindings.Count);

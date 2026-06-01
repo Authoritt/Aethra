@@ -239,8 +239,13 @@ public sealed class Deployment : AggregateRoot<DeploymentId>
     public DeploymentLogEntry AppendLog(DeploymentLogLevel level, string stage, string text,
         DateTimeOffset timestamp)
     {
-        var entry = new DeploymentLogEntry(Id, _nextSequence++, timestamp, level, stage, text);
+        // `_nextSequence` no persiste — recovery tras rehydration EF (ver Build.cs AppendLog).
+        var nextSeq = _nextSequence <= 0 && _logs.Count > 0
+            ? _logs.Max(l => l.Sequence) + 1
+            : _nextSequence;
+        var entry = new DeploymentLogEntry(Id, nextSeq, timestamp, level, stage, text);
         _logs.Add(entry);
+        _nextSequence = nextSeq + 1;
         return entry;
     }
 

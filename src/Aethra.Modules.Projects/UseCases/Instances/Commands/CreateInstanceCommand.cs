@@ -172,10 +172,11 @@ internal sealed class CreateInstanceHandler(
         }
 
         db.Instances.Add(instance);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        // Outbox: el dispatcher del módulo Projects publica al bus y el handler del Proxy crea
-        // la Route YARP idempotentemente (ver InstanceProvisionedHandler).
+        // Outbox: añadimos el integration event ANTES del SaveChanges para que se persista
+        // en la misma transacción que la Instance — sin TransactionBehavior global, el commit
+        // único garantiza atomicidad. El dispatcher del módulo Projects publica al bus y el
+        // handler del Proxy crea la Route YARP idempotentemente (ver InstanceProvisionedHandler).
         int? primaryPort = instance.Ports.Count > 0 ? instance.Ports[0].ContainerPort.Value : null;
         await outbox.EnqueueAsync(new InstanceProvisionedIntegrationEvent(
             InstanceId: instance.Id.ToString(),
@@ -188,6 +189,8 @@ internal sealed class CreateInstanceHandler(
             AutoHostname: instance.AutoHostname,
             CustomDomain: instance.CustomDomain,
             CreatedAt: instance.CreatedAt), cancellationToken).ConfigureAwait(false);
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return Project(instance, client.Slug);
     }

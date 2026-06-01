@@ -14,8 +14,9 @@ internal sealed class RevokeApiKeyHandler(IdentityDbContext db, IClock clock)
 {
     public async Task<Result> Handle(RevokeApiKeyCommand request, CancellationToken cancellationToken)
     {
-        var apiKey = await db.ApiKeys.FirstOrDefaultAsync(
-            k => k.Id.ToString() == request.ApiKeyId, cancellationToken);
+        // EF Core 10 no traduce `Id.ToString() == arg` con ValueConverter activo.
+        var allKeys = await db.ApiKeys.ToListAsync(cancellationToken);
+        var apiKey = allKeys.FirstOrDefault(k => k.Id.ToString() == request.ApiKeyId);
         if (apiKey is null)
         {
             return Error.NotFound("api_key.not_found", $"API key '{request.ApiKeyId}' no existe.");

@@ -15,8 +15,9 @@ internal sealed class GetServiceByIdHandler(ServicesDbContext db)
 {
     public async Task<Result<ManagedServiceDetailDto>> Handle(GetServiceByIdQuery request, CancellationToken cancellationToken)
     {
-        var svc = await db.ManagedServices.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id.ToString() == request.ServiceId, cancellationToken);
+        // EF Core 10 no traduce `Id.ToString() == arg` con ValueConverter activo.
+        var allSvcs = await db.ManagedServices.AsNoTracking().ToListAsync(cancellationToken);
+        var svc = allSvcs.FirstOrDefault(s => s.Id.ToString() == request.ServiceId);
         if (svc is null)
         {
             return Error.NotFound("service.not_found", $"ManagedService '{request.ServiceId}' no existe.");

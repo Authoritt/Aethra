@@ -177,8 +177,17 @@ public sealed class Build : AggregateRoot<BuildId>
     /// </summary>
     public BuildLogEntry AppendLog(BuildLogLevel level, string stage, string text, DateTimeOffset timestamp)
     {
-        var entry = new BuildLogEntry(Id, _nextSequence++, timestamp, level, stage, text);
+        // `_nextSequence` no se persiste — al cargar el aggregate desde EF, el ctor sin
+        // parámetros lo inicializa en 0. Cuando el orchestrator hace AppendLog tras un
+        // rehydration, debemos arrancar desde el siguiente sequence disponible sino
+        // colisionamos con el log de creación (seq=0). Calcular vez en vez es O(N) pero
+        // los logs por build son pocos (decenas).
+        var nextSeq = _nextSequence <= 0 && _logs.Count > 0
+            ? _logs.Max(l => l.Sequence) + 1
+            : _nextSequence;
+        var entry = new BuildLogEntry(Id, nextSeq, timestamp, level, stage, text);
         _logs.Add(entry);
+        _nextSequence = nextSeq + 1;
         return entry;
     }
 
