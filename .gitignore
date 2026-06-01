@@ -54,3 +54,10 @@ buffer.db-wal
 
 # Docker
 docker-compose.override.yml
+
+# Secretos locales / smoke testing
+**/.aspnet-keys/
+cookies.txt
+login.json
+/tmp/
+/apps/api/logs/
