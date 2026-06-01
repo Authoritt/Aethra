@@ -7,6 +7,7 @@ using Aethra.Modules.Notes.Infrastructure;
 using Aethra.Modules.Projects.Infrastructure;
 using Aethra.Modules.Proxy.Infrastructure;
 using Aethra.Modules.Services.Infrastructure;
+using Aethra.Modules.Settings.Infrastructure;
 using Aethra.Modules.Vms.Infrastructure;
 using Aethra.Shared.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +43,7 @@ public static class MigrationsBootstrap
             sp.GetRequiredService<MonitoringDbContext>(),
             sp.GetRequiredService<NotesDbContext>(),
             sp.GetRequiredService<IdentityDbContext>(),
+            sp.GetRequiredService<SettingsDbContext>(),
         };
 
         foreach (var ctx in contexts)

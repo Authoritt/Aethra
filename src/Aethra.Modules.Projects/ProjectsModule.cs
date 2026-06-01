@@ -12,10 +12,10 @@ namespace Aethra.Modules.Projects;
 /// <summary>
 /// Punto de entrada del módulo Projects.
 ///
-/// Estado F9.0 cleanup: registra el DbContext (vacío de DbSets) y NoOp lookups/writers para
-/// que los módulos consumidores (Services, Mcp, Cloudflare, Monitoring) puedan resolver sus
-/// dependencias a través de Shared.Contracts mientras A1 completa los aggregates nuevos y
-/// la sub-fase persistence cablea las impls EF reales.
+/// F9.0 persistence: registra el DbContext con sus aggregates (Project + Template + Client +
+/// Instance + EnvironmentVariable) y las implementaciones EF reales de los lookups/writers
+/// cross-module que consumen Services, Mcp, Cloudflare y Monitoring. El único stub que queda
+/// es <see cref="NoOpSecretWriter"/> — F9.1 introducirá la tabla cifrada de secretos y su impl.
 ///
 /// Endpoints REST no se mapean en esta fase — se reescribirán en F9.5 sobre los nuevos
 /// commands/queries (Template, Client, Instance).
@@ -29,12 +29,14 @@ public static class ProjectsModule
 
         services.AddAethraModuleDbContext<ProjectsDbContext>(conn);
 
-        // Read-models y writers cross-module (Shared.Contracts) — stubs NoOp que la sub-fase
-        // persistence sustituirá por implementaciones EF reales.
-        services.AddScoped<ITemplateLookup, NoOpTemplateLookup>();
-        services.AddScoped<IInstanceLookup, NoOpInstanceLookup>();
-        services.AddScoped<ITenantContext, NoOpTenantContext>();
-        services.AddScoped<IEnvVarWriter, NoOpEnvVarWriter>();
+        // Read-models y writers cross-module (Shared.Contracts). Todos resuelven contra el
+        // ProjectsDbContext del scope corriente — el TransactionBehavior del caller agrupa
+        // los cambios del writer dentro de su transacción.
+        services.AddScoped<ITemplateLookup, EfTemplateLookup>();
+        services.AddScoped<IInstanceLookup, EfInstanceLookup>();
+        services.AddScoped<ITenantContext, EfTenantContext>();
+        services.AddScoped<IEnvVarWriter, EfEnvVarWriter>();
+        // F9.1 cableará EfSecretWriter contra la nueva tabla cifrada.
         services.AddScoped<ISecretWriter, NoOpSecretWriter>();
 
         return services;

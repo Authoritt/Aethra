@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\Aethra.Modules.Notes\Aethra.Modules.Notes.csproj" />
     <ProjectReference Include="..\..\src\Aethra.Modules.Identity\Aethra.Modules.Identity.csproj" />
     <ProjectReference Include="..\..\src\Aethra.Modules.Mcp\Aethra.Modules.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Settings\Aethra.Modules.Settings.csproj" />
   </ItemGroup>
 
   <ItemGroup>

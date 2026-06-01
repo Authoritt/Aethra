@@ -17,6 +17,7 @@
     <Project Path="src/Aethra.Modules.Projects/Aethra.Modules.Projects.csproj" />
     <Project Path="src/Aethra.Modules.Proxy/Aethra.Modules.Proxy.csproj" />
     <Project Path="src/Aethra.Modules.Services/Aethra.Modules.Services.csproj" />
+    <Project Path="src/Aethra.Modules.Settings/Aethra.Modules.Settings.csproj" />
     <Project Path="src/Aethra.Modules.Vms/Aethra.Modules.Vms.csproj" />
     <Project Path="src/Aethra.Shared.Contracts/Aethra.Shared.Contracts.csproj" />
     <Project Path="src/Aethra.Shared.Infrastructure/Aethra.Shared.Infrastructure.csproj" />

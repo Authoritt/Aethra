@@ -11,6 +11,7 @@ using Aethra.Modules.Notes;
 using Aethra.Modules.Projects;
 using Aethra.Modules.Proxy;
 using Aethra.Modules.Services;
+using Aethra.Modules.Settings;
 using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Vms;
 using Aethra.Modules.Vms.Authentication;
@@ -68,6 +69,7 @@ var moduleAssemblies = new[]
     typeof(NotesModule).Assembly,
     typeof(IdentityModule).Assembly,
     typeof(McpModule).Assembly,
+    typeof(SettingsModule).Assembly,
 };
 
 builder.Services.AddMediatR(cfg =>
@@ -109,7 +111,8 @@ builder.Services
     .AddMonitoringModule(builder.Configuration)
     .AddCloudflareModule(builder.Configuration)
     .AddNotesModule(builder.Configuration)
-    .AddMcpModule(builder.Configuration);
+    .AddMcpModule(builder.Configuration)
+    .AddSettingsModule(builder.Configuration);
 
 // -----------------------------------------------------------------------------
 // Auth: cookie single-user para UI + token X-Satellite-Token para SignalR de satélite.
@@ -225,6 +228,7 @@ app.MapMonitoringModuleEndpoints();
 app.MapNotesModuleEndpoints();
 app.MapIdentityModuleEndpoints();
 app.MapMcpModuleEndpoints();
+app.MapSettingsModuleEndpoints();
 app.MapDashboardHub();
 
 // YARP reverse proxy: catch-all al final. Cualquier hostname no manejado por endpoints
