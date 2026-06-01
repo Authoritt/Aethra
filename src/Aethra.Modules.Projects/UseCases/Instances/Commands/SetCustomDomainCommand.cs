@@ -57,6 +57,25 @@ internal sealed class SetCustomDomainHandler(
             normalizedDomain = hostnameResult.Value.Value;
         }
 
+        // Solo validamos BaseDomain wildcard cuando se está SETeando un custom domain
+        // (no al removerlo). Sin wildcard configurado, la Route YARP no podrá servir TLS.
+        var baseDomain = await baseDomainProvider.GetActiveAsync(cancellationToken).ConfigureAwait(false);
+        if (normalizedDomain is not null)
+        {
+            if (baseDomain is null)
+            {
+                return Error.Conflict(
+                    "custom_domain.no_base_domain",
+                    "No hay BaseDomain activo en Settings. Configúralo en /settings/domains.");
+            }
+            if (!baseDomain.WildcardConfigured)
+            {
+                return Error.Conflict(
+                    "custom_domain.wildcard_not_configured",
+                    "El BaseDomain wildcard no está configurado. Marca el wildcard como verificado en Settings antes de asignar custom domains.");
+            }
+        }
+
         var previous = instance.CustomDomain;
         if (previous == normalizedDomain)
         {
@@ -68,7 +87,6 @@ internal sealed class SetCustomDomainHandler(
         // Outbox: encolar events antes del SaveChanges para commit atómico (ver
         // CreateInstanceCommand para el rationale).
         int? primaryPort = instance.Ports.Count > 0 ? instance.Ports[0].ContainerPort.Value : null;
-        var baseDomain = await baseDomainProvider.GetActiveAsync(cancellationToken).ConfigureAwait(false);
         var cloudflareZoneId = baseDomain?.CloudflareZoneId;
 
         if (previous is not null)
