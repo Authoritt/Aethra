@@ -1,5 +1,7 @@
+using Aethra.Modules.Projects.Domain.Templates;
 using Aethra.Modules.Projects.Infrastructure;
 using Aethra.Modules.Projects.Infrastructure.Lookups;
+using Aethra.Modules.Projects.Infrastructure.Security;
 using Aethra.Modules.Projects.Presentation;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Infrastructure.Modules;
@@ -40,6 +42,10 @@ public static class ProjectsModule
         services.AddScoped<IEnvVarWriter, EfEnvVarWriter>();
         // F9.1 cableará EfSecretWriter contra la nueva tabla cifrada.
         services.AddScoped<ISecretWriter, NoOpSecretWriter>();
+
+        // F9.9: codec del Template.WebhookSecret. DataProtection ya está registrado en
+        // apps/api/Program.cs con KeyRing persistente.
+        services.AddSingleton<IWebhookSecretCodec, DataProtectionWebhookSecretCodec>();
 
         return services;
     }

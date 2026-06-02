@@ -68,9 +68,12 @@ internal sealed class TemplateConfiguration : IEntityTypeConfiguration<Template>
         builder.Property(t => t.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
         builder.Property(t => t.Description).HasColumnName("description").HasMaxLength(2000);
 
-        builder.Property(t => t.WebhookSecret)
-            .HasColumnName("webhook_secret")
-            .HasMaxLength(256)
+        // F9.9: el webhook secret se persiste cifrado (DataProtection, purpose
+        // 'aethra-webhook-secrets'). Antes era plaintext en text 256 — ver migración
+        // WebhookSecretCipher para detalles del cambio.
+        builder.Property(t => t.WebhookSecretCipher)
+            .HasColumnName("webhook_secret_cipher")
+            .HasColumnType("bytea")
             .IsRequired();
 
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();

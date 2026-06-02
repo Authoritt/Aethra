@@ -12,7 +12,7 @@ namespace Aethra.Modules.Projects.Infrastructure.Lookups;
 /// Todas las queries usan <c>AsNoTracking</c> porque son lecturas cross-module — los Templates
 /// solo se mutan dentro de los handlers de <c>Modules.Projects</c>.
 /// </summary>
-internal sealed class EfTemplateLookup(ProjectsDbContext db) : ITemplateLookup
+internal sealed class EfTemplateLookup(ProjectsDbContext db, IWebhookSecretCodec webhookCodec) : ITemplateLookup
 {
     public async Task<IReadOnlyList<TemplateForBuildView>> FindByRepoAsync(
         string repoUrl, string branch, CancellationToken ct)
@@ -48,7 +48,7 @@ internal sealed class EfTemplateLookup(ProjectsDbContext db) : ITemplateLookup
         return t is null ? null : Project(t);
     }
 
-    private static TemplateForBuildView Project(Template t)
+    private TemplateForBuildView Project(Template t)
         => new(
             TemplateId: t.Id.ToString(),
             ProjectId: t.ProjectId.ToString(),
@@ -56,7 +56,10 @@ internal sealed class EfTemplateLookup(ProjectsDbContext db) : ITemplateLookup
             Name: t.Name,
             GitRepoUrl: t.Source.GitRepoUrl.Value,
             Branch: t.Source.Branch,
-            WebhookSecret: t.WebhookSecret,
+            // El cipher se descifra en el read-model para que los consumidores (webhook
+            // validator) puedan validar HMAC. Sólo vive en memoria del proceso API; nunca
+            // se serializa fuera del proceso.
+            WebhookSecret: webhookCodec.Decode(t.WebhookSecretCipher),
             BaseDirectory: t.Source.BaseDirectory,
             WatchPaths: t.Source.WatchPaths,
             BuildType: t.Build.BuildType.ToString(),

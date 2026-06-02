@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Aethra.Modules.Projects.Domain;
 using Aethra.Modules.Projects.Domain.Templates;
@@ -62,7 +61,7 @@ public sealed partial class CreateTemplateValidator : AbstractValidator<CreateTe
     private static partial Regex TemplateSlugRegex();
 }
 
-internal sealed class CreateTemplateHandler(ProjectsDbContext db, IClock clock)
+internal sealed class CreateTemplateHandler(ProjectsDbContext db, IWebhookSecretCodec webhookCodec, IClock clock)
     : ICommandHandler<CreateTemplateCommand, TemplateCreatedResult>
 {
     public async Task<Result<TemplateCreatedResult>> Handle(
@@ -133,8 +132,9 @@ internal sealed class CreateTemplateHandler(ProjectsDbContext db, IClock clock)
 
         // El secret se calcula aquí (no en el aggregate) para poder devolverlo en plain al caller.
         // Si el cliente pasa uno explícito, lo respetamos (útil para rehidratar desde backup).
-        var webhookSecret = string.IsNullOrWhiteSpace(request.WebhookSecret)
-            ? GenerateWebhookSecret()
+        // El aggregate lo cifra internamente con DataProtection.
+        var webhookSecretPlain = string.IsNullOrWhiteSpace(request.WebhookSecret)
+            ? Template.GenerateWebhookSecret()
             : request.WebhookSecret.Trim();
 
         Template template;
@@ -146,7 +146,8 @@ internal sealed class CreateTemplateHandler(ProjectsDbContext db, IClock clock)
                 request.Name,
                 source,
                 build,
-                webhookSecret,
+                webhookSecretPlain,
+                webhookCodec,
                 clock.UtcNow,
                 request.Description);
         }
@@ -163,10 +164,7 @@ internal sealed class CreateTemplateHandler(ProjectsDbContext db, IClock clock)
             projectId: template.ProjectId.ToString(),
             slug: template.Slug.Value,
             name: template.Name,
-            webhookSecret: template.WebhookSecret,
+            webhookSecret: webhookSecretPlain,
             createdAt: template.CreatedAt);
     }
-
-    private static string GenerateWebhookSecret()
-        => Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
 }

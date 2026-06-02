@@ -22,10 +22,12 @@ public sealed class Template : AggregateRoot<TemplateId>
     public TemplateBuild Build { get; private set; }
 
     /// <summary>
-    /// Secret HMAC con el que se firman los webhooks entrantes para este template.
-    /// Generado al crear; se puede rotar con <see cref="RotateWebhookSecret"/>.
+    /// Webhook secret cifrado con DataProtection (purpose <c>aethra-webhook-secrets</c>).
+    /// El secret HMAC compartido con GitHub se cifra en reposo y sólo se descifra en memoria
+    /// al momento de validar la firma de un payload entrante. Generado al crear; se puede rotar
+    /// con <see cref="RotateWebhookSecret"/>.
     /// </summary>
-    public string WebhookSecret { get; private set; }
+    public byte[] WebhookSecretCipher { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -37,7 +39,7 @@ public sealed class Template : AggregateRoot<TemplateId>
         string name,
         TemplateSource source,
         TemplateBuild build,
-        string webhookSecret,
+        byte[] webhookSecretCipher,
         DateTimeOffset now) : base(id)
     {
         ProjectId = projectId;
@@ -45,28 +47,38 @@ public sealed class Template : AggregateRoot<TemplateId>
         Name = name;
         Source = source;
         Build = build;
-        WebhookSecret = webhookSecret;
+        WebhookSecretCipher = webhookSecretCipher;
         CreatedAt = now;
         UpdatedAt = now;
     }
 
+    /// <summary>
+    /// Crea un Template. El <paramref name="webhookSecretPlain"/> se cifra inmediatamente con
+    /// <paramref name="codec"/>; el plain solo vive en memoria durante la transacción.
+    /// </summary>
     public static Template Create(
         ProjectId projectId,
         Slug slug,
         string name,
         TemplateSource source,
         TemplateBuild build,
-        string? webhookSecret,
+        string webhookSecretPlain,
+        IWebhookSecretCodec codec,
         DateTimeOffset now,
         string? description = null)
     {
+        ArgumentNullException.ThrowIfNull(codec);
         if (string.IsNullOrWhiteSpace(name))
         {
             throw new ArgumentException("El nombre del template no puede estar vacío.", nameof(name));
         }
+        if (string.IsNullOrWhiteSpace(webhookSecretPlain))
+        {
+            throw new ArgumentException("El webhookSecretPlain no puede estar vacío.", nameof(webhookSecretPlain));
+        }
 
-        var secret = string.IsNullOrWhiteSpace(webhookSecret) ? GenerateWebhookSecret() : webhookSecret.Trim();
-        var template = new Template(TemplateId.New(), projectId, slug, name.Trim(), source, build, secret, now)
+        var cipher = codec.Encode(webhookSecretPlain.Trim());
+        var template = new Template(TemplateId.New(), projectId, slug, name.Trim(), source, build, cipher, now)
         {
             Description = description?.Trim(),
         };
@@ -123,23 +135,32 @@ public sealed class Template : AggregateRoot<TemplateId>
     }
 
     /// <summary>
-    /// Genera un nuevo webhook secret. El anterior queda inválido inmediatamente.
+    /// Rota el secret usando el <paramref name="codec"/> para cifrar el nuevo valor.
+    /// Devuelve el nuevo secret en plain para que el caller pueda mostrárselo al operador
+    /// una sola vez. El anterior queda inválido inmediatamente.
     /// </summary>
-    public void RotateWebhookSecret(DateTimeOffset now)
+    public string RotateWebhookSecret(IWebhookSecretCodec codec, DateTimeOffset now)
     {
-        WebhookSecret = GenerateWebhookSecret();
+        ArgumentNullException.ThrowIfNull(codec);
+        var newPlain = GenerateWebhookSecret();
+        WebhookSecretCipher = codec.Encode(newPlain);
         UpdatedAt = now;
         Raise(new TemplateWebhookRotatedEvent(Id));
+        return newPlain;
     }
 
-    private static string GenerateWebhookSecret()
+    /// <summary>
+    /// Genera un nuevo webhook secret en plaintext (no lo persiste).
+    /// Útil para handlers que necesitan presentárselo al usuario antes de cifrarlo.
+    /// </summary>
+    public static string GenerateWebhookSecret()
         => Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24));
 
     // EF Core
     private Template() : base()
     {
         Name = string.Empty;
-        WebhookSecret = string.Empty;
+        WebhookSecretCipher = [];
         Source = default!;
         Build = default!;
     }
