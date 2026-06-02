@@ -18,6 +18,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
+    <PackageReference Include="SSH.NET" />
   </ItemGroup>
 
   <!-- Hub SignalR vive en este módulo (capa Presentation), por eso ref a ASP.NET. -->

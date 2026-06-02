@@ -20,6 +20,7 @@
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Http.Polly" Version="10.0.0" />
+    <PackageVersion Include="SSH.NET" Version="2025.0.0" />
   </ItemGroup>
   <ItemGroup Label="Entity Framework Core">
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
