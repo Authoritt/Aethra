@@ -246,11 +246,21 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Dockerfile">Dockerfile</SelectItem>
-                  <SelectItem value="DockerCompose">DockerCompose</SelectItem>
-                  <SelectItem value="Nixpacks">Nixpacks</SelectItem>
+                  <SelectItem value="Dockerfile">
+                    Dockerfile — usa tu propio <code className="font-mono">Dockerfile</code>
+                  </SelectItem>
+                  <SelectItem value="DockerCompose">
+                    Docker Compose — varios servicios desde <code className="font-mono">compose.yml</code>
+                  </SelectItem>
+                  <SelectItem value="Nixpacks">
+                    Nixpacks — auto-detecta lenguaje (sin Dockerfile)
+                  </SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Es la estrategia para construir la imagen. El runtime que la ejecuta (Docker o Podman) se configura por VM en{" "}
+                <span className="font-mono">Satellite:ContainerRuntime</span>.
+              </p>
             </div>
 
             {buildType === "Dockerfile" ? (
