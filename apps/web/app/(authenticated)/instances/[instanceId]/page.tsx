@@ -1,7 +1,28 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { ExternalLink } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { PageHeader } from "@/components/layout/page-header";
+import { BuildStatusPill } from "@/components/aethra/build-status-pill";
+import { DeploymentStatusPill } from "@/components/aethra/deployment-status-pill";
 import { AutoHostnameInfo } from "@/app/_components/AutoHostnameInfo";
-import { StatusPill } from "@/app/_components/StatusPill";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   BuildSummary,
@@ -29,11 +50,13 @@ export default async function InstanceDetailPage({
   if (instanceResult === "notfound") notFound();
   if (instanceResult === "error") {
     return (
-      <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-        <div className="mx-auto max-w-3xl rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-          Error cargando la instance.
-        </div>
-      </main>
+      <div className="px-6 py-8 md:px-10 md:py-10">
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            Error cargando la instance.
+          </CardContent>
+        </Card>
+      </div>
     );
   }
   const instance = instanceResult;
@@ -67,267 +90,251 @@ export default async function InstanceDetailPage({
   const openUrl = effectiveHost ? `https://${effectiveHost}` : null;
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <nav className="text-xs text-zinc-500">
-          <Link
-            href={`/templates/${instance.templateId}`}
-            className="hover:text-zinc-300"
-          >
-            Template
-          </Link>
-          <span> / </span>
-          <Link
-            href={`/clients/${instance.clientId}`}
-            className="hover:text-zinc-300"
-          >
-            Client
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">{instance.slug}</span>
-        </nav>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Template", href: `/templates/${instance.templateId}` },
+          { label: "Client", href: `/clients/${instance.clientId}` },
+          { label: instance.slug },
+        ]}
+        title={instance.slug}
+        description={
+          <>
+            container <span className="font-mono">{instance.containerName}</span>
+          </>
+        }
+        actions={
+          openUrl ? (
+            <Button asChild variant="outline">
+              <a href={openUrl} target="_blank" rel="noreferrer noopener">
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Abrir
+              </a>
+            </Button>
+          ) : null
+        }
+      />
 
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="truncate font-mono text-2xl font-semibold">
-              {instance.slug}
-            </h1>
-            <p className="mt-1 text-xs text-zinc-500">
-              container <span className="font-mono">{instance.containerName}</span>
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] uppercase tracking-wider text-zinc-500">
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2 py-0.5">
-                env {instance.environment}
-              </span>
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2 py-0.5">
-                vm {instance.targetVmId.slice(0, 8)}
-              </span>
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2 py-0.5">
-                ports {instance.ports.length}
-              </span>
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2 py-0.5">
-                volumes {instance.volumes.length}
-              </span>
-            </div>
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Badge variant="outline">env: {instance.environment}</Badge>
+        <Badge variant="outline" className="font-mono">
+          vm: {instance.targetVmId.slice(0, 8)}
+        </Badge>
+        <Badge variant="outline">{instance.ports.length} ports</Badge>
+        <Badge variant="outline">{instance.volumes.length} volumes</Badge>
+      </div>
+
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="config">Configuración</TabsTrigger>
+          <TabsTrigger value="deployments">
+            Deployments ({deployments.length})
+          </TabsTrigger>
+          <TabsTrigger value="builds">Builds disponibles</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Hostname & routing</CardTitle>
+                <CardDescription>
+                  Auto-hostname y custom domain efectivos.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <AutoHostnameInfo
+                  autoHostname={instance.autoHostname}
+                  customDomain={instance.customDomain}
+                />
+                <CustomDomainForm
+                  instanceId={instance.id}
+                  initialDomain={instance.customDomain}
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Auto-deploy</CardTitle>
+                <CardDescription>
+                  Cuando está activo, cada nuevo build verde del template padre
+                  dispara automáticamente un deploy aquí.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AutoDeployToggle
+                  instanceId={instance.id}
+                  initial={instance.autoDeployOnNewBuild}
+                />
+              </CardContent>
+            </Card>
           </div>
-        </header>
+        </TabsContent>
 
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm uppercase tracking-wider text-zinc-500">
-                Hostname & routing
-              </h2>
-              {openUrl ? (
-                <a
-                  href={openUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-200 transition hover:bg-zinc-800"
-                >
-                  Abrir
-                </a>
-              ) : (
-                <span className="rounded-full border border-zinc-800 bg-zinc-900/40 px-3 py-1 text-xs text-zinc-500">
-                  sin host
-                </span>
-              )}
-            </div>
-            <div className="flex flex-col gap-2">
-              <span className="text-xs uppercase tracking-wider text-zinc-500">
-                Auto-hostname
-              </span>
-              <AutoHostnameInfo
-                autoHostname={instance.autoHostname}
-                customDomain={instance.customDomain}
-              />
-            </div>
-            <CustomDomainForm
-              instanceId={instance.id}
-              initialDomain={instance.customDomain}
-            />
+        <TabsContent value="config" className="mt-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                  Ports
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {instance.ports.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Sin puertos.</p>
+                ) : (
+                  <ul className="flex flex-col gap-1 font-mono text-[11px]">
+                    {instance.ports.map((p, i) => (
+                      <li
+                        key={i}
+                        className="rounded border border-border bg-muted px-2 py-1"
+                      >
+                        {p.containerPort} → {p.hostPort ?? "auto"}{" "}
+                        <span className="text-muted-foreground">
+                          /{p.protocol.toLowerCase()}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                  Volumes
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {instance.volumes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Sin volumes.</p>
+                ) : (
+                  <ul className="flex flex-col gap-1 font-mono text-[11px]">
+                    {instance.volumes.map((v, i) => (
+                      <li
+                        key={i}
+                        className="rounded border border-border bg-muted px-2 py-1"
+                      >
+                        <span className="text-primary">{v.name}</span>
+                        <span className="text-muted-foreground"> → </span>
+                        {v.containerPath}
+                        {v.readOnly ? (
+                          <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            ro
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
           </div>
+        </TabsContent>
 
-          <div className="flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <h2 className="text-sm uppercase tracking-wider text-zinc-500">
-              Auto-deploy
-            </h2>
-            <AutoDeployToggle
-              instanceId={instance.id}
-              initial={instance.autoDeployOnNewBuild}
-            />
-            <p className="text-[11px] text-zinc-500">
-              Cuando esta activo, cada nuevo build verde del template padre
-              dispara automaticamente un deploy aqui. Desactivalo para
-              promociones manuales o ventanas de mantenimiento.
-            </p>
-          </div>
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm uppercase tracking-wider text-zinc-500">
-            Deployments recientes{" "}
-            <span className="ml-2 font-mono text-[11px] text-zinc-600">
-              {deployments.length}
-            </span>
-            {deploymentsResult === "error" && (
-              <span className="ml-2 text-[11px] normal-case text-rose-400">
-                (error al cargar)
-              </span>
-            )}
-          </h2>
+        <TabsContent value="deployments" className="mt-6">
           {deployments.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-5 text-sm text-zinc-400">
-              Esta instance aun no se ha desplegado.
-            </p>
+            <EmptyState
+              title="Sin deployments"
+              description="Esta instance aún no se ha desplegado."
+            />
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
-                  <tr>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Trigger</th>
-                    <th className="px-4 py-3">Build</th>
-                    <th className="px-4 py-3">Creado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800">
+            <Card>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Trigger</TableHead>
+                    <TableHead>Build</TableHead>
+                    <TableHead>Creado</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {deployments.map((d) => (
-                    <tr key={d.id} className="hover:bg-zinc-900/60">
-                      <td className="px-4 py-3">
-                        <Link href={`/deployments/${d.id}`} className="inline-block">
-                          <StatusPill status={d.status} />
+                    <TableRow key={d.id}>
+                      <TableCell>
+                        <Link href={`/deployments/${d.id}`}>
+                          <DeploymentStatusPill status={d.status} />
                         </Link>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-zinc-400">
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
                         {d.trigger}
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <Link
                           href={`/builds/${d.buildId}`}
-                          className="font-mono text-[11px] text-zinc-300 hover:text-emerald-300"
+                          className="font-mono text-[11px] hover:text-primary"
                         >
                           {d.buildId.slice(0, 8)}
                         </Link>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-zinc-400">
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
                         {formatDate(d.createdAt)}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Card>
           )}
-        </section>
+        </TabsContent>
 
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm uppercase tracking-wider text-zinc-500">
-            Builds disponibles del template{" "}
-            <span className="ml-2 font-mono text-[11px] text-zinc-600">
-              {builds.length}
-            </span>
-          </h2>
+        <TabsContent value="builds" className="mt-6">
           {builds.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-5 text-sm text-zinc-400">
-              Sin builds del template padre. Cuando haya uno verde podras
-              desplegarlo aqui.
-            </p>
+            <EmptyState
+              title="Sin builds del template"
+              description="Cuando haya uno verde podrás desplegarlo aquí."
+            />
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
-                  <tr>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Ref</th>
-                    <th className="px-4 py-3">SHA</th>
-                    <th className="px-4 py-3">Image</th>
-                    <th className="px-4 py-3 text-right">Accion</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800">
+            <Card>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Ref</TableHead>
+                    <TableHead>SHA</TableHead>
+                    <TableHead>Image</TableHead>
+                    <TableHead className="text-right">Acción</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {builds.map((b) => {
-                    const deployable = Boolean(b.imageRef) && b.status === "Completed";
+                    const deployable =
+                      Boolean(b.imageRef) && b.status === "Completed";
                     return (
-                      <tr key={b.id} className="hover:bg-zinc-900/60">
-                        <td className="px-4 py-3">
-                          <Link href={`/builds/${b.id}`} className="inline-block">
-                            <StatusPill status={b.status} />
+                      <TableRow key={b.id}>
+                        <TableCell>
+                          <Link href={`/builds/${b.id}`}>
+                            <BuildStatusPill status={b.status} />
                           </Link>
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs text-zinc-200">
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
                           {b.gitRef}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-[11px] text-zinc-400">
+                        </TableCell>
+                        <TableCell className="font-mono text-[11px] text-muted-foreground">
                           {b.gitSha.slice(0, 8)}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-[11px] text-zinc-400">
+                        </TableCell>
+                        <TableCell className="font-mono text-[11px] text-muted-foreground">
                           {b.imageRef ?? "—"}
-                        </td>
-                        <td className="px-4 py-3 text-right">
+                        </TableCell>
+                        <TableCell className="text-right">
                           <DeployBuildButton
                             buildId={b.id}
                             instanceId={instance.id}
                             disabled={!deployable}
                           />
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Card>
           )}
-        </section>
-
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <h3 className="text-xs uppercase tracking-wider text-zinc-500">Ports</h3>
-            {instance.ports.length === 0 ? (
-              <p className="mt-2 text-sm text-zinc-500">Sin puertos.</p>
-            ) : (
-              <ul className="mt-2 flex flex-col gap-1 font-mono text-[11px] text-zinc-300">
-                {instance.ports.map((p, i) => (
-                  <li
-                    key={i}
-                    className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1"
-                  >
-                    {p.containerPort} {"->"} {p.hostPort ?? "auto"}{" "}
-                    <span className="text-zinc-500">/{p.protocol.toLowerCase()}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <h3 className="text-xs uppercase tracking-wider text-zinc-500">
-              Volumes
-            </h3>
-            {instance.volumes.length === 0 ? (
-              <p className="mt-2 text-sm text-zinc-500">Sin volumes.</p>
-            ) : (
-              <ul className="mt-2 flex flex-col gap-1 font-mono text-[11px] text-zinc-300">
-                {instance.volumes.map((v, i) => (
-                  <li
-                    key={i}
-                    className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1"
-                  >
-                    <span className="text-emerald-300">{v.name}</span>
-                    <span className="text-zinc-500"> {"->"} </span>
-                    {v.containerPath}
-                    {v.readOnly && (
-                      <span className="ml-2 text-[10px] uppercase tracking-wider text-zinc-500">
-                        ro
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-      </div>
-    </main>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
 

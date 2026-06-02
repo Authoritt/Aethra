@@ -1,5 +1,16 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { Boxes } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { PageHeader } from "@/components/layout/page-header";
 import { AutoHostnameInfo } from "@/app/_components/AutoHostnameInfo";
 import { serverFetch } from "@/lib/server-fetch";
 import type { ClientDetail, InstanceSummary } from "@/lib/types";
@@ -22,11 +33,13 @@ export default async function ClientDetailPage({
   if (clientResult === "notfound") notFound();
   if (clientResult === "error") {
     return (
-      <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-        <div className="mx-auto max-w-3xl rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-          Error cargando el client.
-        </div>
-      </main>
+      <div className="px-6 py-8 md:px-10 md:py-10">
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            Error cargando el client.
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -34,90 +47,83 @@ export default async function ClientDetailPage({
   const instances = Array.isArray(instancesResult) ? instancesResult : [];
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-        <nav className="text-xs text-zinc-500">
-          <Link href="/projects" className="hover:text-zinc-300">
-            Proyectos
-          </Link>
-          <span> / </span>
-          <Link
-            href={`/projects/${client.projectId}`}
-            className="hover:text-zinc-300"
-          >
-            Proyecto
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">{client.displayName}</span>
-        </nav>
-
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="truncate text-3xl font-semibold">
-              {client.displayName}
-            </h1>
-            <p className="mt-1 font-mono text-xs text-zinc-500">{client.slug}</p>
-            {client.description && (
-              <p className="mt-3 max-w-2xl text-sm text-zinc-300">
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Proyectos", href: "/projects" },
+          { label: "Proyecto", href: `/projects/${client.projectId}` },
+          { label: client.displayName },
+        ]}
+        title={client.displayName}
+        description={
+          <>
+            <span className="font-mono text-xs">{client.slug}</span>
+            {client.description ? (
+              <>
+                <span className="mx-2 text-muted-foreground/50">·</span>
                 {client.description}
-              </p>
-            )}
-          </div>
-          {/* Edit endpoint quedaria en F9.6; el boton vive aqui como placeholder
-              hacia la futura ruta /clients/{id}/edit. */}
-          <span
-            className="shrink-0 rounded-full border border-zinc-800 bg-zinc-900/40 px-5 py-2 text-sm text-zinc-500"
-            title="La edicion de clients llegara en una iteracion posterior."
-            aria-disabled
-          >
-            Editar (pronto)
-          </span>
-        </header>
+              </>
+            ) : null}
+          </>
+        }
+      />
 
-        <section className="grid grid-cols-1 gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 md:grid-cols-3">
-          <Kv label="Contact email" value={client.contactEmail ?? "—"} />
-          <Kv
-            label="Billing tag"
-            value={client.billingTag ?? "—"}
-            mono={Boolean(client.billingTag)}
-          />
-          <Kv label="Instances" value={String(client.instanceCount)} />
-        </section>
+      <div className="mb-6 flex flex-wrap gap-2">
+        {client.contactEmail ? (
+          <Badge variant="outline">{client.contactEmail}</Badge>
+        ) : null}
+        {client.billingTag ? (
+          <Badge variant="outline" className="font-mono">
+            {client.billingTag}
+          </Badge>
+        ) : null}
+        <Badge variant="outline">{client.instanceCount} instances</Badge>
+      </div>
 
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm uppercase tracking-wider text-zinc-500">
-            Instances{" "}
-            <span className="ml-2 font-mono text-[11px] text-zinc-600">
-              {instances.length}
-            </span>
-            {instancesResult === "error" && (
-              <span className="ml-2 text-[11px] normal-case text-rose-400">
-                (error al cargar)
-              </span>
-            )}
-          </h2>
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="instances">
+            Instances ({instances.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-6">
+          <Card>
+            <CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-3">
+              <Kv label="Contact email" value={client.contactEmail ?? "—"} />
+              <Kv
+                label="Billing tag"
+                value={client.billingTag ?? "—"}
+                mono={Boolean(client.billingTag)}
+              />
+              <Kv label="Instances" value={String(client.instanceCount)} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="instances" className="mt-6">
           {instances.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-5 text-sm text-zinc-400">
-              Este client aun no tiene instancias. Creales una desde el detalle
-              de un template.
-            </p>
+            <EmptyState
+              icon={Boxes}
+              title="Sin instances"
+              description="Este client aún no tiene instancias. Creales una desde el detalle de un template."
+            />
           ) : (
             <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
               {instances.map((inst) => (
                 <li key={inst.id}>
                   <Link
                     href={`/instances/${inst.id}`}
-                    className="block rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 transition hover:border-emerald-500/40 hover:bg-zinc-900/80"
+                    className="group block rounded-md border border-border bg-card p-4 transition-colors hover:border-primary/40"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="truncate font-mono text-xs text-zinc-100">
+                      <h3 className="truncate font-mono text-xs text-foreground">
                         {inst.slug}
                       </h3>
-                      <span className="shrink-0 rounded-full border border-zinc-700 bg-zinc-800/40 px-2 py-0.5 text-[10px] uppercase tracking-wider text-zinc-400">
-                        {inst.environment}
-                      </span>
+                      <Badge variant="outline">{inst.environment}</Badge>
                     </div>
-                    <p className="mt-2 font-mono text-[11px] text-zinc-500">
+                    <p className="mt-2 font-mono text-[11px] text-muted-foreground">
                       template {inst.templateId.slice(0, 8)}
                     </p>
                     <div className="mt-2">
@@ -131,9 +137,9 @@ export default async function ClientDetailPage({
               ))}
             </ul>
           )}
-        </section>
-      </div>
-    </main>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
 
@@ -148,9 +154,11 @@ function Kv({
 }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wider text-zinc-500">{label}</dt>
+      <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </dt>
       <dd
-        className={`mt-0.5 break-all text-zinc-100 ${mono ? "font-mono text-xs" : "text-sm"}`}
+        className={`mt-0.5 break-all text-foreground ${mono ? "font-mono text-xs" : "text-sm"}`}
       >
         {value}
       </dd>

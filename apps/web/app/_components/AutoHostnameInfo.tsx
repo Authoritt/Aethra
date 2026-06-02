@@ -1,10 +1,11 @@
+import { cn } from "@/lib/utils";
+
 /**
  * Badge informativo que muestra el auto-hostname asignado por Aethra
  * (template-client-env.base_domain). Si no hay autoHostname, muestra
  * un placeholder neutro. Cuando hay customDomain configurado, se
  * indica que el auto-hostname sigue activo pero ya no es el principal.
  */
-
 export function AutoHostnameInfo({
   autoHostname,
   customDomain,
@@ -14,7 +15,7 @@ export function AutoHostnameInfo({
 }) {
   if (!autoHostname) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/40 px-2 py-1 font-mono text-[11px] text-zinc-500">
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted px-2 py-1 font-mono text-[11px] text-muted-foreground">
         sin hostname asignado
       </span>
     );
@@ -23,11 +24,12 @@ export function AutoHostnameInfo({
   const overridden = Boolean(customDomain);
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 font-mono text-[11px] ${
+      className={cn(
+        "inline-flex items-center gap-2 rounded-md border px-2 py-1 font-mono text-[11px]",
         overridden
-          ? "border-zinc-800 bg-zinc-900/40 text-zinc-400"
-          : "border-emerald-500/30 bg-emerald-500/5 text-emerald-200"
-      }`}
+          ? "border-border bg-muted text-muted-foreground"
+          : "border-success/30 bg-success/5 text-success-foreground",
+      )}
       title={
         overridden
           ? "El custom domain tiene prioridad. El auto-hostname sigue funcionando como alias."
@@ -35,14 +37,17 @@ export function AutoHostnameInfo({
       }
     >
       <span
-        className={`size-1.5 rounded-full ${
-          overridden ? "bg-zinc-500" : "bg-emerald-400"
-        }`}
+        className={cn(
+          "size-1.5 rounded-full",
+          overridden ? "bg-muted-foreground" : "bg-success",
+        )}
       />
       {autoHostname}
-      {overridden && (
-        <span className="text-[10px] uppercase tracking-wider text-zinc-500">alias</span>
-      )}
+      {overridden ? (
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          alias
+        </span>
+      ) : null}
     </span>
   );
 }

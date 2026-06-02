@@ -1,5 +1,6 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   ClientSummary,
@@ -25,11 +26,13 @@ export default async function NewInstancePage({
   if (templateResult === "notfound") notFound();
   if (templateResult === "error") {
     return (
-      <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-        <div className="mx-auto max-w-3xl rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-          Error cargando el template.
-        </div>
-      </main>
+      <div className="px-6 py-8 md:px-10 md:py-10">
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            Error cargando el template.
+          </CardContent>
+        </Card>
+      </div>
     );
   }
   const template = templateResult;
@@ -46,35 +49,31 @@ export default async function NewInstancePage({
     : [];
   const vms = Array.isArray(vmsResult) ? vmsResult : [];
 
+  const hasCatalogError =
+    clientsResult === "error" ||
+    environmentsResult === "error" ||
+    vmsResult === "error";
+
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-        <nav className="text-xs text-zinc-500">
-          <Link
-            href={`/templates/${template.id}`}
-            className="hover:text-zinc-300"
-          >
-            {template.name}
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">Nueva instance</span>
-        </nav>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: template.name, href: `/templates/${template.id}` },
+          { label: "Nueva instance" },
+        ]}
+        title="Nueva instance"
+        description="Desplegá este template en un client + environment + VM concretos."
+      />
 
-        <header>
-          <h1 className="text-3xl font-semibold">Nueva instance</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Despliega este template en un client + environment + VM concreto.
-          </p>
-        </header>
+      {hasCatalogError ? (
+        <Card className="mb-4 border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            No se pudieron cargar todos los catálogos. La creación podría fallar.
+          </CardContent>
+        </Card>
+      ) : null}
 
-        {(clientsResult === "error" ||
-          environmentsResult === "error" ||
-          vmsResult === "error") && (
-          <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-            No se pudieron cargar todos los catalogos. La creacion podria fallar.
-          </p>
-        )}
-
+      <div className="max-w-3xl">
         <NewInstanceForm
           templateId={template.id}
           clients={clients}
@@ -82,6 +81,6 @@ export default async function NewInstancePage({
           vms={vms}
         />
       </div>
-    </main>
+    </div>
   );
 }

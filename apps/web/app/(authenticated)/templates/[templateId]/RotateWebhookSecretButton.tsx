@@ -1,21 +1,30 @@
 "use client";
 
 import { useState } from "react";
+import { Copy, KeyRound, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ApiError, api } from "@/lib/api";
 import type { RotateWebhookSecretResponse } from "@/lib/types";
 
-export function RotateWebhookSecretButton({ templateId }: { templateId: string }) {
+export function RotateWebhookSecretButton({
+  templateId,
+}: {
+  templateId: string;
+}) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   async function rotate() {
-    const ok = window.confirm(
-      "Rotar el webhook secret invalida el anterior inmediatamente. Tendras que reconfigurar el provider Git. Continuar?",
-    );
-    if (!ok) return;
-    setError(null);
     setLoading(true);
     try {
       const response = await api<RotateWebhookSecretResponse>(
@@ -23,13 +32,17 @@ export function RotateWebhookSecretButton({ templateId }: { templateId: string }
         { method: "POST" },
       );
       setSecret(response.webhookSecret);
+      setConfirmOpen(false);
+      toast.success("Webhook secret rotado");
     } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as { message?: string; detail?: string } | undefined;
-        setError(body?.message ?? body?.detail ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string; detail?: string } | undefined)
+              ?.message ?? `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -39,57 +52,76 @@ export function RotateWebhookSecretButton({ templateId }: { templateId: string }
     if (!secret) return;
     try {
       await navigator.clipboard.writeText(secret);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      toast.success("Copiado al portapapeles");
     } catch {
-      // clipboard may not be available
+      toast.error("No se pudo copiar");
     }
   }
 
-  if (secret) {
-    return (
-      <div className="flex w-full max-w-lg flex-col gap-2 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wider text-amber-200">
-            Nuevo webhook secret (one-time)
-          </span>
-          <button
-            type="button"
-            onClick={copy}
-            className="rounded-full border border-amber-500/40 px-3 py-1 text-xs text-amber-200 transition hover:bg-amber-500/20"
-          >
-            {copied ? "Copiado" : "Copiar"}
-          </button>
-        </div>
-        <pre className="overflow-x-auto whitespace-nowrap rounded-lg bg-zinc-950/80 px-3 py-2 font-mono text-xs text-amber-100">
-          {secret}
-        </pre>
-        <button
-          type="button"
-          onClick={() => setSecret(null)}
-          className="self-end rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
-        >
-          Cerrar
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col items-end gap-1">
-      <button
-        type="button"
-        onClick={rotate}
-        disabled={loading}
-        className="rounded-full border border-amber-500/40 px-4 py-2 text-sm text-amber-300 transition hover:bg-amber-500/10 disabled:opacity-50"
+    <>
+      <Button variant="outline" onClick={() => setConfirmOpen(true)}>
+        <KeyRound className="mr-2 h-4 w-4" />
+        Rotar webhook secret
+      </Button>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rotar webhook secret</DialogTitle>
+            <DialogDescription>
+              Rotar el webhook secret invalida el anterior inmediatamente.
+              Tendrás que reconfigurar el provider Git (GitHub/Gitlab).
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={rotate} disabled={loading}>
+              {loading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Rotar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!secret}
+        onOpenChange={(open) => {
+          if (!open) setSecret(null);
+        }}
       >
-        {loading ? "Rotando..." : "Rotar webhook secret"}
-      </button>
-      {error && (
-        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-300">
-          {error}
-        </p>
-      )}
-    </div>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nuevo webhook secret</DialogTitle>
+            <DialogDescription>
+              Copialo y configurarlo en tu provider Git. No volverá a mostrarse.
+            </DialogDescription>
+          </DialogHeader>
+          {secret ? (
+            <div className="rounded-md border border-border bg-card">
+              <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Secret
+                </span>
+                <Button variant="outline" size="sm" onClick={copy}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copiar
+                </Button>
+              </div>
+              <pre className="overflow-x-auto whitespace-nowrap px-3 py-2 font-mono text-xs text-foreground">
+                {secret}
+              </pre>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button onClick={() => setSecret(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

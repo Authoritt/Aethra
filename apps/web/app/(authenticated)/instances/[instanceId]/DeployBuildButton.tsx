@@ -2,6 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Loader2, Rocket } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
 import type { DeploymentDetail } from "@/lib/types";
 
@@ -16,49 +19,48 @@ export function DeployBuildButton({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function deploy() {
-    setError(null);
     setBusy(true);
     try {
       const response = await api<DeploymentDetail>(
         `/api/deployments/builds/${encodeURIComponent(buildId)}/instances/${encodeURIComponent(instanceId)}/trigger`,
         { method: "POST" },
       );
+      toast.success("Deployment disparado");
       router.push(`/deployments/${response.id}`);
       router.refresh();
     } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as { message?: string; detail?: string } | undefined;
-        setError(body?.message ?? body?.detail ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
       setBusy(false);
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string; detail?: string } | undefined)
+              ?.message ?? `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
     }
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <button
-        type="button"
-        onClick={deploy}
-        disabled={busy || disabled}
-        className="rounded-full bg-emerald-500 px-3 py-1 text-xs font-medium text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-        title={
-          disabled
-            ? "Solo builds con imagen y status Completed se pueden desplegar."
-            : undefined
-        }
-      >
-        {busy ? "Disparando..." : "Deploy aqui"}
-      </button>
-      {error && (
-        <p className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-300">
-          {error}
-        </p>
+    <Button
+      type="button"
+      size="sm"
+      onClick={deploy}
+      disabled={busy || disabled}
+      title={
+        disabled
+          ? "Solo builds con imagen y status Completed se pueden desplegar."
+          : undefined
+      }
+    >
+      {busy ? (
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      ) : (
+        <Rocket className="mr-2 h-4 w-4" />
       )}
-    </div>
+      Deploy
+    </Button>
   );
 }
