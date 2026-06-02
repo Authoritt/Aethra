@@ -594,9 +594,17 @@ export interface TemplateSummary {
   projectId: string;
   slug: string;
   name: string;
+  description: string | null;
   gitRepoUrl: string;
   branch: string;
-  instanceCount: number;
+  buildType: BuildType;
+  createdAt: string;
+  updatedAt: string;
+  /**
+   * El backend (ListTemplatesQuery) no proyecta este contador en la summary.
+   * Se mantiene opcional para las vistas que lo muestren cuando este disponible.
+   */
+  instanceCount?: number;
 }
 
 export interface TemplateDetail extends TemplateSummary {
@@ -645,7 +653,16 @@ export interface ClientSummary {
   projectId: string;
   slug: string;
   displayName: string;
-  instanceCount: number;
+  description: string | null;
+  contactEmail: string | null;
+  billingTag: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /**
+   * El backend (ListClientsQuery) no proyecta este contador en la summary.
+   * Se mantiene opcional para las vistas que lo muestren cuando este disponible.
+   */
+  instanceCount?: number;
 }
 
 export interface ClientDetail extends ClientSummary {
@@ -690,6 +707,7 @@ export interface InstanceSummary {
   id: string;
   templateId: string;
   clientId: string;
+  clientSlug: string;
   slug: string;
   environment: string;
   targetVmId: string;
@@ -697,6 +715,9 @@ export interface InstanceSummary {
   autoDeployOnNewBuild: boolean;
   autoHostname: string | null;
   customDomain: string | null;
+  primaryPort: number | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface InstanceDetail extends InstanceSummary {
