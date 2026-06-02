@@ -73,7 +73,20 @@ internal sealed class CreateIntegrationCredentialHandler(
         }
 
         db.IntegrationCredentials.Add(credential);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException is Npgsql.PostgresException pgEx && pgEx.SqlState == "23505")
+        {
+            // Race condition: otro request paso el AnyAsync antes de SaveChanges y la BD ahora
+            // rechaza por UNIQUE constraint. Reportamos el mismo conflict que el chequeo previo
+            // para mantener consistencia de codigo de error frente al cliente.
+            return Error.Conflict(
+                "settings.credential_name_taken",
+                $"Ya existe una credencial con el nombre '{normalized}'.");
+        }
 
         return Mappers.ToDto(credential);
     }

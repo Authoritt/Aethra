@@ -45,7 +45,20 @@ internal sealed class CreateBaseDomainHandler(SettingsDbContext db, IClock clock
         }
 
         db.BaseDomains.Add(domain);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException is Npgsql.PostgresException pgEx && pgEx.SqlState == "23505")
+        {
+            // Race condition: otro request paso el AnyAsync antes de SaveChanges y la BD ahora
+            // rechaza por UNIQUE constraint. Reportamos el mismo conflict que el chequeo previo
+            // para mantener consistencia de codigo de error frente al cliente.
+            return Error.Conflict(
+                "settings.base_domain_taken",
+                $"Ya existe un base domain con hostname '{normalized}'.");
+        }
 
         return Mappers.ToDto(domain);
     }

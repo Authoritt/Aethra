@@ -57,7 +57,20 @@ internal sealed class CreateEnvironmentDefinitionHandler(SettingsDbContext db, I
         }
 
         db.EnvironmentDefinitions.Add(env);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException is Npgsql.PostgresException pgEx && pgEx.SqlState == "23505")
+        {
+            // Race condition: otro request paso el AnyAsync antes de SaveChanges y la BD ahora
+            // rechaza por UNIQUE constraint. Reportamos el mismo conflict que el chequeo previo
+            // para mantener consistencia de codigo de error frente al cliente.
+            return Error.Conflict(
+                "settings.environment_slug_taken",
+                $"Ya existe un ambiente con slug '{normalized}'.");
+        }
 
         return Mappers.ToDto(env);
     }
