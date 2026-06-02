@@ -2,52 +2,83 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ApiError, api } from "@/lib/api";
 
-interface Props {
+export function DeleteMonitorButton({
+  monitorId,
+  name,
+}: {
   monitorId: string;
   name: string;
-}
-
-export function DeleteMonitorButton({ monitorId, name }: Props) {
+}) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function onClick() {
-    const ok = window.confirm(
-      `¿Eliminar el monitor "${name}"?\n\nEsta acción borrará el monitor y todo su historial de checks.`,
-    );
-    if (!ok) return;
-    setError(null);
+  async function onConfirm() {
     setLoading(true);
     try {
       await api(`/api/monitors/${monitorId}`, { method: "DELETE" });
+      toast.success(`Monitor "${name}" eliminado`);
       router.push("/monitors");
       router.refresh();
     } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as { detail?: string; Message?: string } | undefined;
-        setError(body?.detail ?? body?.Message ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
-    } finally {
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { detail?: string; Message?: string } | undefined)
+              ?.detail ??
+            (e.body as { Message?: string } | undefined)?.Message ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
       setLoading(false);
     }
   }
 
   return (
-    <div className="inline-flex flex-col items-end gap-1">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={loading}
-        className="rounded-full border border-rose-500/30 px-4 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
-      >
-        {loading ? "Eliminando..." : "Eliminar"}
-      </button>
-      {error && <span className="text-[11px] text-rose-300">{error}</span>}
-    </div>
+    <>
+      <Button variant="destructive" size="sm" onClick={() => setOpen(true)}>
+        <Trash2 className="mr-2 h-4 w-4" />
+        Eliminar
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar monitor "{name}"</DialogTitle>
+            <DialogDescription>
+              Esta acción borrará el monitor y todo su historial de checks.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={onConfirm}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

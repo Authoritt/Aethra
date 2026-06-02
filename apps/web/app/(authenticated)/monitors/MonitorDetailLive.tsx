@@ -8,8 +8,13 @@ import {
   HubConnectionState,
   LogLevel,
 } from "@microsoft/signalr";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { API_URL } from "@/lib/api";
-import type { MonitorStatus, MonitorStatusChangedPayload } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import type {
+  MonitorStatus,
+  MonitorStatusChangedPayload,
+} from "@/lib/types";
 import { MonitorStatusPill } from "./MonitorStatusPill";
 
 interface Props {
@@ -19,11 +24,6 @@ interface Props {
   isEnabled: boolean;
 }
 
-/**
- * Card del estado en vivo del monitor de detalle. Se suscribe a <c>MonitorStatusChanged</c> en
- * el grupo del monitor y actualiza el pill + timestamp sin esperar a un refresh SSR. También
- * fuerza refresh periódico para que la tabla de checks se renueve.
- */
 export default function MonitorDetailLive({
   monitorId,
   initialStatus,
@@ -32,7 +32,9 @@ export default function MonitorDetailLive({
 }: Props) {
   const router = useRouter();
   const [status, setStatus] = useState<MonitorStatus>(initialStatus);
-  const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(initialLastCheckedAt);
+  const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(
+    initialLastCheckedAt,
+  );
   const [lastLatency, setLastLatency] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
 
@@ -44,14 +46,17 @@ export default function MonitorDetailLive({
       .configureLogging(LogLevel.Warning)
       .build();
 
-    connection.on("MonitorStatusChanged", (payload: MonitorStatusChangedPayload) => {
-      if (cancelled) return;
-      if (payload.monitorId !== monitorId) return;
-      setStatus(payload.to);
-      setLastCheckedAt(payload.timestamp);
-      setLastLatency(payload.latencyMs);
-      router.refresh();
-    });
+    connection.on(
+      "MonitorStatusChanged",
+      (payload: MonitorStatusChangedPayload) => {
+        if (cancelled) return;
+        if (payload.monitorId !== monitorId) return;
+        setStatus(payload.to);
+        setLastCheckedAt(payload.timestamp);
+        setLastLatency(payload.latencyMs);
+        router.refresh();
+      },
+    );
 
     connection.onreconnected(() => {
       setConnected(true);
@@ -67,7 +72,7 @@ export default function MonitorDetailLive({
         try {
           await connection.invoke("JoinMonitor", monitorId);
         } catch {
-          // Si el hub no implementa JoinMonitor todavía, el grupo "all" sigue funcionando.
+          // Si el hub no implementa JoinMonitor todavía
         }
       })
       .catch(() => {
@@ -84,40 +89,43 @@ export default function MonitorDetailLive({
   }, [monitorId, router]);
 
   return (
-    <section className="flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm uppercase tracking-wider text-zinc-500">
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+        <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
           Estado actual
-        </h2>
+        </CardTitle>
         <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
             connected
-              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-              : "border-zinc-700 bg-zinc-800/40 text-zinc-400"
-          }`}
+              ? "border-success/30 bg-success/10 text-success-foreground"
+              : "border-border bg-muted text-muted-foreground",
+          )}
         >
           <span
-            className={`size-1.5 rounded-full ${
-              connected ? "bg-emerald-400" : "bg-zinc-500"
-            }`}
+            className={cn(
+              "size-1.5 rounded-full",
+              connected ? "bg-success" : "bg-muted-foreground",
+            )}
           />
           {connected ? "hub en vivo" : "hub desconectado"}
         </span>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <MonitorStatusPill status={status} disabled={!isEnabled} />
-        {lastLatency !== null && (
-          <span className="font-mono text-xs text-zinc-300">
-            última: {lastLatency} ms
-          </span>
-        )}
-      </div>
-      <div className="text-xs text-zinc-500">
-        {lastCheckedAt
-          ? `Último check: ${new Date(lastCheckedAt).toLocaleString()}`
-          : "Sin checks aún"}
-      </div>
-    </section>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-3">
+          <MonitorStatusPill status={status} disabled={!isEnabled} />
+          {lastLatency !== null ? (
+            <span className="font-mono text-xs text-foreground">
+              última: {lastLatency} ms
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-2 text-xs text-muted-foreground">
+          {lastCheckedAt
+            ? `Último check: ${new Date(lastCheckedAt).toLocaleString()}`
+            : "Sin checks aún"}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

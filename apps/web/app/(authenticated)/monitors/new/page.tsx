@@ -2,6 +2,21 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/layout/page-header";
 import { ApiError, api } from "@/lib/api";
 import type {
   CreateMonitorRequest,
@@ -23,32 +38,23 @@ export default function NewMonitorPage() {
   const [timeout, setTimeout] = useState(10000);
   const [headersText, setHeadersText] = useState("");
   const [body, setBody] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   function validate(): string | null {
     if (!SLUG_RE.test(slug.trim())) {
       return "Slug inválido: solo minúsculas, dígitos y guiones (ej. mi-monitor).";
     }
-    if (name.trim().length === 0) {
-      return "Nombre requerido.";
-    }
-    if (!URL_RE.test(url.trim())) {
-      return "URL debe ser http(s):// absoluta.";
-    }
+    if (name.trim().length === 0) return "Nombre requerido.";
+    if (!URL_RE.test(url.trim())) return "URL debe ser http(s):// absoluta.";
     const codes = parseExpected(expected);
-    if (codes.length === 0) {
-      return "Códigos esperados inválidos: usa comas, ej. '200,204'.";
-    }
-    if (interval < 30 || interval > 3600) {
+    if (codes.length === 0)
+      return "Códigos esperados inválidos: usá comas, ej. '200,204'.";
+    if (interval < 30 || interval > 3600)
       return "Intervalo entre 30 y 3600 segundos.";
-    }
-    if (timeout < 1000 || timeout > 60000) {
+    if (timeout < 1000 || timeout > 60000)
       return "Timeout entre 1000 y 60000 ms.";
-    }
-    if (headersText.trim() && parseHeaders(headersText) === null) {
-      return "Headers mal formados. Usa 'Clave: valor' por línea.";
-    }
+    if (headersText.trim() && parseHeaders(headersText) === null)
+      return "Headers mal formados. Usá 'Clave: valor' por línea.";
     return null;
   }
 
@@ -56,14 +62,16 @@ export default function NewMonitorPage() {
     e.preventDefault();
     const v = validate();
     if (v) {
-      setError(v);
+      toast.error(v);
       return;
     }
-    setError(null);
     setLoading(true);
     try {
       const body_template = body.trim() === "" ? undefined : body;
-      const headers = headersText.trim() === "" ? undefined : parseHeaders(headersText) ?? undefined;
+      const headers =
+        headersText.trim() === ""
+          ? undefined
+          : (parseHeaders(headersText) ?? undefined);
       const payload: CreateMonitorRequest = {
         slug: slug.trim(),
         name: name.trim(),
@@ -79,190 +87,182 @@ export default function NewMonitorPage() {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      toast.success("Monitor creado");
       router.push(`/monitors/${created.id}`);
       router.refresh();
     } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as { detail?: string; Message?: string } | undefined;
-        setError(body?.detail ?? body?.Message ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { detail?: string; Message?: string } | undefined)
+              ?.detail ??
+            (e.body as { Message?: string } | undefined)?.Message ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
-        <header>
-          <h1 className="text-3xl font-semibold">Nuevo monitor</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Configura un probe HTTP. El worker lo ejecuta a partir del próximo tick (10s).
-          </p>
-        </header>
-
-        <form
-          onSubmit={onSubmit}
-          className="flex flex-col gap-5 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6"
-        >
-          <Field label="Slug" required hint="Identificador URL-friendly único (ej. api-prod).">
-            <input
-              type="text"
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="api-prod"
-              className={inputClass}
-              autoComplete="off"
-              required
-            />
-          </Field>
-          <Field label="Nombre" required>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="API producción"
-              className={inputClass}
-              required
-            />
-          </Field>
-          <Field label="URL" required hint="Absoluta, http(s)://.">
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://api.example.com/health"
-              className={inputClass}
-              autoComplete="off"
-              required
-            />
-          </Field>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Método HTTP">
-              <select
-                value={method}
-                onChange={(e) => setMethod(e.target.value as MonitorHttpMethod)}
-                className={inputClass}
-              >
-                <option value="GET">GET</option>
-                <option value="HEAD">HEAD</option>
-                <option value="POST">POST</option>
-              </select>
-            </Field>
-            <Field label="Códigos OK" hint="Comas. Ej: 200,204.">
-              <input
-                type="text"
-                value={expected}
-                onChange={(e) => setExpected(e.target.value)}
-                placeholder="200"
-                className={inputClass}
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Monitores", href: "/monitors" },
+          { label: "Nuevo" },
+        ]}
+        title="Nuevo monitor"
+        description="Configurá un probe HTTP. El worker lo ejecuta a partir del próximo tick (10s)."
+      />
+      <Card className="max-w-2xl">
+        <CardContent className="p-6">
+          <form onSubmit={onSubmit} className="flex flex-col gap-5">
+            <div className="space-y-2">
+              <Label htmlFor="slug">Slug *</Label>
+              <Input
+                id="slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="api-prod"
+                className="font-mono text-xs"
                 required
               />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Intervalo (s)" hint="30..3600.">
-              <input
-                type="number"
-                value={interval}
-                onChange={(e) => setInterval(Number(e.target.value) || 60)}
-                min={30}
-                max={3600}
-                step={10}
-                className={inputClass}
+              <p className="text-xs text-muted-foreground">
+                Identificador único URL-friendly.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="name">Nombre *</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="API producción"
+                required
               />
-            </Field>
-            <Field label="Timeout (ms)" hint="1000..60000.">
-              <input
-                type="number"
-                value={timeout}
-                onChange={(e) => setTimeout(Number(e.target.value) || 10000)}
-                min={1000}
-                max={60000}
-                step={500}
-                className={inputClass}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="url">URL *</Label>
+              <Input
+                id="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://api.example.com/health"
+                className="font-mono text-xs"
+                required
               />
-            </Field>
-          </div>
-
-          <Field
-            label="Headers"
-            hint="Una por línea, 'Clave: valor'. Opcional (auth, etc.)."
-          >
-            <textarea
-              value={headersText}
-              onChange={(e) => setHeadersText(e.target.value)}
-              placeholder="Authorization: Bearer xxx"
-              className={`${inputClass} h-20`}
-            />
-          </Field>
-
-          {method === "POST" && (
-            <Field label="Body" hint="JSON o texto plano enviado en el POST.">
-              <textarea
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder='{"ping": true}'
-                className={`${inputClass} h-24 font-mono text-xs`}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Método HTTP</Label>
+                <Select
+                  value={method}
+                  onValueChange={(v) => setMethod(v as MonitorHttpMethod)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GET">GET</SelectItem>
+                    <SelectItem value="HEAD">HEAD</SelectItem>
+                    <SelectItem value="POST">POST</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="expected">Códigos OK</Label>
+                <Input
+                  id="expected"
+                  value={expected}
+                  onChange={(e) => setExpected(e.target.value)}
+                  placeholder="200"
+                  className="font-mono text-xs"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Comas. Ej: 200,204.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="interval">Intervalo (s)</Label>
+                <Input
+                  id="interval"
+                  type="number"
+                  value={interval}
+                  onChange={(e) => setInterval(Number(e.target.value) || 60)}
+                  min={30}
+                  max={3600}
+                  step={10}
+                />
+                <p className="text-xs text-muted-foreground">30..3600.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="timeout">Timeout (ms)</Label>
+                <Input
+                  id="timeout"
+                  type="number"
+                  value={timeout}
+                  onChange={(e) =>
+                    setTimeout(Number(e.target.value) || 10000)
+                  }
+                  min={1000}
+                  max={60000}
+                  step={500}
+                />
+                <p className="text-xs text-muted-foreground">1000..60000.</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="headers">Headers</Label>
+              <Textarea
+                id="headers"
+                value={headersText}
+                onChange={(e) => setHeadersText(e.target.value)}
+                rows={3}
+                placeholder="Authorization: Bearer xxx"
+                className="font-mono text-xs"
               />
-            </Field>
-          )}
+              <p className="text-xs text-muted-foreground">
+                Una por línea, &apos;Clave: valor&apos;. Opcional.
+              </p>
+            </div>
+            {method === "POST" ? (
+              <div className="space-y-2">
+                <Label htmlFor="body">Body</Label>
+                <Textarea
+                  id="body"
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  rows={4}
+                  placeholder='{"ping": true}'
+                  className="font-mono text-xs"
+                />
+              </div>
+            ) : null}
 
-          {error && (
-            <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-              {error}
-            </p>
-          )}
-
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => router.push("/monitors")}
-              className="rounded-full border border-zinc-700 px-5 py-2 text-sm text-zinc-300 transition hover:bg-zinc-800"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-50"
-            >
-              {loading ? "Creando..." : "Crear monitor"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </main>
-  );
-}
-
-const inputClass =
-  "w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none focus:border-emerald-500";
-
-function Field({
-  label,
-  required,
-  hint,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-sm text-zinc-300">
-      <span>
-        {label}
-        {required && <span className="text-rose-400"> *</span>}
-      </span>
-      {children}
-      {hint && <span className="text-xs text-zinc-500">{hint}</span>}
-    </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => router.push("/monitors")}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Crear monitor
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

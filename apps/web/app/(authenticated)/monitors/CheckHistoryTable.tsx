@@ -1,3 +1,13 @@
+import { Card } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { MonitorCheckDto } from "@/lib/types";
 import { MonitorStatusPill } from "./MonitorStatusPill";
 
@@ -5,49 +15,41 @@ interface Props {
   checks: MonitorCheckDto[];
 }
 
-/**
- * Historial reciente (más nuevo primero). Espera <c>checks</c> en orden cronológico
- * ascendente (como vuelve la API) — se invierte localmente para mostrar.
- */
 export function CheckHistoryTable({ checks }: Props) {
   if (checks.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-6 text-center text-sm text-zinc-500">
-        Sin checks registrados.
-      </div>
-    );
+    return <EmptyState title="Sin checks registrados" />;
   }
   const newestFirst = [...checks].reverse();
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
-          <tr>
-            <th className="px-4 py-2">Cuando</th>
-            <th className="px-4 py-2">Estado</th>
-            <th className="px-4 py-2">HTTP</th>
-            <th className="px-4 py-2">Latencia</th>
-            <th className="px-4 py-2">Detalle</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-800">
+    <Card>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Cuando</TableHead>
+            <TableHead>Estado</TableHead>
+            <TableHead>HTTP</TableHead>
+            <TableHead>Latencia</TableHead>
+            <TableHead>Detalle</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {newestFirst.map((c) => (
-            <tr key={c.id} className="hover:bg-zinc-900/60">
-              <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-zinc-300">
+            <TableRow key={c.id}>
+              <TableCell className="whitespace-nowrap font-mono text-xs">
                 {formatStamp(c.timestamp)}
-              </td>
-              <td className="px-4 py-2">
+              </TableCell>
+              <TableCell>
                 <MonitorStatusPill status={c.status} />
-              </td>
-              <td className="px-4 py-2 font-mono text-xs text-zinc-300">
+              </TableCell>
+              <TableCell className="font-mono text-xs">
                 {c.http_status_code ?? "—"}
-              </td>
-              <td className="px-4 py-2 font-mono text-xs text-zinc-300">
+              </TableCell>
+              <TableCell className="font-mono text-xs">
                 {c.latency_ms === null ? "—" : `${c.latency_ms} ms`}
-              </td>
-              <td className="px-4 py-2 text-xs text-zinc-400">
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">
                 {c.error_message ? (
-                  <span className="text-rose-300">{c.error_message}</span>
+                  <span className="text-destructive">{c.error_message}</span>
                 ) : c.response_snippet ? (
                   <span title={c.response_snippet} className="line-clamp-1">
                     {c.response_snippet}
@@ -55,12 +57,12 @@ export function CheckHistoryTable({ checks }: Props) {
                 ) : (
                   "—"
                 )}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </Card>
   );
 }
 

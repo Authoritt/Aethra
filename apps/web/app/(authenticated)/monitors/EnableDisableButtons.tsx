@@ -2,58 +2,56 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Loader2, Pause, Play } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
 
-interface Props {
+export function EnableDisableButtons({
+  monitorId,
+  isEnabled,
+}: {
   monitorId: string;
   isEnabled: boolean;
-}
-
-export function EnableDisableButtons({ monitorId, isEnabled }: Props) {
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function toggle() {
-    setError(null);
     setLoading(true);
     try {
       const path = isEnabled
         ? `/api/monitors/${monitorId}/disable`
         : `/api/monitors/${monitorId}/enable`;
       await api(path, { method: "POST" });
+      toast.success(isEnabled ? "Monitor deshabilitado" : "Monitor habilitado");
       router.refresh();
     } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as { detail?: string; Message?: string } | undefined;
-        setError(body?.detail ?? body?.Message ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { detail?: string; Message?: string } | undefined)
+              ?.detail ??
+            (e.body as { Message?: string } | undefined)?.Message ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="inline-flex flex-col items-end gap-1">
-      <button
-        type="button"
-        onClick={toggle}
-        disabled={loading}
-        className={`rounded-full border px-4 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
-          isEnabled
-            ? "border-amber-500/30 text-amber-300 hover:bg-amber-500/10"
-            : "border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
-        }`}
-      >
-        {loading
-          ? "Procesando..."
-          : isEnabled
-            ? "Deshabilitar"
-            : "Habilitar"}
-      </button>
-      {error && <span className="text-[11px] text-rose-300">{error}</span>}
-    </div>
+    <Button variant="outline" size="sm" onClick={toggle} disabled={loading}>
+      {loading ? (
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      ) : isEnabled ? (
+        <Pause className="mr-2 h-4 w-4" />
+      ) : (
+        <Play className="mr-2 h-4 w-4" />
+      )}
+      {isEnabled ? "Deshabilitar" : "Habilitar"}
+    </Button>
   );
 }

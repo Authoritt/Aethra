@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import type { MonitorDetailDto } from "@/lib/types";
 import { EditMonitorForm } from "./EditMonitorForm";
@@ -39,24 +41,29 @@ export default async function EditMonitorPage({
   if (data === "notfound") notFound();
   if (data === "error") {
     return (
-      <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-        <div className="mx-auto max-w-3xl rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-          Error cargando el monitor.
-        </div>
-      </main>
+      <div className="px-6 py-8 md:px-10 md:py-10">
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            Error cargando el monitor.
+          </CardContent>
+        </Card>
+      </div>
     );
   }
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
-        <header>
-          <h1 className="text-3xl font-semibold">Editar monitor</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Los cambios se aplican al próximo tick del worker.
-          </p>
-        </header>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Monitores", href: "/monitors" },
+          { label: data.name, href: `/monitors/${data.id}` },
+          { label: "Editar" },
+        ]}
+        title="Editar monitor"
+        description="Los cambios se aplican al próximo tick del worker."
+      />
+      <div className="max-w-2xl">
         <EditMonitorForm initial={data} />
       </div>
-    </main>
+    </div>
   );
 }
