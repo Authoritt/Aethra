@@ -17,7 +17,7 @@ public sealed class ModuleIsolationTests
     private static readonly string[] ModuleNames =
     [
         "Projects", "Deployments", "Services", "Proxy", "Vms",
-        "Metrics", "Monitoring", "Cloudflare", "Notes", "Identity"
+        "Metrics", "Monitoring", "Cloudflare", "Notes", "Identity", "Notifications"
     ];
 
     [Fact]

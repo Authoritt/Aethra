@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Notification channels (Slack/Discord/Telegram/Email/Webhook) + dispatcher BackgroundService + listeners cross-module.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aethra.Shared.Kernel\Aethra.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\Aethra.Shared.Contracts\Aethra.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\Aethra.Shared.Infrastructure\Aethra.Shared.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Polly" />
+  </ItemGroup>
+
+  <!-- ASP.NET para endpoints REST + DataProtection (cifrado de config con webhooks/tokens). -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

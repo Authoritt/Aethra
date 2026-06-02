@@ -29,3 +29,15 @@ public sealed record DeploymentFailedIntegrationEvent(
     string ErrorCode,
     string ErrorMessage,
     DateTimeOffset FailedAt) : IntegrationEvent;
+
+/// <summary>
+/// Evento cross-module: un deployment falló pero el rollback restauró exitosamente el
+/// contenedor previo. Útil para que el módulo Notifications avise al operador (rollback
+/// implica downtime cero pero merece atención).
+/// </summary>
+public sealed record DeploymentRolledBackIntegrationEvent(
+    string DeploymentId,
+    string InstanceId,
+    string ErrorCode,
+    string ErrorMessage,
+    DateTimeOffset RolledBackAt) : IntegrationEvent;

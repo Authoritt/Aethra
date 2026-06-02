@@ -400,6 +400,16 @@ public sealed class DeploymentOrchestrator(
             {
                 deployment.Rollback(clock.UtcNow);
                 logger.LogInformation("Rollback OK para deployment {Id}", deployment.Id);
+
+                // Emite evento cross-module: el módulo Notifications avisa al operador via
+                // canales activos (Slack/Discord/Telegram/Email/Webhook). Rollback = downtime cero
+                // pero merece atención porque el deploy original falló.
+                await outbox.EnqueueAsync(new DeploymentRolledBackIntegrationEvent(
+                    DeploymentId: deployment.Id.ToString(),
+                    InstanceId: deployment.InstanceId,
+                    ErrorCode: deployment.ErrorCode ?? "unknown",
+                    ErrorMessage: deployment.ErrorMessage ?? string.Empty,
+                    RolledBackAt: clock.UtcNow), ct).ConfigureAwait(false);
             }
             else
             {
