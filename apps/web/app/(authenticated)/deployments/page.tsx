@@ -1,6 +1,22 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { StatusPill } from "@/app/_components/StatusPill";
+import { Activity, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { PageHeader } from "@/components/layout/page-header";
+import { DeploymentStatusPill } from "@/components/aethra/deployment-status-pill";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   ClientSummary,
@@ -20,10 +36,10 @@ interface AggregatedDeployment extends DeploymentSummary {
   environment: string;
 }
 
-async function aggregate(
-  searchParams: { instanceId?: string; status?: string },
-): Promise<AggregatedDeployment[] | "unauthorized" | "error"> {
-  // Si vino filtrado por instance, atajamos al endpoint directo.
+async function aggregate(searchParams: {
+  instanceId?: string;
+  status?: string;
+}): Promise<AggregatedDeployment[] | "unauthorized" | "error"> {
   if (searchParams.instanceId) {
     const direct = await serverFetch<DeploymentSummary[]>(
       `/api/deployments/instances/${searchParams.instanceId}`,
@@ -41,7 +57,6 @@ async function aggregate(
     }));
   }
 
-  // Overview global: fan-out projects -> templates -> instances -> deployments.
   const projects = await serverFetch<ProjectSummaryV2[]>("/api/projects");
   if (projects === "unauthorized") return "unauthorized";
   if (projects === "error") return "error";
@@ -71,7 +86,6 @@ async function aggregate(
 
   const templatesById = new Map(templates.map((t) => [t.id, t]));
 
-  // Recorremos instances por template para conocer su contexto.
   const instanceLists = await Promise.all(
     templates.map((t) =>
       serverFetch<InstanceSummary[]>(`/api/templates/${t.id}/instances`),
@@ -124,149 +138,140 @@ export default async function DeploymentsPage({
 
   const filterStatus = sp.status ?? "";
   const filterInstance = sp.instanceId ?? "";
+  const errored = data === "error";
+  const deployments = Array.isArray(data) ? data : [];
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold">Deployments</h1>
-            <p className="text-sm text-zinc-500">
-              Ultimos 50 deployments agregados de todas las instancias.
-            </p>
-          </div>
-          <Link
-            href="/projects"
-            className="rounded-full border border-zinc-700 px-4 py-2 text-sm transition hover:bg-zinc-800"
-          >
-            Ir a proyectos
-          </Link>
-        </header>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        title="Deployments"
+        description="Últimos 50 deployments agregados de todas las instancias."
+      />
 
-        <form
-          className="flex flex-wrap items-end gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4"
-          method="get"
-        >
-          <label className="flex flex-col text-xs text-zinc-300">
-            Instance ID
-            <input
-              type="text"
-              name="instanceId"
-              defaultValue={filterInstance}
-              placeholder="uuid"
-              className="mt-1 w-56 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-[11px] text-zinc-100 outline-none focus:border-emerald-500"
-            />
-          </label>
-          <label className="flex flex-col text-xs text-zinc-300">
-            Status
-            <select
-              name="status"
-              defaultValue={filterStatus}
-              className="mt-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-emerald-500"
-            >
-              <option value="">(todos)</option>
-              <option value="Pending">Pending</option>
-              <option value="Running">Running</option>
-              <option value="Completed">Completed</option>
-              <option value="Failed">Failed</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </label>
-          <button
-            type="submit"
-            className="rounded-full border border-zinc-700 px-4 py-2 text-xs text-zinc-200 transition hover:bg-zinc-800"
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap items-end gap-3 p-4">
+          <form
+            method="get"
+            className="flex flex-wrap items-end gap-3"
           >
-            Filtrar
-          </button>
-          {(filterStatus || filterInstance) && (
-            <Link
-              href="/deployments"
-              className="text-xs text-zinc-400 underline-offset-2 hover:underline"
-            >
-              Limpiar
-            </Link>
-          )}
-        </form>
+            <div className="space-y-1">
+              <Label htmlFor="instanceId">Instance ID</Label>
+              <Input
+                id="instanceId"
+                name="instanceId"
+                defaultValue={filterInstance}
+                placeholder="uuid"
+                className="w-56 font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="status">Status</Label>
+              <select
+                id="status"
+                name="status"
+                defaultValue={filterStatus}
+                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">(todos)</option>
+                <option value="Pending">Pending</option>
+                <option value="Running">Running</option>
+                <option value="Completed">Completed</option>
+                <option value="Failed">Failed</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+            <Button type="submit">Filtrar</Button>
+            {filterStatus || filterInstance ? (
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/deployments">
+                  <X className="mr-2 h-4 w-4" />
+                  Limpiar
+                </Link>
+              </Button>
+            ) : null}
+          </form>
+        </CardContent>
+      </Card>
 
-        {data === "error" && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
+      {errored ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
             No se pudo cargar el listado.
-          </div>
-        )}
-
-        {Array.isArray(data) && data.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-12 text-center">
-            <h2 className="text-xl font-semibold">Sin deployments</h2>
-            <p className="mt-2 text-sm text-zinc-500">
-              {filterInstance || filterStatus
-                ? "No hay deployments que cumplan el filtro."
-                : "Aun no se ha desplegado ninguna instancia."}
-            </p>
-          </div>
-        )}
-
-        {Array.isArray(data) && data.length > 0 && (
-          <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Instance</th>
-                  <th className="px-4 py-3">Template</th>
-                  <th className="px-4 py-3">Client</th>
-                  <th className="px-4 py-3">Env</th>
-                  <th className="px-4 py-3">Trigger</th>
-                  <th className="px-4 py-3">Creado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {data.map((d) => (
-                  <tr key={d.id} className="hover:bg-zinc-900/60">
-                    <td className="px-4 py-3">
-                      <Link href={`/deployments/${d.id}`} className="inline-block">
-                        <StatusPill status={d.status} />
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
+          </CardContent>
+        </Card>
+      ) : deployments.length === 0 ? (
+        <EmptyState
+          icon={Activity}
+          title="Sin deployments"
+          description={
+            filterInstance || filterStatus
+              ? "No hay deployments que cumplan el filtro."
+              : "Aún no se ha desplegado ninguna instancia."
+          }
+        />
+      ) : (
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Instance</TableHead>
+                <TableHead>Template</TableHead>
+                <TableHead>Client</TableHead>
+                <TableHead>Env</TableHead>
+                <TableHead>Trigger</TableHead>
+                <TableHead>Creado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {deployments.map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell>
+                    <Link href={`/deployments/${d.id}`}>
+                      <DeploymentStatusPill status={d.status} />
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/instances/${d.instanceId}`}
+                      className="font-mono text-xs hover:text-primary"
+                    >
+                      {d.instanceSlug}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {d.templateId ? (
                       <Link
-                        href={`/instances/${d.instanceId}`}
-                        className="font-mono text-xs text-zinc-200 hover:text-emerald-300"
+                        href={`/templates/${d.templateId}`}
+                        className="hover:text-primary"
                       >
-                        {d.instanceSlug}
+                        {d.templateName}
                       </Link>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-zinc-300">
-                      {d.templateId ? (
-                        <Link
-                          href={`/templates/${d.templateId}`}
-                          className="hover:text-emerald-300"
-                        >
-                          {d.templateName}
-                        </Link>
-                      ) : (
-                        d.templateName
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-zinc-300">
-                      {d.clientDisplayName}
-                    </td>
-                    <td className="px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
+                    ) : (
+                      d.templateName
+                    )}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {d.clientDisplayName}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-[10px] uppercase">
                       {d.environment}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-zinc-400">
-                      {d.trigger}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-zinc-400">
-                      {formatDate(d.createdAt)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </main>
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {d.trigger}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {formatDate(d.createdAt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+    </div>
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { ApiError, api } from "@/lib/api";
 import type { DeploymentDetail } from "@/lib/types";
 
@@ -19,10 +20,13 @@ const TERMINAL_STATUSES = new Set([
  * terminal; cuando cambia, dispara router.refresh() para que el server
  * component renderice el detalle final.
  */
-export function DeploymentLivePoll({ deploymentId }: { deploymentId: string }) {
+export function DeploymentLivePoll({
+  deploymentId,
+}: {
+  deploymentId: string;
+}) {
   const router = useRouter();
   const [lastStatus, setLastStatus] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,17 +43,16 @@ export function DeploymentLivePoll({ deploymentId }: { deploymentId: string }) {
           router.refresh();
           return;
         }
-        setError(null);
       } catch (e) {
         if (cancelled) return;
-        if (e instanceof ApiError) {
-          const body = e.body as
-            | { message?: string; detail?: string }
-            | undefined;
-          setError(body?.message ?? body?.detail ?? `Error ${e.status}`);
-        } else {
-          setError(e instanceof Error ? e.message : "Error desconocido");
-        }
+        const msg =
+          e instanceof ApiError
+            ? (e.body as { message?: string; detail?: string } | undefined)
+                ?.message ?? `Error ${e.status}`
+            : e instanceof Error
+              ? e.message
+              : "Error desconocido";
+        toast.error(msg);
       }
       if (!cancelled) {
         timeoutId = setTimeout(tick, 2000);
@@ -65,16 +68,12 @@ export function DeploymentLivePoll({ deploymentId }: { deploymentId: string }) {
   }, [deploymentId, router]);
 
   return (
-    <div className="flex flex-col items-end gap-1 text-xs text-emerald-300">
-      <span className="inline-flex items-center gap-1.5">
-        <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
-        Live · {lastStatus ?? "..."}
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-info/30 bg-info/10 px-2.5 py-0.5 text-xs font-medium text-info-foreground">
+      <span className="relative inline-flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-info opacity-60" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-info" />
       </span>
-      {error && (
-        <span className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-300">
-          {error}
-        </span>
-      )}
-    </div>
+      Live · {lastStatus ?? "…"}
+    </span>
   );
 }

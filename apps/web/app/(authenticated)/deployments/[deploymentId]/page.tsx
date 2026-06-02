@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { StatusPill } from "@/app/_components/StatusPill";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
+import { DeploymentStatusPill } from "@/components/aethra/deployment-status-pill";
 import { serverFetch } from "@/lib/server-fetch";
 import type { DeploymentDetail } from "@/lib/types";
 import { DeploymentLivePoll } from "./DeploymentLivePoll";
@@ -29,60 +32,58 @@ export default async function DeploymentDetailPage({
   if (deployment === "notfound") notFound();
   if (deployment === "error") {
     return (
-      <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-        <div className="mx-auto max-w-3xl rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-          Error cargando el deployment.
-        </div>
-      </main>
+      <div className="px-6 py-8 md:px-10 md:py-10">
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            Error cargando el deployment.
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   const terminal = TERMINAL_STATUSES.has(deployment.status);
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-        <nav className="text-xs text-zinc-500">
-          <Link href="/deployments" className="hover:text-zinc-300">
-            Deployments
-          </Link>
-          <span> / </span>
-          <Link
-            href={`/instances/${deployment.instanceId}`}
-            className="hover:text-zinc-300"
-          >
-            Instance
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">{deployment.id.slice(0, 8)}</span>
-        </nav>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Deployments", href: "/deployments" },
+          {
+            label: "Instance",
+            href: `/instances/${deployment.instanceId}`,
+          },
+          { label: deployment.id.slice(0, 8) },
+        ]}
+        title={deployment.id.slice(0, 12)}
+        description={
+          <span className="font-mono text-xs text-muted-foreground">
+            {deployment.id}
+          </span>
+        }
+        actions={
+          <>
+            <DeploymentStatusPill status={deployment.status} />
+            {!terminal ? (
+              <DeploymentLivePoll deploymentId={deployment.id} />
+            ) : null}
+          </>
+        }
+      />
 
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <StatusPill status={deployment.status} />
-              <h1 className="font-mono text-2xl font-semibold">
-                {deployment.id.slice(0, 12)}
-              </h1>
-            </div>
-            <p className="mt-2 font-mono text-xs text-zinc-500">{deployment.id}</p>
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] uppercase tracking-wider text-zinc-500">
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2 py-0.5">
-                trigger {deployment.trigger}
-              </span>
-            </div>
-          </div>
-          {!terminal && (
-            <DeploymentLivePoll deploymentId={deployment.id} />
-          )}
-        </header>
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Badge variant="outline">trigger {deployment.trigger}</Badge>
+      </div>
 
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <h3 className="text-xs uppercase tracking-wider text-zinc-500">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
               Timing
-            </h3>
-            <dl className="mt-3 flex flex-col gap-2 text-sm">
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="flex flex-col gap-3 text-sm">
               <Kv label="Creado" value={formatDate(deployment.createdAt)} />
               <Kv
                 label="Fin"
@@ -93,12 +94,16 @@ export default async function DeploymentDetailPage({
                 }
               />
             </dl>
-          </div>
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <h3 className="text-xs uppercase tracking-wider text-zinc-500">
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
               Imagen
-            </h3>
-            <dl className="mt-3 flex flex-col gap-2 text-sm">
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="flex flex-col gap-3 text-sm">
               <Kv label="Nueva" value={deployment.newImageRef} mono />
               <Kv
                 label="Anterior"
@@ -106,12 +111,16 @@ export default async function DeploymentDetailPage({
                 mono={Boolean(deployment.oldImageRef)}
               />
             </dl>
-          </div>
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <h3 className="text-xs uppercase tracking-wider text-zinc-500">
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
               Container
-            </h3>
-            <dl className="mt-3 flex flex-col gap-2 text-sm">
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="flex flex-col gap-3 text-sm">
               <Kv
                 label="Nuevo"
                 value={deployment.newContainerId ?? "—"}
@@ -123,12 +132,16 @@ export default async function DeploymentDetailPage({
                 mono={Boolean(deployment.oldContainerId)}
               />
             </dl>
-          </div>
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <h3 className="text-xs uppercase tracking-wider text-zinc-500">
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
               Resultado
-            </h3>
-            <dl className="mt-3 flex flex-col gap-2 text-sm">
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="flex flex-col gap-3 text-sm">
               <Kv label="Error code" value={deployment.errorCode ?? "—"} mono />
               <Kv
                 label="Error message"
@@ -136,28 +149,32 @@ export default async function DeploymentDetailPage({
                 mono={Boolean(deployment.errorMessage)}
               />
             </dl>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
+      </section>
 
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-          <h3 className="text-xs uppercase tracking-wider text-zinc-500">
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
             Logs del deploy
-          </h3>
-          <p className="mt-2 text-sm text-zinc-400">
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
             El detalle del deploy no expone logs propios en el contrato actual.
             Para ver los logs del build asociado y entender el origen de la
             imagen,{" "}
             <Link
               href={`/builds/${deployment.buildId}`}
-              className="text-emerald-300 underline-offset-2 hover:underline"
+              className="text-primary underline-offset-4 hover:underline"
             >
-              abre el build {deployment.buildId.slice(0, 8)}
+              abrí el build {deployment.buildId.slice(0, 8)}
             </Link>
             .
           </p>
-        </section>
-      </div>
-    </main>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -172,9 +189,11 @@ function Kv({
 }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wider text-zinc-500">{label}</dt>
+      <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </dt>
       <dd
-        className={`mt-0.5 break-all text-zinc-100 ${mono ? "font-mono text-xs" : "text-sm"}`}
+        className={`mt-0.5 break-all text-foreground ${mono ? "font-mono text-xs" : "text-sm"}`}
       >
         {value}
       </dd>

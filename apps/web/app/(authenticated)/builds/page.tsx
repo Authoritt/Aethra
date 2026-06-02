@@ -1,6 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { StatusPill } from "@/app/_components/StatusPill";
+import { Plus, Rocket } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { PageHeader } from "@/components/layout/page-header";
+import { BuildStatusPill } from "@/components/aethra/build-status-pill";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   BuildSummary,
@@ -18,9 +32,6 @@ interface AggregatedBuild extends BuildSummary {
 async function aggregateRecentBuilds(): Promise<
   AggregatedBuild[] | "unauthorized" | "error"
 > {
-  // El contrato de A10 expone builds solo por template. Para un overview global
-  // hacemos fan-out: projects -> templates -> builds, y mergeamos por fecha
-  // desc. Cap a 50 para no abusar.
   const projects = await serverFetch<ProjectSummaryV2[]>("/api/projects");
   if (projects === "unauthorized") return "unauthorized";
   if (projects === "error") return "error";
@@ -63,92 +74,95 @@ export default async function BuildsPage() {
   const data = await aggregateRecentBuilds();
   if (data === "unauthorized") redirect("/login");
 
+  const errored = data === "error";
+  const builds = Array.isArray(data) ? data : [];
+
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold">Builds</h1>
-            <p className="text-sm text-zinc-500">
-              Ultimos 50 builds agregados de todos los templates.
-            </p>
-          </div>
-          <Link
-            href="/projects"
-            className="rounded-full border border-zinc-700 px-4 py-2 text-sm transition hover:bg-zinc-800"
-          >
-            Ir a proyectos
-          </Link>
-        </header>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        title="Builds"
+        description="Últimos 50 builds agregados de todos los templates del workspace."
+        actions={
+          <Button asChild>
+            <Link href="/builds/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Build manual
+            </Link>
+          </Button>
+        }
+      />
 
-        {data === "error" && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-            No se pudo cargar el listado. Verifica que la API este corriendo.
-          </div>
-        )}
-
-        {Array.isArray(data) && data.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-12 text-center">
-            <h2 className="text-xl font-semibold">Sin builds aun</h2>
-            <p className="mt-2 text-sm text-zinc-500">
-              Cuando dispares un webhook o un build manual desde un template, los
-              ultimos apareceran aqui.
-            </p>
-          </div>
-        )}
-
-        {Array.isArray(data) && data.length > 0 && (
-          <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Template</th>
-                  <th className="px-4 py-3">Ref</th>
-                  <th className="px-4 py-3">SHA</th>
-                  <th className="px-4 py-3">Trigger</th>
-                  <th className="px-4 py-3">Creado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {data.map((b) => (
-                  <tr key={b.id} className="hover:bg-zinc-900/60">
-                    <td className="px-4 py-3">
-                      <Link href={`/builds/${b.id}`} className="inline-block">
-                        <StatusPill status={b.status} />
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/templates/${b.templateId}`}
-                        className="text-sm text-zinc-200 hover:text-emerald-300"
-                      >
-                        {b.templateName}
-                      </Link>
-                      <div className="font-mono text-[10px] text-zinc-500">
-                        {b.templateSlug}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-200">
-                      {b.gitRef}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-zinc-400">
-                      {b.gitSha.slice(0, 8)}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-zinc-400">
+      {errored ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            No se pudo cargar el listado. Verificá que la API esté corriendo.
+          </CardContent>
+        </Card>
+      ) : builds.length === 0 ? (
+        <EmptyState
+          icon={Rocket}
+          title="Sin builds aún"
+          description="Cuando dispares un webhook o un build manual desde un template, los últimos aparecerán aquí."
+          action={
+            <Button asChild>
+              <Link href="/builds/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Disparar build manual
+              </Link>
+            </Button>
+          }
+        />
+      ) : (
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Template</TableHead>
+                <TableHead>Ref</TableHead>
+                <TableHead>SHA</TableHead>
+                <TableHead>Trigger</TableHead>
+                <TableHead>Creado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {builds.map((b) => (
+                <TableRow key={b.id}>
+                  <TableCell>
+                    <Link href={`/builds/${b.id}`}>
+                      <BuildStatusPill status={b.status} />
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/templates/${b.templateId}`}
+                      className="text-sm hover:text-primary"
+                    >
+                      {b.templateName}
+                    </Link>
+                    <div className="font-mono text-[10px] text-muted-foreground">
+                      {b.templateSlug}
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">{b.gitRef}</TableCell>
+                  <TableCell className="font-mono text-[11px] text-muted-foreground">
+                    {b.gitSha.slice(0, 8)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs font-normal">
                       {b.trigger}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-zinc-400">
-                      {formatDate(b.createdAt)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </main>
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {formatDate(b.createdAt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+    </div>
   );
 }
 

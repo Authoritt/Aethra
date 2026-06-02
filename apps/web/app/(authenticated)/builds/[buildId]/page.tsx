@@ -1,6 +1,8 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { StatusPill } from "@/app/_components/StatusPill";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
+import { BuildStatusPill } from "@/components/aethra/build-status-pill";
 import { serverFetch } from "@/lib/server-fetch";
 import type { BuildDetail } from "@/lib/types";
 import { BuildLogsViewer } from "./BuildLogsViewer";
@@ -27,65 +29,54 @@ export default async function BuildDetailPage({
   if (build === "notfound") notFound();
   if (build === "error") {
     return (
-      <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-        <div className="mx-auto max-w-3xl rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-          Error cargando el build.
-        </div>
-      </main>
+      <div className="px-6 py-8 md:px-10 md:py-10">
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            Error cargando el build.
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   const terminal = TERMINAL_STATUSES.has(build.status);
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-        <nav className="text-xs text-zinc-500">
-          <Link href="/builds" className="hover:text-zinc-300">
-            Builds
-          </Link>
-          <span> / </span>
-          <Link
-            href={`/templates/${build.templateId}`}
-            className="hover:text-zinc-300"
-          >
-            Template
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">{build.id.slice(0, 8)}</span>
-        </nav>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Builds", href: "/builds" },
+          { label: "Template", href: `/templates/${build.templateId}` },
+          { label: build.id.slice(0, 8) },
+        ]}
+        title={build.gitSha.slice(0, 12)}
+        description={
+          <span className="font-mono text-xs text-muted-foreground">
+            {build.id}
+          </span>
+        }
+        actions={<BuildStatusPill status={build.status} />}
+      />
 
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <StatusPill status={build.status} />
-              <h1 className="font-mono text-2xl font-semibold">
-                {build.gitSha.slice(0, 12)}
-              </h1>
-            </div>
-            <p className="mt-2 font-mono text-xs text-zinc-500">{build.id}</p>
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] uppercase tracking-wider text-zinc-500">
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2 py-0.5">
-                ref {build.gitRef}
-              </span>
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2 py-0.5">
-                trigger {build.trigger}
-              </span>
-              {build.triggeredBy && (
-                <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2 py-0.5">
-                  by {build.triggeredBy}
-                </span>
-              )}
-            </div>
-          </div>
-        </header>
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Badge variant="outline" className="font-mono text-xs">
+          ref {build.gitRef}
+        </Badge>
+        <Badge variant="outline">trigger {build.trigger}</Badge>
+        {build.triggeredBy ? (
+          <Badge variant="outline">by {build.triggeredBy}</Badge>
+        ) : null}
+      </div>
 
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <h3 className="text-xs uppercase tracking-wider text-zinc-500">
+      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
               Timing
-            </h3>
-            <dl className="mt-3 flex flex-col gap-2 text-sm">
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="flex flex-col gap-3 text-sm">
               <Kv label="Creado" value={formatDate(build.createdAt)} />
               <Kv
                 label="Inicio"
@@ -96,7 +87,7 @@ export default async function BuildDetailPage({
                 value={build.finishedAt ? formatDate(build.finishedAt) : "—"}
               />
               <Kv
-                label="Duracion"
+                label="Duración"
                 value={
                   build.buildDurationMs != null
                     ? formatDuration(build.buildDurationMs)
@@ -104,12 +95,16 @@ export default async function BuildDetailPage({
                 }
               />
             </dl>
-          </div>
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <h3 className="text-xs uppercase tracking-wider text-zinc-500">
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
               Resultado
-            </h3>
-            <dl className="mt-3 flex flex-col gap-2 text-sm">
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="flex flex-col gap-3 text-sm">
               <Kv label="Image ref" value={build.imageRef ?? "—"} mono />
               <Kv label="Error code" value={build.errorCode ?? "—"} mono />
               <Kv
@@ -118,26 +113,26 @@ export default async function BuildDetailPage({
                 mono={Boolean(build.errorMessage)}
               />
             </dl>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
+      </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm uppercase tracking-wider text-zinc-500">
-              Logs
-            </h2>
-            {terminal ? (
-              <span className="text-[11px] text-zinc-500">build terminado</span>
-            ) : (
-              <span className="text-[11px] text-emerald-300">
-                streaming (polling cada 2s)
-              </span>
-            )}
-          </div>
-          <BuildLogsViewer buildId={build.id} terminal={terminal} />
-        </section>
-      </div>
-    </main>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Logs
+          </h2>
+          {terminal ? (
+            <span className="text-xs text-muted-foreground">build terminado</span>
+          ) : (
+            <span className="text-xs text-primary">
+              streaming (polling cada 2s)
+            </span>
+          )}
+        </div>
+        <BuildLogsViewer buildId={build.id} terminal={terminal} />
+      </section>
+    </div>
   );
 }
 
@@ -152,9 +147,11 @@ function Kv({
 }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wider text-zinc-500">{label}</dt>
+      <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </dt>
       <dd
-        className={`mt-0.5 break-all text-zinc-100 ${mono ? "font-mono text-xs" : "text-sm"}`}
+        className={`mt-0.5 break-all text-foreground ${mono ? "font-mono text-xs" : "text-sm"}`}
       >
         {value}
       </dd>
