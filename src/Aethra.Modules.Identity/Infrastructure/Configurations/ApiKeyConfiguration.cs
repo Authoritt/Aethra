@@ -47,6 +47,15 @@ internal sealed class ApiKeyConfiguration : IEntityTypeConfiguration<ApiKey>
         builder.Property(k => k.RevokedAt).HasColumnName("revoked_at");
         builder.Property(k => k.ExpiresAt).HasColumnName("expires_at");
 
+        // F11.1: owner_user_id nullable — keys creadas antes de multi-user no tienen owner.
+        builder.Property(k => k.OwnerUserId)
+            .HasColumnName("owner_user_id")
+            .HasMaxLength(64)
+            .HasConversion(ValueConverters.NullableUserIdConverter);
+
+        builder.HasIndex(k => k.OwnerUserId)
+            .HasDatabaseName("ix_api_keys_owner_user_id");
+
         // Índice único en key_hash — habilita lookup O(log n) por hash desde
         // AethraApiKeyAuthHandler. Es único porque dos secrets random distintos
         // no pueden colisionar en su hash determinístico.

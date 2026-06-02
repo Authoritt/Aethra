@@ -40,6 +40,12 @@ public sealed class ApiKey : AggregateRoot<ApiKeyId>
     /// <summary>Expiración opcional. Si está seteada y ya pasó, la key no autentica.</summary>
     public DateTimeOffset? ExpiresAt { get; private set; }
 
+    /// <summary>
+    /// User dueño de la key. NULL para keys legacy creadas antes de F11.1 (cuando solo
+    /// existía single-user admin). Keys nuevas se asocian con el user que las crea.
+    /// </summary>
+    public UserId? OwnerUserId { get; private set; }
+
     public bool IsRevoked => RevokedAt.HasValue;
 
     public bool IsExpired(DateTimeOffset now) => ExpiresAt.HasValue && ExpiresAt.Value <= now;
@@ -53,7 +59,8 @@ public sealed class ApiKey : AggregateRoot<ApiKeyId>
         byte[] keyHash,
         IReadOnlySet<string> scopes,
         DateTimeOffset createdAt,
-        DateTimeOffset? expiresAt) : base(id)
+        DateTimeOffset? expiresAt,
+        UserId? ownerUserId) : base(id)
     {
         Name = name;
         KeyPrefix = keyPrefix;
@@ -61,6 +68,7 @@ public sealed class ApiKey : AggregateRoot<ApiKeyId>
         Scopes = scopes;
         CreatedAt = createdAt;
         ExpiresAt = expiresAt;
+        OwnerUserId = ownerUserId;
     }
 
     /// <summary>
@@ -75,7 +83,8 @@ public sealed class ApiKey : AggregateRoot<ApiKeyId>
         IEnumerable<string> scopes,
         DateTimeOffset now,
         IApiKeyHasher hasher,
-        DateTimeOffset? expiresAt = null)
+        DateTimeOffset? expiresAt = null,
+        UserId? ownerUserId = null)
     {
         ArgumentNullException.ThrowIfNull(hasher);
         ValidateName(name);
@@ -102,7 +111,8 @@ public sealed class ApiKey : AggregateRoot<ApiKeyId>
             hash,
             normalizedScopes,
             now,
-            expiresAt);
+            expiresAt,
+            ownerUserId);
 
         apiKey.Raise(new ApiKeyCreatedEvent(apiKey.Id, apiKey.Name, [.. normalizedScopes]));
         return apiKey;
@@ -161,6 +171,10 @@ public sealed class ApiKey : AggregateRoot<ApiKeyId>
         "settings:read",
         "settings:write",
         "context:read",
+        "users:read",
+        "users:write",
+        "notifications:read",
+        "notifications:write",
         AdminScope,
     };
 
