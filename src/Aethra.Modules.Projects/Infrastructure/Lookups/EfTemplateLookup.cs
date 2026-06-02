@@ -63,5 +63,6 @@ internal sealed class EfTemplateLookup(ProjectsDbContext db, IWebhookSecretCodec
             BaseDirectory: t.Source.BaseDirectory,
             WatchPaths: t.Source.WatchPaths,
             BuildType: t.Build.BuildType.ToString(),
-            DockerfilePath: t.Build.DockerfilePath);
+            DockerfilePath: t.Build.DockerfilePath,
+            ComposeFilePath: t.Build.ComposeFilePath);
 }

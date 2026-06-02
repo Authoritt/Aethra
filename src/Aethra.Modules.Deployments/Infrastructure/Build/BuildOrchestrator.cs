@@ -118,10 +118,28 @@ public sealed class BuildOrchestrator(
 
             // === Build ===
             build.Transition(BuildStatus.Building, clock.UtcNow);
-            build.AppendLog(BuildLogLevel.Info, "building",
-                $"Build con Dockerfile={template.DockerfilePath}, base_dir={template.BaseDirectory}, "
-                + $"build_type={template.BuildType}, image={imageRef}",
-                clock.UtcNow);
+            // F11.2: el mensaje principal depende del modo — para Nixpacks no aplica Dockerfile.
+            var buildMode = MapBuildMode(template.BuildType);
+            if (buildMode == BuildMode.Nixpacks)
+            {
+                build.AppendLog(BuildLogLevel.Info, "building",
+                    $"Build via Nixpacks (auto-detect de lenguaje), base_dir={template.BaseDirectory}, image={imageRef}",
+                    clock.UtcNow);
+            }
+            else if (buildMode == BuildMode.DockerCompose)
+            {
+                build.AppendLog(BuildLogLevel.Info, "building",
+                    $"Build via DockerCompose={template.ComposeFilePath ?? "docker-compose.yml"}, "
+                    + $"base_dir={template.BaseDirectory}, image={imageRef}",
+                    clock.UtcNow);
+            }
+            else
+            {
+                build.AppendLog(BuildLogLevel.Info, "building",
+                    $"Build con Dockerfile={template.DockerfilePath}, base_dir={template.BaseDirectory}, "
+                    + $"build_type={template.BuildType}, image={imageRef}",
+                    clock.UtcNow);
+            }
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
             // Credencial del registry interno: si en el futuro se hace push a un registry, el
@@ -157,12 +175,18 @@ public sealed class BuildOrchestrator(
             BuildResult buildResult;
             try
             {
+                // F11.2: el satélite necesita el modo + paths específicos por modo.
+                // Para Nixpacks, no se usa Dockerfile (se ignora); para DockerCompose se manda
+                // ComposeFilePath. El default sigue siendo Dockerfile para preservar compat.
                 var spec = new BuildSpec(
                     ImageRef: imageRef,
                     BuildContextTarGz: context.TarGz,
                     DockerfilePath: template.DockerfilePath,
                     BuildArgs: new Dictionary<string, string>(),
-                    BuildSecrets: null);
+                    BuildSecrets: null,
+                    Mode: buildMode,
+                    ComposeFilePath: buildMode == BuildMode.DockerCompose ? template.ComposeFilePath : null,
+                    NixpacksConfig: null);
                 buildResult = await satelliteClient
                     .SendBuildAsync(vmId: targetVmId, spec: spec, pushTo: null, ct: ct)
                     .ConfigureAwait(false);
@@ -246,6 +270,19 @@ public sealed class BuildOrchestrator(
         const string prefix = "refs/heads/";
         return gitRef.StartsWith(prefix, StringComparison.Ordinal) ? gitRef[prefix.Length..] : gitRef;
     }
+
+    /// <summary>
+    /// Mapea el string del <c>template.BuildType</c> (que viene del read-model) al enum
+    /// <see cref="BuildMode"/> del contrato satélite. Default: Dockerfile (compat).
+    /// </summary>
+    private static BuildMode MapBuildMode(string buildType)
+        => buildType?.Trim().ToLowerInvariant() switch
+        {
+            "nixpacks" => BuildMode.Nixpacks,
+            "dockercompose" => BuildMode.DockerCompose,
+            "docker-compose" => BuildMode.DockerCompose,
+            _ => BuildMode.Dockerfile,
+        };
 
     private void FailAndPersist(Domain.Build.Build build, string code, string message,
         long? durationMs = null)
