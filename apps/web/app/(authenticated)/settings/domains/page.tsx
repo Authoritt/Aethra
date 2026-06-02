@@ -76,7 +76,7 @@ export default async function BaseDomainsPage() {
         </Card>
       ) : domains.length === 0 ? (
         <EmptyState
-          icon={Globe}
+          icon={<Globe className="h-6 w-6" />}
           title="Aún sin base domains"
           description="Registrá el FQDN bajo el cual Aethra creará hostnames. Después marcá el wildcard como configurado cuando crees el registro DNS."
           action={

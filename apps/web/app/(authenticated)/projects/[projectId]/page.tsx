@@ -122,7 +122,7 @@ export default async function ProjectDetailPage({
             <CardContent>
               {templates.length === 0 ? (
                 <EmptyState
-                  icon={FileCode}
+                  icon={<FileCode className="h-6 w-6" />}
                   title="Sin templates"
                   description="Creá la primera plantilla para definir el build de una imagen reutilizable."
                 />
@@ -181,7 +181,7 @@ export default async function ProjectDetailPage({
             <CardContent>
               {clients.length === 0 ? (
                 <EmptyState
-                  icon={Users}
+                  icon={<Users className="h-6 w-6" />}
                   title="Sin clients"
                   description="Los clients representan tenants que tendrán sus propias instancias del template."
                 />

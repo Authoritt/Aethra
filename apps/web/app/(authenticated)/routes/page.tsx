@@ -68,7 +68,7 @@ export default async function RoutesPage() {
         </Card>
       ) : routes.length === 0 ? (
         <EmptyState
-          icon={Network}
+          icon={<Network className="h-6 w-6" />}
           title="Aún sin rutas"
           description="Creá tu primera ruta para exponer un backend con TLS automático."
           action={

@@ -137,7 +137,7 @@ export default async function MonitorsPage({ searchParams }: ListPageProps) {
         </Card>
       ) : list.length === 0 ? (
         <EmptyState
-          icon={Activity}
+          icon={<Activity className="h-6 w-6" />}
           title="Aún sin monitores"
           description="Creá tu primer monitor uptime para empezar a observar una URL."
           action={

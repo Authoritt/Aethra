@@ -50,7 +50,7 @@ export default async function NewBuildPage() {
       <div className="max-w-2xl">
         {templates.length === 0 ? (
           <EmptyState
-            icon={Rocket}
+            icon={<Rocket className="h-6 w-6" />}
             title="No hay templates disponibles"
             description="Necesitás al menos un template en algún proyecto para disparar builds."
           />

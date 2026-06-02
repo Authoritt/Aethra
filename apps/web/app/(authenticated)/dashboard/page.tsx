@@ -136,18 +136,22 @@ export default async function Dashboard() {
         <KpiCard
           label="Proyectos"
           value={ctx?.projects.length ?? 0}
-          icon={FolderKanban}
+          icon={<FolderKanban className="h-4 w-4" />}
         />
-        <KpiCard label="VMs" value={ctx?.vms.length ?? 0} icon={Server} />
+        <KpiCard
+          label="VMs"
+          value={ctx?.vms.length ?? 0}
+          icon={<Server className="h-4 w-4" />}
+        />
         <KpiCard
           label="Servicios"
           value={ctx?.services.length ?? 0}
-          icon={Boxes}
+          icon={<Boxes className="h-4 w-4" />}
         />
         <KpiCard
           label="Monitores down"
           value={monitorOverview?.down ?? 0}
-          icon={Activity}
+          icon={<Activity className="h-4 w-4" />}
           tone={(monitorOverview?.down ?? 0) > 0 ? "destructive" : "success"}
         />
       </section>

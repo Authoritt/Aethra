@@ -70,7 +70,7 @@ export default async function ServicesPage() {
         </Card>
       ) : services.length === 0 ? (
         <EmptyState
-          icon={Boxes}
+          icon={<Boxes className="h-6 w-6" />}
           title="Aún sin servicios"
           description="Crea un Postgres, Redis o RabbitMQ desde plantilla para que tus applications puedan consumirlo vía bindings."
           action={

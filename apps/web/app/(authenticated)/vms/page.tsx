@@ -60,7 +60,7 @@ export default async function VmsPage() {
         </Card>
       ) : vms.length === 0 ? (
         <EmptyState
-          icon={Server}
+          icon={<Server className="h-6 w-6" />}
           title="Aún sin VMs"
           description="Registrá tu primera VM para conectar un satélite y ver métricas en tiempo real."
           action={

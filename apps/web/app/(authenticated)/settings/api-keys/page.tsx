@@ -75,7 +75,7 @@ export default async function ApiKeysPage() {
         </Card>
       ) : keys.length === 0 ? (
         <EmptyState
-          icon={Key}
+          icon={<Key className="h-6 w-6" />}
           title="Aún sin API keys"
           description="Creá tu primera API key para que tus integraciones, scripts y agentes IA puedan llamar a la API de Aethra."
           action={

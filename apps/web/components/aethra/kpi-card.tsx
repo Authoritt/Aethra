@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import type { LucideIcon } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -10,7 +9,10 @@ export interface KpiCardProps {
   label: string;
   value: React.ReactNode;
   delta?: React.ReactNode;
-  icon?: LucideIcon;
+  // ReactNode (no LucideIcon) para que un Server Component pueda pasar
+  // `icon={<FolderKanban className="h-4 w-4" />}` sin atravesar el boundary
+  // server→client con una function (componentes lucide son functions).
+  icon?: React.ReactNode;
   sparkline?: number[];
   /** Variante visual del énfasis del número. */
   tone?: "default" | "success" | "warning" | "destructive" | "info";
@@ -37,7 +39,7 @@ export function KpiCard({
   label,
   value,
   delta,
-  icon: Icon,
+  icon,
   sparkline,
   tone = "default",
   className,
@@ -55,9 +57,9 @@ export function KpiCard({
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             {label}
           </p>
-          {Icon ? (
+          {icon ? (
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
-              <Icon className="h-4 w-4" />
+              {icon}
             </div>
           ) : null}
         </div>

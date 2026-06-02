@@ -80,7 +80,7 @@ export default async function IntegrationsPage() {
         </Card>
       ) : creds.length === 0 ? (
         <EmptyState
-          icon={Plug2}
+          icon={<Plug2 className="h-6 w-6" />}
           title="Aún sin credenciales"
           description="Centralizá acá las credenciales que comparten varios módulos (Cloudflare, GitHub, registries...). El valor en claro solo se ve una vez."
           action={

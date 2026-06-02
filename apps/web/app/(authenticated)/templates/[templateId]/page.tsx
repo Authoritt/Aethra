@@ -208,7 +208,7 @@ export default async function TemplateDetailPage({
         <TabsContent value="instances" className="mt-6">
           {instances.length === 0 ? (
             <EmptyState
-              icon={Rocket}
+              icon={<Rocket className="h-6 w-6" />}
               title="Sin instances"
               description="Creá la primera para desplegar este template hacia un client + environment."
               action={

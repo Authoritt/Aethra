@@ -62,7 +62,7 @@ export default async function CloudflareZonesPage() {
         </Card>
       ) : zones.length === 0 ? (
         <EmptyState
-          icon={Cloud}
+          icon={<Cloud className="h-6 w-6" />}
           title="Aún sin zonas"
           description="Registrá una zona de Cloudflare para gestionar sus DNS records desde Aethra. Necesitás el zone_id y un API token con scope Zone.DNS."
           action={

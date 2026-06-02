@@ -100,7 +100,7 @@ export default async function BuildsPage() {
         </Card>
       ) : builds.length === 0 ? (
         <EmptyState
-          icon={Rocket}
+          icon={<Rocket className="h-6 w-6" />}
           title="Sin builds aún"
           description="Cuando dispares un webhook o un build manual desde un template, los últimos aparecerán aquí."
           action={

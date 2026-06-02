@@ -165,7 +165,7 @@ export default async function ServiceDetailPage({
 
         {activeBindings.length === 0 ? (
           <EmptyState
-            icon={Plug2}
+            icon={<Plug2 className="h-6 w-6" />}
             title="Sin bindings activos"
             description="Bindea una application para que pueda consumir este servicio."
           />

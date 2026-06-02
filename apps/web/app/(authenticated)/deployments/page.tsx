@@ -201,7 +201,7 @@ export default async function DeploymentsPage({
         </Card>
       ) : deployments.length === 0 ? (
         <EmptyState
-          icon={Activity}
+          icon={<Activity className="h-6 w-6" />}
           title="Sin deployments"
           description={
             filterInstance || filterStatus

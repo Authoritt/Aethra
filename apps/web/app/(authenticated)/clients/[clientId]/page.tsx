@@ -105,7 +105,7 @@ export default async function ClientDetailPage({
         <TabsContent value="instances" className="mt-6">
           {instances.length === 0 ? (
             <EmptyState
-              icon={Boxes}
+              icon={<Boxes className="h-6 w-6" />}
               title="Sin instances"
               description="Este client aún no tiene instancias. Creales una desde el detalle de un template."
             />

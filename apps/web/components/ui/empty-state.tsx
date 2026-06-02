@@ -1,16 +1,17 @@
 import * as React from "react";
-import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface EmptyStateProps extends React.HTMLAttributes<HTMLDivElement> {
-  icon?: LucideIcon;
+  // ReactNode (no LucideIcon) — un Server Component no puede pasar funciones
+  // a Client Components. Convención: `icon={<FolderKanban className="h-6 w-6" />}`.
+  icon?: React.ReactNode;
   title: string;
   description?: string;
   action?: React.ReactNode;
 }
 
 const EmptyState = React.forwardRef<HTMLDivElement, EmptyStateProps>(
-  ({ icon: Icon, title, description, action, className, ...props }, ref) => {
+  ({ icon, title, description, action, className, ...props }, ref) => {
     return (
       <div
         ref={ref}
@@ -20,9 +21,9 @@ const EmptyState = React.forwardRef<HTMLDivElement, EmptyStateProps>(
         )}
         {...props}
       >
-        {Icon ? (
+        {icon ? (
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <Icon className="h-6 w-6" />
+            {icon}
           </div>
         ) : null}
         <div className="flex flex-col gap-1">
