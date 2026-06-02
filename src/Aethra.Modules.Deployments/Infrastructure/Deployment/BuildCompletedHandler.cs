@@ -3,6 +3,7 @@ using Aethra.Shared.Contracts.Deployments;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Kernel.Time;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Aethra.Modules.Deployments.Infrastructure.Deployment;
@@ -25,10 +26,16 @@ namespace Aethra.Modules.Deployments.Infrastructure.Deployment;
 /// </para>
 ///
 /// <para>
-/// Idempotencia: si el Build se reprocesa (mismo evento delivered dos veces por el outbox), se
-/// crearán deployments duplicados. F9.4 añadirá una check "no existe Deployment activo para esta
-/// (instance, build) antes de encolar" — por ahora la convención <c>at-least-once</c> del outbox
-/// se acepta como riesgo conocido para una plataforma single-user.
+/// Idempotencia F9.10 D2: el outbox es at-least-once. Si el evento se entrega 2 veces, sin check
+/// crearíamos 2N <see cref="Deployment"/> duplicados (uno por cada Instance × cada entrega). Para
+/// evitarlo, antes de crear cada Deployment chequeamos en BD si ya existe uno para
+/// <c>(BuildId, InstanceId)</c>. Si existe, skipeamos esa Instance y logueamos.
+///
+/// TODO técnico pendiente: añadir UNIQUE constraint <c>(build_id, instance_id)</c> en la tabla
+/// <c>deployments.deployments</c> via nueva migración. Eso convierte la idempotencia en garantía
+/// de schema (race condition imposible incluso con dos handlers concurrentes); el check en código
+/// actual sigue siendo correcto pero teóricamente sufre TOCTOU si dos entregas del outbox se
+/// procesaran en paralelo (en F9.10 el outbox publisher es single-threaded, así que no aplica).
 /// </para>
 /// </summary>
 internal sealed class BuildCompletedHandler(
@@ -56,8 +63,25 @@ internal sealed class BuildCompletedHandler(
         }
 
         var queuedIds = new List<DeploymentId>(instances.Count);
+        var skipped = 0;
         foreach (var instance in instances)
         {
+            // F9.10 D2: idempotencia outbox at-least-once — si ya hay un Deployment para
+            // (build, instance) no creamos otro. Caso típico: outbox publisher reintenta
+            // tras un fallo transitorio del bus o del downstream y el evento se redelivera.
+            var alreadyExists = await db.Deployments
+                .AnyAsync(d => d.BuildId == notification.BuildId && d.InstanceId == instance.InstanceId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (alreadyExists)
+            {
+                logger.LogInformation(
+                    "Deployment ya existe para (build={BuildId}, instance={InstanceId}), idempotencia outbox — skip",
+                    notification.BuildId, instance.InstanceId);
+                skipped++;
+                continue;
+            }
+
             var deployment = Domain.Deployment.Deployment.Queue(
                 buildId: notification.BuildId,
                 instanceId: instance.InstanceId,
@@ -70,6 +94,14 @@ internal sealed class BuildCompletedHandler(
             queuedIds.Add(deployment.Id);
         }
 
+        if (queuedIds.Count == 0)
+        {
+            logger.LogInformation(
+                "BuildCompleted {BuildId} (template={Template}): {Skipped} Instances ya tenían deployment — no hay fan-out nuevo",
+                notification.BuildId, notification.TemplateId, skipped);
+            return;
+        }
+
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         // Notificar al worker tras commit en BD: si el commit falla, no encolamos nada.
@@ -79,7 +111,7 @@ internal sealed class BuildCompletedHandler(
         }
 
         logger.LogInformation(
-            "BuildCompleted {BuildId} (template={Template}): fan-out a {Count} Instances con auto-deploy",
-            notification.BuildId, notification.TemplateId, instances.Count);
+            "BuildCompleted {BuildId} (template={Template}): fan-out a {Count} Instances con auto-deploy (skipped={Skipped})",
+            notification.BuildId, notification.TemplateId, queuedIds.Count, skipped);
     }
 }
