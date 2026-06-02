@@ -1,5 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ChevronRight, Plus, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { serverFetch } from "@/lib/server-fetch";
 import type { ClientSummary, ProjectSummaryV2 } from "@/lib/types";
 
@@ -42,133 +55,147 @@ export default async function ClientsPage() {
   const data = await aggregateClients();
   if (data === "unauthorized") redirect("/login");
 
-  const totalClients = Array.isArray(data)
-    ? data.reduce((sum, g) => sum + g.clients.length, 0)
-    : 0;
-  const groupsWithClients = Array.isArray(data)
-    ? data.filter((g) => g.clients.length > 0)
-    : [];
+  const groups = Array.isArray(data) ? data : [];
+  const errored = data === "error";
+  const totalClients = groups.reduce((sum, g) => sum + g.clients.length, 0);
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold">Clients</h1>
-            <p className="text-sm text-zinc-500">
-              Tenants concretos de cada proyecto. Cada client recibe sus propias
-              instancias de los templates del proyecto.
-            </p>
-          </div>
-          <Link
-            href="/projects"
-            className="rounded-full border border-zinc-700 px-4 py-2 text-sm transition hover:bg-zinc-800"
-          >
-            Ir a proyectos
-          </Link>
-        </header>
+    <div className="px-6 py-8 md:px-10 md:py-10 space-y-8">
+      <PageHeader
+        title="Clients"
+        description="Tenants concretos de cada proyecto. Cada client recibe sus propias instancias de los templates del proyecto."
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/projects">
+              Ir a proyectos
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        }
+      />
 
-        {data === "error" && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-            No se pudo cargar el listado. Verifica que la API este corriendo.
-          </div>
-        )}
-
-        {Array.isArray(data) && data.length === 0 && (
-          <EmptyState
-            title="Aun sin proyectos"
-            body="Los clients viven dentro de un proyecto. Crea un proyecto primero y luego agrega su primer client."
-          />
-        )}
-
-        {Array.isArray(data) && data.length > 0 && totalClients === 0 && (
-          <EmptyState
-            title="Aun sin clients"
-            body="Ninguno de tus proyectos tiene clients todavia. Entra a un proyecto para crear el primero."
-          />
-        )}
-
-        {groupsWithClients.length > 0 && (
-          <div className="flex flex-col gap-8">
-            {groupsWithClients.map((group) => (
-              <section key={group.project.id} className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="flex items-center gap-2 text-sm uppercase tracking-wider text-zinc-500">
-                    {group.project.color && (
-                      <span
-                        className="size-3 shrink-0 rounded-full ring-1 ring-zinc-800"
-                        style={{ backgroundColor: group.project.color }}
-                        aria-hidden
-                      />
-                    )}
-                    <Link
-                      href={`/projects/${group.project.id}`}
-                      className="hover:text-zinc-300"
-                    >
-                      {group.project.name}
-                    </Link>
-                    <span className="font-mono text-[11px] text-zinc-600">
-                      {group.clients.length}
-                    </span>
+      {errored ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            No se pudo cargar el listado. Verificá que la API esté corriendo.
+          </CardContent>
+        </Card>
+      ) : groups.length === 0 ? (
+        <EmptyState
+          icon={<Users className="h-6 w-6" />}
+          title="Aún sin proyectos"
+          description="Los clients viven dentro de un proyecto. Creá un proyecto primero y luego agregá su primer client."
+          action={
+            <Button asChild>
+              <Link href="/projects/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Crear proyecto
+              </Link>
+            </Button>
+          }
+        />
+      ) : totalClients === 0 ? (
+        <EmptyState
+          icon={<Users className="h-6 w-6" />}
+          title="Aún sin clients"
+          description="Ninguno de tus proyectos tiene clients todavía. Entrá a un proyecto para crear el primero."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/projects">
+                Ver proyectos
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          }
+        />
+      ) : (
+        groups
+          .filter((g) => g.clients.length > 0)
+          .map((group) => (
+            <section key={group.project.id} className="space-y-3">
+              <header className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  {group.project.color ? (
+                    <span
+                      className="size-3 shrink-0 rounded-full ring-1 ring-border"
+                      style={{ backgroundColor: group.project.color }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                    {group.project.name}
                   </h2>
-                  <Link
-                    href={`/projects/${group.project.id}/clients/new`}
-                    className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-200 transition hover:bg-zinc-800"
-                  >
-                    Crear client
-                  </Link>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {group.project.slug}
+                  </span>
+                  <Badge variant="outline" className="font-mono text-[10px]">
+                    {group.clients.length}
+                  </Badge>
                 </div>
-                <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-                  {group.clients.map((c) => (
-                    <ClientCard key={c.id} client={c} />
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
-        )}
-      </div>
-    </main>
-  );
-}
+                <div className="flex items-center gap-2">
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href={`/projects/${group.project.id}/clients/new`}>
+                      <Plus className="mr-1 h-4 w-4" />
+                      Crear client
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/projects/${group.project.id}`}>
+                      Ver proyecto
+                      <ChevronRight className="ml-1 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </header>
 
-function ClientCard({ client }: { client: ClientSummary }) {
-  return (
-    <li>
-      <Link
-        href={`/clients/${client.id}`}
-        className="block rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 transition hover:border-emerald-500/40 hover:bg-zinc-900/80"
-      >
-        <h3 className="truncate text-lg font-semibold">{client.displayName}</h3>
-        <p className="mt-1 font-mono text-xs text-zinc-500">{client.slug}</p>
-        <div className="mt-3 flex flex-col gap-1 text-[11px] text-zinc-400">
-          <span className="truncate">
-            <span className="text-zinc-600">email: </span>
-            {client.contactEmail ?? "—"}
-          </span>
-          {client.billingTag && (
-            <span className="truncate font-mono">
-              <span className="font-sans text-zinc-600">billing: </span>
-              {client.billingTag}
-            </span>
-          )}
-        </div>
-      </Link>
-    </li>
-  );
-}
-
-function EmptyState({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-12 text-center">
-      <h2 className="text-xl font-semibold text-zinc-100">{title}</h2>
-      <p className="mt-2 text-sm text-zinc-500">{body}</p>
-      <Link
-        href="/projects"
-        className="mt-6 inline-block rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400"
-      >
-        Ir a proyectos
-      </Link>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {group.clients.map((c) => (
+                  <Card
+                    key={c.id}
+                    className="transition-colors hover:border-primary/40"
+                  >
+                    <CardHeader className="pb-3">
+                      <CardTitle className="truncate text-base">
+                        {c.displayName}
+                      </CardTitle>
+                      <CardDescription className="font-mono text-xs">
+                        {c.slug}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-1.5 pb-3 text-xs">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          email
+                        </span>
+                        <span className="truncate font-mono text-foreground">
+                          {c.contactEmail ?? "—"}
+                        </span>
+                      </div>
+                      {c.billingTag ? (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            billing
+                          </span>
+                          <span className="truncate font-mono text-foreground">
+                            {c.billingTag}
+                          </span>
+                        </div>
+                      ) : null}
+                    </CardContent>
+                    <CardFooter className="pt-0">
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={`/clients/${c.id}`}>
+                          Detalles
+                          <ChevronRight className="ml-1 h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          ))
+      )}
     </div>
   );
 }

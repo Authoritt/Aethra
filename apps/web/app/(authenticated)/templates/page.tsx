@@ -1,5 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ChevronRight, FileCode, Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { serverFetch } from "@/lib/server-fetch";
 import type { ProjectSummaryV2, TemplateSummary } from "@/lib/types";
 
@@ -42,131 +55,145 @@ export default async function TemplatesPage() {
   const data = await aggregateTemplates();
   if (data === "unauthorized") redirect("/login");
 
-  const totalTemplates = Array.isArray(data)
-    ? data.reduce((sum, g) => sum + g.templates.length, 0)
-    : 0;
-  const groupsWithTemplates = Array.isArray(data)
-    ? data.filter((g) => g.templates.length > 0)
-    : [];
+  const groups = Array.isArray(data) ? data : [];
+  const errored = data === "error";
+  const totalTemplates = groups.reduce((sum, g) => sum + g.templates.length, 0);
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold">Templates</h1>
-            <p className="text-sm text-zinc-500">
-              Plantillas reutilizables de build (Dockerfile, Compose o Nixpacks)
-              agrupadas por proyecto. Cada una genera builds e instancias.
-            </p>
-          </div>
-          <Link
-            href="/projects"
-            className="rounded-full border border-zinc-700 px-4 py-2 text-sm transition hover:bg-zinc-800"
-          >
-            Ir a proyectos
-          </Link>
-        </header>
+    <div className="px-6 py-8 md:px-10 md:py-10 space-y-8">
+      <PageHeader
+        title="Plantillas"
+        description="Plantillas reutilizables de build (Dockerfile, Compose o Nixpacks) agrupadas por proyecto. Cada una genera builds e instancias."
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/projects">
+              Ir a proyectos
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        }
+      />
 
-        {data === "error" && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-            No se pudo cargar el listado. Verifica que la API este corriendo.
-          </div>
-        )}
-
-        {Array.isArray(data) && data.length === 0 && (
-          <EmptyState
-            title="Aun sin proyectos"
-            body="Los templates viven dentro de un proyecto. Crea un proyecto primero y luego define su primer template."
-          />
-        )}
-
-        {Array.isArray(data) && data.length > 0 && totalTemplates === 0 && (
-          <EmptyState
-            title="Aun sin templates"
-            body="Ninguno de tus proyectos tiene templates todavia. Entra a un proyecto para crear el primero."
-          />
-        )}
-
-        {groupsWithTemplates.length > 0 && (
-          <div className="flex flex-col gap-8">
-            {groupsWithTemplates.map((group) => (
-              <section key={group.project.id} className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="flex items-center gap-2 text-sm uppercase tracking-wider text-zinc-500">
-                    {group.project.color && (
-                      <span
-                        className="size-3 shrink-0 rounded-full ring-1 ring-zinc-800"
-                        style={{ backgroundColor: group.project.color }}
-                        aria-hidden
-                      />
-                    )}
-                    <Link
-                      href={`/projects/${group.project.id}`}
-                      className="hover:text-zinc-300"
-                    >
-                      {group.project.name}
-                    </Link>
-                    <span className="font-mono text-[11px] text-zinc-600">
-                      {group.templates.length}
-                    </span>
+      {errored ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            No se pudo cargar el listado. Verificá que la API esté corriendo.
+          </CardContent>
+        </Card>
+      ) : groups.length === 0 ? (
+        <EmptyState
+          icon={<FileCode className="h-6 w-6" />}
+          title="Aún sin proyectos"
+          description="Los templates viven dentro de un proyecto. Creá un proyecto primero y luego definí su primer template."
+          action={
+            <Button asChild>
+              <Link href="/projects/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Crear proyecto
+              </Link>
+            </Button>
+          }
+        />
+      ) : totalTemplates === 0 ? (
+        <EmptyState
+          icon={<FileCode className="h-6 w-6" />}
+          title="Aún sin plantillas"
+          description="Ninguno de tus proyectos tiene templates todavía. Entrá a un proyecto para crear el primero."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/projects">
+                Ver proyectos
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          }
+        />
+      ) : (
+        groups
+          .filter((g) => g.templates.length > 0)
+          .map((group) => (
+            <section key={group.project.id} className="space-y-3">
+              <header className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  {group.project.color ? (
+                    <span
+                      className="size-3 shrink-0 rounded-full ring-1 ring-border"
+                      style={{ backgroundColor: group.project.color }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                    {group.project.name}
                   </h2>
-                  <Link
-                    href={`/projects/${group.project.id}/templates/new`}
-                    className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-200 transition hover:bg-zinc-800"
-                  >
-                    Crear template
-                  </Link>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {group.project.slug}
+                  </span>
+                  <Badge variant="outline" className="font-mono text-[10px]">
+                    {group.templates.length}
+                  </Badge>
                 </div>
-                <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-                  {group.templates.map((t) => (
-                    <TemplateCard key={t.id} template={t} />
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
-        )}
-      </div>
-    </main>
-  );
-}
+                <div className="flex items-center gap-2">
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href={`/projects/${group.project.id}/templates/new`}>
+                      <Plus className="mr-1 h-4 w-4" />
+                      Crear template
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/projects/${group.project.id}`}>
+                      Ver proyecto
+                      <ChevronRight className="ml-1 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </header>
 
-function TemplateCard({ template }: { template: TemplateSummary }) {
-  return (
-    <li>
-      <Link
-        href={`/templates/${template.id}`}
-        className="block rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 transition hover:border-emerald-500/40 hover:bg-zinc-900/80"
-      >
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="truncate text-lg font-semibold">{template.name}</h3>
-          <span className="shrink-0 rounded-full border border-zinc-700 bg-zinc-800/40 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-400">
-            {template.buildType}
-          </span>
-        </div>
-        <p className="mt-1 font-mono text-xs text-zinc-500">{template.slug}</p>
-        <p className="mt-3 truncate font-mono text-[11px] text-zinc-400">
-          {template.gitRepoUrl}
-          <span className="text-zinc-600"> @ </span>
-          {template.branch}
-        </p>
-      </Link>
-    </li>
-  );
-}
-
-function EmptyState({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-12 text-center">
-      <h2 className="text-xl font-semibold text-zinc-100">{title}</h2>
-      <p className="mt-2 text-sm text-zinc-500">{body}</p>
-      <Link
-        href="/projects"
-        className="mt-6 inline-block rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400"
-      >
-        Ir a proyectos
-      </Link>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {group.templates.map((t) => (
+                  <Card
+                    key={t.id}
+                    className="transition-colors hover:border-primary/40"
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="truncate text-base">
+                          {t.name}
+                        </CardTitle>
+                        <Badge
+                          variant="outline"
+                          className="shrink-0 font-mono text-[10px] uppercase"
+                        >
+                          {t.buildType}
+                        </Badge>
+                      </div>
+                      <CardDescription className="font-mono text-xs">
+                        {t.slug}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pb-3">
+                      <p
+                        className="truncate font-mono text-[11px] text-muted-foreground"
+                        title={`${t.gitRepoUrl} @ ${t.branch}`}
+                      >
+                        {t.gitRepoUrl}
+                        <span className="opacity-60"> @ </span>
+                        {t.branch}
+                      </p>
+                    </CardContent>
+                    <CardFooter className="pt-0">
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={`/templates/${t.id}`}>
+                          Detalles
+                          <ChevronRight className="ml-1 h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          ))
+      )}
     </div>
   );
 }
