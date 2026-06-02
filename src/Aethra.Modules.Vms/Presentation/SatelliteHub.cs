@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Aethra.Modules.Vms.Authentication;
 using Aethra.Modules.Vms.Domain;
 using Aethra.Modules.Vms.Infrastructure;
@@ -6,14 +5,11 @@ using Aethra.Shared.Contracts.Containers;
 using Aethra.Shared.Contracts.Vms;
 using Aethra.Shared.Infrastructure.Outbox;
 using Aethra.Shared.Kernel.Time;
-using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Aethra.Modules.Vms.Presentation;
@@ -30,6 +26,8 @@ public sealed class SatelliteHub(
     VmsDbContext db,
     IClock clock,
     IIntegrationEventBus integrationBus,
+    ISatelliteConnectionRegistry registry,
+    ISatelliteRpcCallbacks rpcCallbacks,
     ILogger<SatelliteHub> logger) : Hub
 {
     public override async Task OnConnectedAsync()
@@ -46,9 +44,9 @@ public sealed class SatelliteHub(
 
         // F9.8C: registro de conexión central → satélite (vmId → connectionId) para que
         // SignalRSatelliteRpcClient pueda chequear "está conectado?" antes de mandar comandos.
-        var registry = Context.GetHttpContext()?.RequestServices
-            .GetService<Aethra.Shared.Contracts.Containers.ISatelliteConnectionRegistry>();
-        registry?.Register(vmId.Value.ToString()!, Context.ConnectionId);
+        // F9.10 D1: registry inyectado por ctor (antes se resolvía via Context.GetHttpContext()
+        // que puede estar disposed post-handshake).
+        registry.Register(vmId.Value.ToString()!, Context.ConnectionId);
 
         await base.OnConnectedAsync();
     }
@@ -60,9 +58,7 @@ public sealed class SatelliteHub(
         {
             // F9.8C: desregistrar antes de hacer el resto para que cualquier RPC en vuelo
             // detecte rápidamente que el satélite ya no está disponible.
-            var registry = Context.GetHttpContext()?.RequestServices
-                .GetService<Aethra.Shared.Contracts.Containers.ISatelliteConnectionRegistry>();
-            registry?.Unregister(vmId.Value.ToString()!, Context.ConnectionId);
+            registry.Unregister(vmId.Value.ToString()!, Context.ConnectionId);
 
             var vm = await db.Vms.FindAsync([vmId], Context.ConnectionAborted);
             if (vm is not null)
@@ -123,76 +119,52 @@ public sealed class SatelliteHub(
 
     public Task BuildImageResponse(BuildImageResponse response)
     {
-        Callbacks().CompleteRequest(response.CorrelationId, response);
+        rpcCallbacks.CompleteRequest(response.CorrelationId, response);
         return Task.CompletedTask;
     }
 
     public Task RunContainerResponse(RunContainerResponse response)
     {
-        Callbacks().CompleteRequest(response.CorrelationId, response);
+        rpcCallbacks.CompleteRequest(response.CorrelationId, response);
         return Task.CompletedTask;
     }
 
     public Task StopContainerAck(string correlationId)
     {
-        Callbacks().CompleteRequest(correlationId, new object());
+        rpcCallbacks.CompleteRequest(correlationId, new object());
         return Task.CompletedTask;
     }
 
     public Task RemoveContainerAck(string correlationId)
     {
-        Callbacks().CompleteRequest(correlationId, new object());
+        rpcCallbacks.CompleteRequest(correlationId, new object());
         return Task.CompletedTask;
     }
 
     public Task ListContainersResponse(ListContainersResponse response)
     {
-        Callbacks().CompleteRequest(response.CorrelationId, response);
+        rpcCallbacks.CompleteRequest(response.CorrelationId, response);
         return Task.CompletedTask;
     }
 
     public Task RpcFailed(string correlationId, string errorMessage)
     {
-        Callbacks().FailRequest(correlationId, new InvalidOperationException(errorMessage));
+        rpcCallbacks.FailRequest(correlationId, new InvalidOperationException(errorMessage));
         return Task.CompletedTask;
     }
 
     public Task LogChunkPush(LogChunk chunk)
     {
-        Callbacks().PushLogChunk(chunk);
+        rpcCallbacks.PushLogChunk(chunk);
         return Task.CompletedTask;
     }
 
     public Task LogStreamCompleted(string correlationId, string? errorMessage)
     {
-        Callbacks().CompleteStream(
+        rpcCallbacks.CompleteStream(
             correlationId,
             errorMessage is null ? null : new InvalidOperationException(errorMessage));
         return Task.CompletedTask;
-    }
-
-    /// <summary>Resuelve <see cref="ISatelliteRpcCallbacks"/> del scope del hub. Es opcional —
-    /// si el host no registró una implementación (modo dry-run F9.6) emitimos un warning y
-    /// descartamos el callback.</summary>
-    private ISatelliteRpcCallbacks Callbacks()
-    {
-        var callbacks = Context.GetHttpContext()?.RequestServices.GetService<ISatelliteRpcCallbacks>();
-        if (callbacks is null)
-        {
-            logger.LogWarning(
-                "ISatelliteRpcCallbacks no registrado; respuesta del satélite ignorada (modo dry-run).");
-            return NoopCallbacks.Instance;
-        }
-        return callbacks;
-    }
-
-    private sealed class NoopCallbacks : ISatelliteRpcCallbacks
-    {
-        public static readonly NoopCallbacks Instance = new();
-        public void CompleteRequest(string correlationId, object response) { }
-        public void FailRequest(string correlationId, Exception error) { }
-        public void PushLogChunk(LogChunk chunk) { }
-        public void CompleteStream(string correlationId, Exception? error = null) { }
     }
 
     private VmId? ResolveVmId()
