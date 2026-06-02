@@ -76,7 +76,7 @@ export default async function Dashboard() {
     {
       href: "/vms",
       title: "VMs",
-      description: "Hosts Oracle gestionados con satélite y métricas.",
+      description: "Hosts gestionados con satélite y métricas en vivo.",
       icon: Server,
       badge: ctx?.vms.length ?? 0,
     },

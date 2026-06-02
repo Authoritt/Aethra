@@ -88,7 +88,7 @@ export default function NewVmPage() {
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="vm-oracle-fra-01"
+                placeholder="vm-prod-01"
                 required
                 autoFocus
               />
@@ -102,12 +102,12 @@ export default function NewVmPage() {
                   setSlug(e.target.value);
                   setSlugTouched(true);
                 }}
-                placeholder="vm-oracle-fra-01"
+                placeholder="vm-prod-01"
                 pattern="[a-z0-9]+(-[a-z0-9]+)*"
                 className="font-mono text-xs"
               />
               <p className="text-xs text-muted-foreground">
-                URL-friendly. Sugerido desde el nombre si lo dejás vacío.
+                URL-friendly. Se sugiere desde el nombre si lo dejas vacío.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -139,7 +139,7 @@ export default function NewVmPage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
-                placeholder="Oracle Free Tier ARM, ámsterdam"
+                placeholder="ARM, 4 vCPU, 24 GB RAM"
               />
             </div>
 

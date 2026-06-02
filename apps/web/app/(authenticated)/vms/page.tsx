@@ -41,7 +41,7 @@ export default async function VmsPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         title="VMs"
-        description="Hosts Oracle gestionados por Aethra. Las métricas se reciben vía satélite."
+        description="Hosts gestionados por Aethra. Las métricas se reciben en vivo vía satélite."
         actions={
           <Button asChild>
             <Link href="/vms/new">

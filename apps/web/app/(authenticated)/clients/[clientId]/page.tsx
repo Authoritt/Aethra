@@ -107,7 +107,7 @@ export default async function ClientDetailPage({
             <EmptyState
               icon={<Boxes className="h-6 w-6" />}
               title="Sin instances"
-              description="Este client aún no tiene instancias. Creales una desde el detalle de un template."
+              description="Este client aún no tiene instancias. Crea una desde el detalle de un template."
             />
           ) : (
             <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">

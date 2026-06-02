@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  Boxes,
   Cloud,
   Database,
+  FileCode,
   FolderKanban,
   Hammer,
   LayoutDashboard,
@@ -13,6 +15,7 @@ import {
   Rocket,
   Server,
   Settings,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
@@ -35,6 +38,9 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/projects", label: "Proyectos", icon: FolderKanban },
+      { href: "/templates", label: "Plantillas", icon: FileCode },
+      { href: "/clients", label: "Clientes", icon: Users },
+      { href: "/instances", label: "Instancias", icon: Boxes },
       { href: "/builds", label: "Builds", icon: Hammer },
       { href: "/deployments", label: "Deployments", icon: Rocket },
       { href: "/monitors", label: "Monitores", icon: Activity },

@@ -98,7 +98,7 @@ export default async function ClientsPage() {
         <EmptyState
           icon={<Users className="h-6 w-6" />}
           title="Aún sin clients"
-          description="Ninguno de tus proyectos tiene clients todavía. Entrá a un proyecto para crear el primero."
+          description="Aún no hay clientes registrados. Entra a un proyecto para crear el primero."
           action={
             <Button asChild variant="outline">
               <Link href="/projects">

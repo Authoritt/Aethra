@@ -98,7 +98,7 @@ export default async function TemplatesPage() {
         <EmptyState
           icon={<FileCode className="h-6 w-6" />}
           title="Aún sin plantillas"
-          description="Ninguno de tus proyectos tiene templates todavía. Entrá a un proyecto para crear el primero."
+          description="Aún no hay plantillas registradas. Entra a un proyecto para crear la primera."
           action={
             <Button asChild variant="outline">
               <Link href="/projects">

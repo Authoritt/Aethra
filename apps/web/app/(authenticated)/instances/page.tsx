@@ -137,7 +137,7 @@ export default async function InstancesPage() {
         <EmptyState
           icon={<Boxes className="h-6 w-6" />}
           title="Sin instancias aún"
-          description="Las instancias se crean desde el detalle de un template (template x client x environment). Entrá a un template para crear la primera."
+          description="Las instancias se crean desde el detalle de un template (template x client x environment). Entra a un template para crear la primera."
           action={
             <Button asChild variant="outline">
               <Link href="/templates">

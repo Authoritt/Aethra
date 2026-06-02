@@ -154,7 +154,7 @@ export function CreateBaseDomainForm({
                   {zones.length === 0 ? (
                     <Card className="border-border">
                       <CardContent className="p-3 text-xs text-muted-foreground">
-                        No hay zonas registradas todavía en el módulo
+                        Aún no hay zonas registradas en el módulo
                         Cloudflare.{" "}
                         <Link
                           href="/cloudflare/new"

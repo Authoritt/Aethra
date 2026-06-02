@@ -171,7 +171,7 @@ export function PinnedFactsPanel({
       )}
       {!loading && facts.length === 0 && (
         <p className="text-xs text-muted-foreground">
-          Sin facts fijados todavía.
+          Aún sin facts fijados.
         </p>
       )}
       {facts.length > 0 && (

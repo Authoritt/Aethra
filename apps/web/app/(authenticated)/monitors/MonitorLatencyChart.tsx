@@ -23,7 +23,7 @@ export default function MonitorLatencyChart({ checks }: Props) {
     return (
       <Card>
         <CardContent className="flex h-56 items-center justify-center text-sm text-muted-foreground">
-          Sin checks todavía. Lanzá uno manual o esperá al próximo intervalo.
+          Aún sin checks. Lanza uno manual o espera al próximo intervalo.
         </CardContent>
       </Card>
     );

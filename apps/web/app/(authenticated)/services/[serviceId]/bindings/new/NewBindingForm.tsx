@@ -128,7 +128,7 @@ export function NewBindingForm({
   if (applications.length === 0) {
     return (
       <EmptyState
-        title="No tenés applications todavía"
+        title="Aún sin aplicaciones"
         description="Creá una application en un proyecto antes de bindearla a un servicio."
         action={
           <Button asChild variant="outline">
@@ -170,7 +170,7 @@ export function NewBindingForm({
               spellCheck={false}
             />
             <p className="text-xs text-muted-foreground">
-              Nombre del recurso (database, queue, etc.). Si lo dejás vacío se
+              Nombre del recurso (database, queue, etc.). Si lo dejas vacío se
               autogenera del slug de la application.
             </p>
           </div>

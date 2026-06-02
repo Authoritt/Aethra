@@ -281,7 +281,7 @@ export function NewInstanceForm({
               className="font-mono text-xs"
             />
             <p className="text-xs text-muted-foreground">
-              Opcional. Si lo dejás vacío se usa el auto-hostname
+              Opcional. Si lo dejas vacío se usa el auto-hostname
               template-client-env.base_domain.
             </p>
           </div>

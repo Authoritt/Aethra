@@ -86,7 +86,7 @@ export default async function Home() {
       </div>
 
       <footer className="mt-8 text-xs text-muted-foreground">
-        Aethra · construido sobre tu propia infra Oracle.
+        Aethra · v1
       </footer>
     </main>
   );

@@ -40,7 +40,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: "admin@aethra.local", password: "" },
+    defaultValues: { email: "", password: "" },
   });
 
   async function onSubmit(values: FormValues) {
@@ -71,7 +71,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center space-y-3 text-center">
           <Logo variant="lockup" className="mb-1" />
-          <CardTitle>Iniciá sesión</CardTitle>
+          <CardTitle>Inicia sesión</CardTitle>
           <CardDescription>
             Plataforma unificada de despliegue y operación.
           </CardDescription>
@@ -92,7 +92,7 @@ export default function LoginPage() {
                       <Input
                         type="email"
                         autoComplete="email"
-                        placeholder="admin@aethra.local"
+                        placeholder="tu@correo.com"
                         {...field}
                       />
                     </FormControl>
@@ -130,7 +130,7 @@ export default function LoginPage() {
           </Form>
         </CardContent>
         <CardFooter className="justify-center text-xs text-muted-foreground">
-          v1 · construido sobre tu propia infra Oracle.
+          Aethra · v1
         </CardFooter>
       </Card>
     </main>
