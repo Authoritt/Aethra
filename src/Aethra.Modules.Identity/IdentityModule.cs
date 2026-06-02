@@ -1,4 +1,4 @@
-﻿using Aethra.Modules.Identity.Domain;
+using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure;
 using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
@@ -15,8 +15,9 @@ namespace Aethra.Modules.Identity;
 /// <summary>
 /// Punto de entrada del módulo Identity.
 ///
-/// - <c>SingleUserStore</c>: credenciales single-user en memoria (cookie login).
-/// - <see cref="ApiKey"/>: persistidas en BD con scopes, hash determinístico para lookup O(log n).
+/// F6: <see cref="ApiKey"/> persistidas con scopes para consumo desde el MCP server.
+/// F11.1: multi-user con RBAC — <see cref="EfUserStore"/> + roles. El
+/// <see cref="SingleUserStore"/> queda como fallback bootstrap cuando la BD no tiene users.
 /// </summary>
 public static class IdentityModule
 {
@@ -32,6 +33,13 @@ public static class IdentityModule
         services.AddSingleton<IApiKeyHasher, ApiKeyHasher>();
         services.AddScoped<IApiKeyRepository, EfApiKeyRepository>();
 
+        // F11.1: codec de password + repos + store EF + seeder bootstrap.
+        services.AddSingleton<IUserPasswordCodec, DataProtectionUserPasswordCodec>();
+        services.AddScoped<IUserRepository, EfUserRepository>();
+        services.AddScoped<IRoleRepository, EfRoleRepository>();
+        services.AddScoped<EfUserStore>();
+        services.AddScoped<IdentitySeeder>();
+
         return services;
     }
 
@@ -43,5 +51,9 @@ public static class IdentityModule
         => auth.AddScheme<AethraApiKeyAuthOptions, AethraApiKeyAuthHandler>(scheme, _ => { });
 
     public static IEndpointRouteBuilder MapIdentityModuleEndpoints(this IEndpointRouteBuilder app)
-        => app.MapApiKeysEndpoints();
+    {
+        app.MapApiKeysEndpoints();
+        app.MapUsersEndpoints();
+        return app;
+    }
 }

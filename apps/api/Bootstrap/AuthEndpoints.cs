@@ -1,7 +1,9 @@
 using System.Security.Claims;
+using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure;
+using Aethra.Modules.Identity.Infrastructure.Persistence;
+using Aethra.Shared.Contracts.Authentication;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Aethra.Api.Bootstrap;
@@ -16,27 +18,77 @@ public static class AuthEndpoints
 
         group.MapPost("/login", async (
             [FromBody] LoginRequest req,
-            SingleUserStore store,
-            HttpContext http) =>
+            EfUserStore userStore,
+            IRoleRepository roleRepo,
+            SingleUserStore singleUserStore,
+            HttpContext http,
+            IdentityDbContext db,
+            CancellationToken ct) =>
         {
-            if (!store.ValidateCredentials(req.Email, req.Password))
-            {
-                return Results.Json(new { error = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
-            }
+            // F11.1: si hay users en BD, validar contra EfUserStore. Si está vacía,
+            // fallback a SingleUserStore (bootstrap inicial). Tras login con fallback
+            // emitimos claims equivalentes a admin para que el primer login pueda crear users.
+            var hasUsers = await userStore.CountAsync(ct) > 0;
 
-            var identity = new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.Email, store.AdminEmail),
-                new Claim(ClaimTypes.Name, store.AdminEmail),
-                new Claim("scope", "admin"),
-            ], AuthSchemes.Cookie);
+            ClaimsIdentity identity;
+            if (hasUsers)
+            {
+                var user = await userStore.ValidateCredentialsAsync(req.Email, req.Password, ct);
+                if (user is null)
+                {
+                    return Results.Json(new { error = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
+                }
+
+                // Persistir LastLoginAt — MarkLogin ya se invocó dentro del store.
+                await db.SaveChangesAsync(ct);
+
+                // Cargar roles y scopes para construir los claims.
+                var roleList = await roleRepo.ListByIdsAsync([.. user.Roles.Select(r => r.RoleId)], ct);
+                var aggregatedScopes = roleList
+                    .SelectMany(r => r.Scopes)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+
+                var claims = new List<Claim>
+                {
+                    new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                    new(ClaimTypes.Email, user.Email),
+                    new(ClaimTypes.Name, user.DisplayName ?? user.Email),
+                };
+                foreach (var role in roleList)
+                {
+                    claims.Add(new Claim(ClaimTypes.Role, role.Slug));
+                }
+                foreach (var scope in aggregatedScopes)
+                {
+                    claims.Add(new Claim(ApiKeyAuthSchemes.ScopeClaim, scope));
+                }
+
+                identity = new ClaimsIdentity(claims, AuthSchemes.Cookie);
+            }
+            else
+            {
+                if (!singleUserStore.ValidateCredentials(req.Email, req.Password))
+                {
+                    return Results.Json(new { error = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
+                }
+                // Bootstrap: el usuario admin del config aún no existe en BD. Emitimos claims
+                // con role admin para permitir que llame /api/identity/users y cree users reales.
+                identity = new ClaimsIdentity(
+                [
+                    new Claim(ClaimTypes.Email, singleUserStore.AdminEmail),
+                    new Claim(ClaimTypes.Name, singleUserStore.AdminEmail),
+                    new Claim(ClaimTypes.Role, Role.AdminSlug),
+                    new Claim(ApiKeyAuthSchemes.ScopeClaim, ApiKey.AdminScope),
+                ], AuthSchemes.Cookie);
+            }
 
             await http.SignInAsync(AuthSchemes.Cookie, new ClaimsPrincipal(identity), new AuthenticationProperties
             {
                 IsPersistent = true,
             });
 
-            return Results.Ok(new { email = store.AdminEmail });
+            return Results.Ok(new { email = identity.FindFirst(ClaimTypes.Email)?.Value });
         })
         .WithName("Login")
         .AllowAnonymous();
@@ -65,7 +117,9 @@ public static class AuthEndpoints
             return Results.Ok(new
             {
                 email = http.User.FindFirstValue(ClaimTypes.Email),
-                scopes = http.User.FindAll("scope").Select(c => c.Value),
+                displayName = http.User.FindFirstValue(ClaimTypes.Name),
+                roles = http.User.FindAll(ClaimTypes.Role).Select(c => c.Value).Distinct(),
+                scopes = http.User.FindAll(ApiKeyAuthSchemes.ScopeClaim).Select(c => c.Value).Distinct(),
             });
         })
         .WithName("Me")

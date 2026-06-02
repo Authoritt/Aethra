@@ -58,5 +58,10 @@ public static class MigrationsBootstrap
                 ctx.GetType().Name, pending.Count, string.Join(", ", pending));
             await ctx.Database.MigrateAsync().ConfigureAwait(false);
         }
+
+        // F11.1: tras migrar, asegurar los 3 roles builtin + el user admin si la BD está vacía.
+        // Idempotente — si ya existe el admin solo se confirman los roles builtin.
+        var seeder = sp.GetRequiredService<Aethra.Modules.Identity.Infrastructure.IdentitySeeder>();
+        await seeder.SeedAsync().ConfigureAwait(false);
     }
 }
