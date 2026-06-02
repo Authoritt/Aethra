@@ -894,3 +894,79 @@ export interface DeploymentDetail extends DeploymentSummary {
   errorCode: string | null;
   errorMessage: string | null;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Notifications (F11.3A)                                                     */
+/* -------------------------------------------------------------------------- */
+
+export type NotificationChannelType =
+  | "Slack"
+  | "Discord"
+  | "Telegram"
+  | "Email"
+  | "Webhook";
+
+export type NotificationDeliveryStatus = "Pending" | "Sent" | "Failed";
+
+export interface NotificationChannelDto {
+  id: string;
+  name: string;
+  type: NotificationChannelType;
+  isActive: boolean;
+  eventFilters: string[];
+  config: unknown | null;
+  createdAt: string;
+  updatedAt: string;
+  lastDeliveredAt: string | null;
+}
+
+export interface NotificationDeliveryDto {
+  id: string;
+  channelId: string;
+  channelName: string;
+  eventType: string;
+  status: NotificationDeliveryStatus;
+  attempts: number;
+  error: string | null;
+  createdAt: string;
+  sentAt: string | null;
+}
+
+export interface TestChannelResultDto {
+  success: boolean;
+  error: string | null;
+  attemptedAt: string;
+}
+
+export const NOTIFICATION_EVENT_TYPES = [
+  "monitor.down",
+  "monitor.recovered",
+  "build.failed",
+  "deployment.failed",
+  "deployment.rolled_back",
+  "cert.expired",
+  "cert.failed",
+] as const;
+
+/* -------------------------------------------------------------------------- */
+/* Service backups (F11.3B)                                                   */
+/* -------------------------------------------------------------------------- */
+
+export type ServiceBackupStatus = "Running" | "Completed" | "Failed";
+
+export interface ServiceBackupDto {
+  id: string;
+  serviceId: string;
+  startedAt: string;
+  finishedAt: string | null;
+  status: ServiceBackupStatus;
+  sizeBytes: number | null;
+  destinationPath: string;
+  errorMessage: string | null;
+}
+
+export interface BackupPolicyDto {
+  cronExpression: string;
+  retentionCount: number;
+  destination: string;
+}

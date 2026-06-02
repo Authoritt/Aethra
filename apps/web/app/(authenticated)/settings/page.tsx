@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { Globe, Key, Lock, Plug2, Settings, User, Users } from "lucide-react";
+import { Bell, Globe, Key, Lock, Plug2, Settings, User, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -83,6 +83,14 @@ export default async function SettingsPage() {
       description:
         "Catálogo de ambientes válidos (production, staging, preview...). Otros módulos validan slugs contra esta lista.",
       icon: Settings,
+      available: true,
+    },
+    {
+      href: "/settings/notifications",
+      title: "Notificaciones",
+      description:
+        "Canales (Slack/Discord/Telegram/Email/Webhook) que reciben alertas de monitores, builds y certificados.",
+      icon: Bell,
       available: true,
     },
     {

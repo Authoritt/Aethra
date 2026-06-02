@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  Bell,
   Boxes,
   Cloud,
   Database,
@@ -60,6 +61,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/settings", label: "Settings", icon: Settings },
       { href: "/settings/users", label: "Users", icon: Users },
+      { href: "/settings/notifications", label: "Notificaciones", icon: Bell },
     ],
   },
 ];
