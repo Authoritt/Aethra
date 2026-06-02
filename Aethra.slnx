@@ -14,6 +14,7 @@
     <Project Path="src/Aethra.Modules.Metrics/Aethra.Modules.Metrics.csproj" />
     <Project Path="src/Aethra.Modules.Monitoring/Aethra.Modules.Monitoring.csproj" />
     <Project Path="src/Aethra.Modules.Notes/Aethra.Modules.Notes.csproj" />
+    <Project Path="src/Aethra.Modules.Notifications/Aethra.Modules.Notifications.csproj" />
     <Project Path="src/Aethra.Modules.Projects/Aethra.Modules.Projects.csproj" />
     <Project Path="src/Aethra.Modules.Proxy/Aethra.Modules.Proxy.csproj" />
     <Project Path="src/Aethra.Modules.Services/Aethra.Modules.Services.csproj" />

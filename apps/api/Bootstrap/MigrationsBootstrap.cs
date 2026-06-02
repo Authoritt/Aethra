@@ -4,6 +4,7 @@ using Aethra.Modules.Identity.Infrastructure;
 using Aethra.Modules.Metrics.Infrastructure;
 using Aethra.Modules.Monitoring.Infrastructure;
 using Aethra.Modules.Notes.Infrastructure;
+using Aethra.Modules.Notifications.Infrastructure;
 using Aethra.Modules.Projects.Infrastructure;
 using Aethra.Modules.Proxy.Infrastructure;
 using Aethra.Modules.Services.Infrastructure;
@@ -42,6 +43,7 @@ public static class MigrationsBootstrap
             sp.GetRequiredService<CloudflareDbContext>(),
             sp.GetRequiredService<MonitoringDbContext>(),
             sp.GetRequiredService<NotesDbContext>(),
+            sp.GetRequiredService<NotificationsDbContext>(),
             sp.GetRequiredService<IdentityDbContext>(),
             sp.GetRequiredService<SettingsDbContext>(),
         };

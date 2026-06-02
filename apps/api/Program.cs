@@ -8,6 +8,7 @@ using Aethra.Modules.Mcp;
 using Aethra.Modules.Metrics;
 using Aethra.Modules.Monitoring;
 using Aethra.Modules.Notes;
+using Aethra.Modules.Notifications;
 using Aethra.Modules.Projects;
 using Aethra.Modules.Proxy;
 using Aethra.Modules.Services;
@@ -68,6 +69,7 @@ var moduleAssemblies = new[]
     typeof(MonitoringModule).Assembly,
     typeof(CloudflareModule).Assembly,
     typeof(NotesModule).Assembly,
+    typeof(NotificationsModule).Assembly,
     typeof(IdentityModule).Assembly,
     typeof(McpModule).Assembly,
     typeof(SettingsModule).Assembly,
@@ -134,6 +136,7 @@ builder.Services
     .AddMonitoringModule(builder.Configuration)
     .AddCloudflareModule(builder.Configuration)
     .AddNotesModule(builder.Configuration)
+    .AddNotificationsModule(builder.Configuration)
     .AddMcpModule(builder.Configuration)
     .AddSettingsModule(builder.Configuration);
 
@@ -258,6 +261,7 @@ app.MapServicesModuleEndpoints();
 app.MapCloudflareModuleEndpoints();
 app.MapMonitoringModuleEndpoints();
 app.MapNotesModuleEndpoints();
+app.MapNotificationsModuleEndpoints();
 app.MapIdentityModuleEndpoints();
 app.MapMcpModuleEndpoints();
 app.MapSettingsModuleEndpoints();

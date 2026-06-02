@@ -20,6 +20,7 @@
     <ProjectReference Include="..\..\src\Aethra.Modules.Monitoring\Aethra.Modules.Monitoring.csproj" />
     <ProjectReference Include="..\..\src\Aethra.Modules.Cloudflare\Aethra.Modules.Cloudflare.csproj" />
     <ProjectReference Include="..\..\src\Aethra.Modules.Notes\Aethra.Modules.Notes.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Notifications\Aethra.Modules.Notifications.csproj" />
     <ProjectReference Include="..\..\src\Aethra.Modules.Identity\Aethra.Modules.Identity.csproj" />
     <ProjectReference Include="..\..\src\Aethra.Modules.Mcp\Aethra.Modules.Mcp.csproj" />
     <ProjectReference Include="..\..\src\Aethra.Modules.Settings\Aethra.Modules.Settings.csproj" />
