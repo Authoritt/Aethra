@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { Plug2, Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import type {
   ManagedServiceDetailDto,
@@ -56,11 +62,13 @@ export default async function ServiceDetailPage({
 
   if (data === "error") {
     return (
-      <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-        <div className="mx-auto max-w-3xl rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-          Error cargando el servicio.
-        </div>
-      </main>
+      <div className="px-6 py-8 md:px-10 md:py-10">
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            Error cargando el servicio.
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -69,98 +77,107 @@ export default async function ServiceDetailPage({
   const activeBindings = bindings.filter((b) => b.revoked_at === null);
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-        <nav className="text-xs text-zinc-500">
-          <Link href="/services" className="hover:text-zinc-300">
-            Servicios
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">{service.slug}</span>
-        </nav>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Servicios", href: "/services" },
+          { label: service.slug },
+        ]}
+        title={service.name}
+        description={
+          <>
+            <span className="font-mono text-xs">{service.slug}</span>
+            <span className="mx-2 text-muted-foreground/50">·</span>
+            <span className="font-mono text-[10px] uppercase">
+              {service.type}
+            </span>
+          </>
+        }
+        actions={
+          <>
+            <ServiceStatusPill status={service.status} />
+            <DeleteServiceButton
+              serviceId={service.id}
+              slug={service.slug}
+              bindingsCount={activeBindings.length}
+            />
+          </>
+        }
+      />
 
-        <header className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <h1 className="truncate text-3xl font-semibold">
-                {service.name}
-              </h1>
-              <span className="rounded-full border border-zinc-700 bg-zinc-800/40 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-300">
-                {service.type}
-              </span>
-              <ServiceStatusPill status={service.status} />
-            </div>
-            <p className="mt-1 font-mono text-xs text-zinc-500">
-              {service.slug}
-            </p>
-          </div>
-          <DeleteServiceButton
-            serviceId={service.id}
-            slug={service.slug}
-            bindingsCount={activeBindings.length}
-          />
-        </header>
-
-        {service.error_code && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">
-            <div className="font-medium text-rose-100">
+      {service.error_code ? (
+        <Card className="mb-6 border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4">
+            <div className="text-sm font-medium text-destructive">
               Error: <span className="font-mono">{service.error_code}</span>
             </div>
-            {service.error_message && (
-              <p className="mt-1 text-rose-200/90">{service.error_message}</p>
-            )}
+            {service.error_message ? (
+              <p className="mt-1 text-sm text-destructive/90">
+                {service.error_message}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Configuración
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <KV label="Imagen" mono value={service.image} />
+            <KV label="Versión" mono value={service.version} />
+            <KV
+              label="Puerto interno"
+              mono
+              value={String(service.internal_port)}
+            />
+            <KV label="Network" mono value={service.network_name} />
+            <KV label="Container" mono value={service.container_name} />
+            <KV label="VM target" mono value={service.target_vm_id} />
+            <KV
+              label="Expuesto externamente"
+              value={service.exposed_externally ? "Sí" : "No (interno)"}
+            />
+            <KV
+              label="Provisionado"
+              value={formatDateTime(service.provisioned_at)}
+            />
           </div>
-        )}
+        </CardContent>
+      </Card>
 
-        <Section title="Configuración">
-          <KV label="Imagen" mono value={service.image} />
-          <KV label="Versión" mono value={service.version} />
-          <KV
-            label="Puerto interno"
-            mono
-            value={String(service.internal_port)}
-          />
-          <KV label="Network" mono value={service.network_name} />
-          <KV label="Container" mono value={service.container_name} />
-          <KV label="VM target" mono value={service.target_vm_id} />
-          <KV
-            label="Expuesto externamente"
-            value={service.exposed_externally ? "Sí" : "No (interno)"}
-          />
-          <KV
-            label="Provisionado"
-            value={formatDateTime(service.provisioned_at)}
-          />
-        </Section>
-
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm uppercase tracking-wider text-zinc-500">
-              Bindings ({activeBindings.length})
-            </h2>
-            <Link
-              href={`/services/${service.id}/bindings/new`}
-              className="rounded-full bg-emerald-500 px-4 py-1.5 text-xs font-medium text-emerald-950 transition hover:bg-emerald-400"
-            >
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Bindings ({activeBindings.length})
+          </h2>
+          <Button asChild size="sm">
+            <Link href={`/services/${service.id}/bindings/new`}>
+              <Plus className="mr-2 h-4 w-4" />
               Bindear aplicación
             </Link>
-          </div>
+          </Button>
+        </div>
 
-          {activeBindings.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-8 text-center text-sm text-zinc-500">
-              Aún sin bindings activos. Bindea una application para que pueda
-              consumir este servicio.
-            </div>
-          ) : (
-            <ul className="grid grid-cols-1 gap-3">
-              {activeBindings.map((b) => (
-                <BindingCard key={b.id} binding={b} />
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-    </main>
+        {activeBindings.length === 0 ? (
+          <EmptyState
+            icon={Plug2}
+            title="Sin bindings activos"
+            description="Bindea una application para que pueda consumir este servicio."
+          />
+        ) : (
+          <ul className="grid grid-cols-1 gap-3">
+            {activeBindings.map((b) => (
+              <BindingCard key={b.id} binding={b} />
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -168,40 +185,42 @@ function BindingCard({ binding }: { binding: ServiceBindingDto }) {
   const appLabel =
     binding.application_slug ?? binding.application_id.slice(0, 8);
   return (
-    <li className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-zinc-100">
-              {appLabel}
-            </h3>
-            <PermissionsChip permissions={binding.permissions} />
-            {binding.has_migrations_hook && (
-              <span className="rounded-full border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-300">
-                migrations hook
-              </span>
-            )}
+    <li>
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="truncate text-sm font-semibold text-foreground">
+                  {appLabel}
+                </h3>
+                <PermissionsChip permissions={binding.permissions} />
+                {binding.has_migrations_hook ? (
+                  <Badge variant="info">migrations hook</Badge>
+                ) : null}
+              </div>
+              <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                <KVInline label="Resource" value={binding.resource_name} mono />
+                <KVInline
+                  label="Env prefix"
+                  value={binding.env_var_prefix || "—"}
+                  mono
+                />
+                <KVInline
+                  label="Provisionado"
+                  value={formatDateTime(binding.provisioned_at)}
+                />
+                <KVInline
+                  label="Application ID"
+                  value={binding.application_id}
+                  mono
+                />
+              </dl>
+            </div>
+            <BindingActions bindingId={binding.id} appLabel={appLabel} />
           </div>
-          <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-            <KVInline label="Resource" value={binding.resource_name} mono />
-            <KVInline
-              label="Env prefix"
-              value={binding.env_var_prefix || "—"}
-              mono
-            />
-            <KVInline
-              label="Provisionado"
-              value={formatDateTime(binding.provisioned_at)}
-            />
-            <KVInline
-              label="Application ID"
-              value={binding.application_id}
-              mono
-            />
-          </dl>
-        </div>
-        <BindingActions bindingId={binding.id} appLabel={appLabel} />
-      </div>
+        </CardContent>
+      </Card>
     </li>
   );
 }
@@ -211,35 +230,15 @@ function PermissionsChip({
 }: {
   permissions: ServiceBindingDto["permissions"];
 }) {
-  const styles: Record<ServiceBindingDto["permissions"], string> = {
-    Owner: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-    ReadWrite: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
-    ReadOnly: "border-zinc-700 bg-zinc-800/40 text-zinc-300",
+  const variant: Record<
+    ServiceBindingDto["permissions"],
+    "warning" | "success" | "outline"
+  > = {
+    Owner: "warning",
+    ReadWrite: "success",
+    ReadOnly: "outline",
   };
-  return (
-    <span
-      className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${styles[permissions]}`}
-    >
-      {permissions}
-    </span>
-  );
-}
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-sm uppercase tracking-wider text-zinc-500">
-        {title}
-      </h2>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{children}</div>
-    </section>
-  );
+  return <Badge variant={variant[permissions]}>{permissions}</Badge>;
 }
 
 function KV({
@@ -252,14 +251,12 @@ function KV({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
-      <div className="text-[10px] uppercase tracking-wider text-zinc-500">
+    <div className="rounded-md border border-border bg-muted/30 p-3">
+      <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
       <div
-        className={`mt-1 truncate text-sm text-zinc-200 ${
-          mono ? "font-mono" : ""
-        }`}
+        className={`mt-1 truncate text-sm text-foreground ${mono ? "font-mono" : ""}`}
         title={value}
       >
         {value}
@@ -279,11 +276,11 @@ function KVInline({
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-wider text-zinc-500">
+      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
       <span
-        className={`truncate text-zinc-200 ${mono ? "font-mono" : ""}`}
+        className={`truncate text-foreground ${mono ? "font-mono" : ""}`}
         title={value}
       >
         {value}

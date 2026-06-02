@@ -1,6 +1,7 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import type { ManagedServiceDetailDto } from "@/lib/types";
 import { NewBindingForm, type ApplicationOption } from "./NewBindingForm";
@@ -47,11 +48,13 @@ export default async function NewBindingPage({
 
   if (data === "error") {
     return (
-      <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-        <div className="mx-auto max-w-3xl rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-          Error cargando el servicio.
-        </div>
-      </main>
+      <div className="px-6 py-8 md:px-10 md:py-10">
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            Error cargando el servicio.
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -59,39 +62,30 @@ export default async function NewBindingPage({
   const apps = await fetchApplications();
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-        <nav className="text-xs text-zinc-500">
-          <Link href="/services" className="hover:text-zinc-300">
-            Servicios
-          </Link>
-          <span> / </span>
-          <Link
-            href={`/services/${service.id}`}
-            className="hover:text-zinc-300"
-          >
-            {service.slug}
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">Nuevo binding</span>
-        </nav>
-
-        <header>
-          <h1 className="text-3xl font-semibold">Bindear aplicación</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Conecta una application al servicio{" "}
-            <span className="font-mono text-zinc-300">{service.slug}</span>{" "}
-            ({service.type}). Aethra crea el recurso aislado y expone las
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Servicios", href: "/services" },
+          { label: service.slug, href: `/services/${service.id}` },
+          { label: "Nuevo binding" },
+        ]}
+        title="Bindear aplicación"
+        description={
+          <>
+            Conectá una application al servicio{" "}
+            <span className="font-mono text-foreground">{service.slug}</span> (
+            {service.type}). Aethra crea el recurso aislado y expone las
             credenciales como env vars.
-          </p>
-        </header>
-
+          </>
+        }
+      />
+      <div className="max-w-2xl">
         <NewBindingForm
           serviceId={service.id}
           serviceType={service.type}
           applications={apps}
         />
       </div>
-    </main>
+    </div>
   );
 }

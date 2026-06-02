@@ -2,6 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ApiError, api } from "@/lib/api";
 
 export function DeleteServiceButton({
@@ -14,46 +25,71 @@ export function DeleteServiceButton({
   bindingsCount: number;
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function onClick() {
-    const extra =
-      bindingsCount > 0
-        ? `\n\nAtención: este servicio tiene ${bindingsCount} binding(s) activo(s) que se verán afectados.`
-        : "";
-    const ok = window.confirm(
-      `¿Eliminar el servicio "${slug}"?\n\nEl contenedor se detendrá y el servicio quedará marcado como stopped.${extra}`,
-    );
-    if (!ok) return;
-    setError(null);
+  async function onConfirm() {
     setLoading(true);
     try {
       await api(`/api/services/${serviceId}`, { method: "DELETE" });
+      toast.success(`Servicio "${slug}" eliminado`);
       router.push("/services");
       router.refresh();
     } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as { detail?: string } | undefined;
-        setError(body?.detail ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={loading}
-        className="rounded-full border border-rose-500/30 px-4 py-2 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
-      >
-        {loading ? "Eliminando..." : "Eliminar servicio"}
-      </button>
-      {error && <span className="text-[11px] text-rose-300">{error}</span>}
-    </div>
+    <>
+      <Button variant="destructive" onClick={() => setOpen(true)}>
+        <Trash2 className="mr-2 h-4 w-4" />
+        Eliminar
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar servicio "{slug}"</DialogTitle>
+            <DialogDescription>
+              El contenedor se detendrá y el servicio quedará marcado como
+              stopped.
+              {bindingsCount > 0 ? (
+                <>
+                  {" "}
+                  <strong className="text-destructive">
+                    Atención: este servicio tiene {bindingsCount} binding(s)
+                    activo(s)
+                  </strong>{" "}
+                  que se verán afectados.
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={onConfirm}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

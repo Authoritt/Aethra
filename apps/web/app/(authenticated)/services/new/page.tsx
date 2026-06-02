@@ -1,6 +1,8 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import type { ServiceTemplateDto, VmDto } from "@/lib/types";
 import { TemplatePicker } from "./TemplatePicker";
@@ -45,40 +47,27 @@ export default async function NewServicePage() {
   const vms = await fetchVms();
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
-        <nav className="text-xs text-zinc-500">
-          <Link href="/services" className="hover:text-zinc-300">
-            Servicios
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">Nuevo</span>
-        </nav>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Servicios", href: "/services" },
+          { label: "Nuevo" },
+        ]}
+        title="Crear servicio"
+        description="Elegí una plantilla. Aethra crea el contenedor con red interna y credenciales aisladas listas para bindear desde una application."
+      />
 
-        <header>
-          <h1 className="text-3xl font-semibold">Crear servicio</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Elige una plantilla. Aethra crea el contenedor con red interna y
-            credenciales aisladas listas para bindear desde una application.
-          </p>
-        </header>
-
-        {templates === "error" && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
+      {templates === "error" ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
             No se pudo cargar el catálogo de plantillas.
-          </div>
-        )}
-
-        {Array.isArray(templates) && templates.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-12 text-center text-sm text-zinc-400">
-            No hay plantillas disponibles.
-          </div>
-        )}
-
-        {Array.isArray(templates) && templates.length > 0 && (
-          <TemplatePicker templates={templates} vms={vms} />
-        )}
-      </div>
-    </main>
+          </CardContent>
+        </Card>
+      ) : Array.isArray(templates) && templates.length === 0 ? (
+        <EmptyState title="No hay plantillas disponibles" />
+      ) : Array.isArray(templates) ? (
+        <TemplatePicker templates={templates} vms={vms} />
+      ) : null}
+    </div>
   );
 }

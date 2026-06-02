@@ -1,6 +1,20 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Boxes, Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import type { ManagedServiceSummaryDto } from "@/lib/types";
 import { ServiceStatusPill } from "./ServiceStatusPill";
@@ -30,117 +44,96 @@ export default async function ServicesPage() {
     redirect("/login");
   }
 
+  const errored = data === "error";
+  const services = Array.isArray(data) ? data : [];
+
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold">Servicios compartidos</h1>
-            <p className="text-sm text-zinc-500">
-              Postgres, Redis, RabbitMQ y otros backends provisionados desde
-              plantillas. Consumidos vía bindings desde applications.
-            </p>
-          </div>
-          <Link
-            href="/services/new"
-            className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400"
-          >
-            Crear servicio
-          </Link>
-        </header>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        title="Servicios compartidos"
+        description="Postgres, Redis, RabbitMQ y otros backends provisionados desde plantillas. Consumidos vía bindings desde applications."
+        actions={
+          <Button asChild>
+            <Link href="/services/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Crear servicio
+            </Link>
+          </Button>
+        }
+      />
 
-        {data === "error" && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-            No se pudo cargar el listado. Verifica que la API esté corriendo.
-          </div>
-        )}
-
-        {Array.isArray(data) && data.length === 0 && <EmptyState />}
-
-        {Array.isArray(data) && data.length > 0 && (
-          <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3">Slug</th>
-                  <th className="px-4 py-3">Tipo</th>
-                  <th className="px-4 py-3">Versión</th>
-                  <th className="px-4 py-3">VM target</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Bindings</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {data.map((s) => (
-                  <tr
-                    key={s.id}
-                    className="transition hover:bg-zinc-900/60"
-                  >
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/services/${s.id}`}
-                        className="flex flex-col gap-0.5"
-                      >
-                        <span className="font-mono text-zinc-100">
-                          {s.slug}
-                        </span>
-                        <span className="text-xs text-zinc-500">
-                          {s.name}
-                        </span>
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      <TypeChip type={s.type} />
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-300">
-                      {s.version}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-400">
-                      {s.target_vm_id}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ServiceStatusPill status={s.status} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="inline-flex min-w-[2rem] justify-center rounded-full border border-zinc-700 bg-zinc-800/40 px-2 py-0.5 font-mono text-xs text-zinc-300">
-                        {s.bindings_count}
+      {errored ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            No se pudo cargar el listado. Verificá que la API esté corriendo.
+          </CardContent>
+        </Card>
+      ) : services.length === 0 ? (
+        <EmptyState
+          icon={Boxes}
+          title="Aún sin servicios"
+          description="Crea un Postgres, Redis o RabbitMQ desde plantilla para que tus applications puedan consumirlo vía bindings."
+          action={
+            <Button asChild>
+              <Link href="/services/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Crear servicio
+              </Link>
+            </Button>
+          }
+        />
+      ) : (
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Slug</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Versión</TableHead>
+                <TableHead>VM target</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Bindings</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {services.map((s) => (
+                <TableRow key={s.id}>
+                  <TableCell>
+                    <Link
+                      href={`/services/${s.id}`}
+                      className="flex flex-col"
+                    >
+                      <span className="font-mono text-sm text-foreground">
+                        {s.slug}
                       </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </main>
-  );
-}
-
-function TypeChip({ type }: { type: string }) {
-  return (
-    <span className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-800/40 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-300">
-      {type}
-    </span>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-12 text-center">
-      <h2 className="text-xl font-semibold text-zinc-100">
-        Aún sin servicios
-      </h2>
-      <p className="mt-2 text-sm text-zinc-500">
-        Crea un Postgres, Redis o RabbitMQ desde plantilla para que tus
-        applications puedan consumirlo vía bindings.
-      </p>
-      <Link
-        href="/services/new"
-        className="mt-6 inline-block rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400"
-      >
-        Crear servicio
-      </Link>
+                      <span className="text-xs text-muted-foreground">
+                        {s.name}
+                      </span>
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="font-mono text-[10px] uppercase">
+                      {s.type}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">{s.version}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {s.target_vm_id.slice(0, 8)}
+                  </TableCell>
+                  <TableCell>
+                    <ServiceStatusPill status={s.status} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Badge variant="outline" className="font-mono text-xs">
+                      {s.bindings_count}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
     </div>
   );
 }

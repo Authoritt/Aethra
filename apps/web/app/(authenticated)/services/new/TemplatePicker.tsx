@@ -2,7 +2,23 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type {
   CreateServiceRequest,
   ManagedServiceDetailDto,
@@ -25,36 +41,32 @@ export function TemplatePicker({
   const [name, setName] = useState("");
   const [targetVmId, setTargetVmId] = useState<string>(vms[0]?.id ?? "");
   const [exposedExternally, setExposedExternally] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const slugError = useMemo(() => {
     if (!slug) return null;
-    if (!SLUG_RE.test(slug)) {
-      return "Solo minúsculas, dígitos y guiones; debe iniciar con letra (max 31 chars).";
-    }
-    return null;
+    return SLUG_RE.test(slug)
+      ? null
+      : "Solo minúsculas, dígitos y guiones; debe iniciar con letra (máx 31).";
   }, [slug]);
 
   function pickTemplate(tpl: ServiceTemplateDto) {
     setSelected(tpl);
     if (!name) setName(tpl.display_name);
     if (!slug) setSlug(suggestSlug(tpl));
-    setError(null);
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
     if (slugError) {
-      setError(slugError);
+      toast.error(slugError);
       return;
     }
     if (!targetVmId) {
-      setError("Selecciona una VM target.");
+      toast.error("Seleccioná una VM target.");
       return;
     }
-    setError(null);
     setLoading(true);
     try {
       const body: CreateServiceRequest = {
@@ -68,15 +80,18 @@ export function TemplatePicker({
         method: "POST",
         body: JSON.stringify(body),
       });
+      toast.success(`Servicio "${created.slug}" creado`);
       router.push(`/services/${created.id}`);
       router.refresh();
     } catch (e) {
-      if (e instanceof ApiError) {
-        const data = e.body as { detail?: string } | undefined;
-        setError(data?.detail ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -85,8 +100,8 @@ export function TemplatePicker({
   if (!selected) {
     return (
       <section className="flex flex-col gap-4">
-        <h2 className="text-sm uppercase tracking-wider text-zinc-500">
-          Elige una plantilla
+        <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+          Elegí una plantilla
         </h2>
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {templates.map((tpl) => (
@@ -94,28 +109,32 @@ export function TemplatePicker({
               <button
                 type="button"
                 onClick={() => pickTemplate(tpl)}
-                className="flex h-full w-full flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 text-left transition hover:border-emerald-500/40 hover:bg-zinc-900/80"
+                className="w-full text-left"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-lg font-semibold text-zinc-100">
-                      {tpl.display_name}
-                    </h3>
-                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
-                      {tpl.type}
+                <Card className="h-full transition-colors hover:border-primary/40">
+                  <CardContent className="flex h-full flex-col gap-3 p-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-base font-semibold text-foreground">
+                          {tpl.display_name}
+                        </h3>
+                        <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          {tpl.type}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        v{tpl.version}
+                      </Badge>
+                    </div>
+                    <p className="line-clamp-3 text-xs text-muted-foreground">
+                      {tpl.notes || "—"}
                     </p>
-                  </div>
-                  <span className="shrink-0 rounded-full border border-zinc-700 bg-zinc-800/40 px-2 py-0.5 font-mono text-[10px] text-zinc-300">
-                    v{tpl.version}
-                  </span>
-                </div>
-                <p className="line-clamp-3 text-xs text-zinc-400">
-                  {tpl.notes || "—"}
-                </p>
-                <div className="mt-auto flex items-center justify-between text-[11px] text-zinc-500">
-                  <span className="font-mono">{tpl.image}</span>
-                  <span className="font-mono">:{tpl.internal_port}</span>
-                </div>
+                    <div className="mt-auto flex items-center justify-between font-mono text-[11px] text-muted-foreground">
+                      <span>{tpl.image}</span>
+                      <span>:{tpl.internal_port}</span>
+                    </div>
+                  </CardContent>
+                </Card>
               </button>
             </li>
           ))}
@@ -126,131 +145,129 @@ export function TemplatePicker({
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 px-5 py-3">
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-zinc-500">
-            Plantilla
+      <Card>
+        <CardContent className="flex items-center justify-between gap-3 p-4">
+          <div className="min-w-0">
+            <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Plantilla
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-foreground">
+                {selected.display_name}
+              </span>
+              <Badge variant="outline" className="font-mono text-[10px]">
+                v{selected.version}
+              </Badge>
+            </div>
+            <div className="mt-1 font-mono text-[11px] text-muted-foreground">
+              {selected.image}:{selected.internal_port}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-zinc-100">
-              {selected.display_name}
-            </span>
-            <span className="rounded-full border border-zinc-700 bg-zinc-800/40 px-2 py-0.5 font-mono text-[10px] text-zinc-300">
-              v{selected.version}
-            </span>
-          </div>
-          <div className="mt-1 font-mono text-[11px] text-zinc-500">
-            {selected.image}:{selected.internal_port}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setSelected(null)}
-          className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
-        >
-          Cambiar
-        </button>
-      </header>
+          <Button variant="outline" size="sm" onClick={() => setSelected(null)}>
+            Cambiar
+          </Button>
+        </CardContent>
+      </Card>
 
-      <form
-        onSubmit={onSubmit}
-        className="flex flex-col gap-5 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6"
-      >
-        <Field label="Nombre" required>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={selected.display_name}
-            className={inputClass}
-            required
-            autoFocus
-          />
-        </Field>
+      <form onSubmit={onSubmit}>
+        <Card>
+          <CardContent className="space-y-5 p-6">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nombre *</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={selected.display_name}
+                required
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="slug">Slug *</Label>
+              <Input
+                id="slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="prod-postgres"
+                className="font-mono text-xs"
+                required
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {slugError ? (
+                <p className="text-xs text-destructive">{slugError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Identificador del servicio. Minúsculas + dígitos + guiones.
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>VM target *</Label>
+              <Select value={targetVmId} onValueChange={setTargetVmId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccioná una VM" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vms.length === 0 ? (
+                    <SelectItem value="__none__" disabled>
+                      No hay VMs
+                    </SelectItem>
+                  ) : (
+                    vms.map((vm) => (
+                      <SelectItem key={vm.id} value={vm.id}>
+                        {vm.name} ({vm.slug})
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                VM donde se ejecutará el contenedor del servicio.
+              </p>
+            </div>
 
-        <Field
-          label="Slug"
-          required
-          hint="Identificador del servicio. Minúsculas, dígitos y guiones; inicia con letra."
-        >
-          <input
-            type="text"
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            placeholder="prod-postgres"
-            className={inputClass}
-            required
-            autoComplete="off"
-            spellCheck={false}
-          />
-          {slugError && (
-            <span className="text-xs text-rose-400">{slugError}</span>
-          )}
-        </Field>
+            <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">
+              <Switch
+                id="exposed"
+                checked={exposedExternally}
+                onCheckedChange={setExposedExternally}
+              />
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="exposed" className="cursor-pointer">
+                  Exponer externamente
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Por defecto el servicio solo es accesible vía red Docker
+                  interna. Activalo para abrir el puerto en la VM (ej. conectar
+                  DBeaver).
+                </p>
+              </div>
+            </div>
 
-        <Field
-          label="VM target"
-          required
-          hint="VM donde se ejecutará el contenedor del servicio."
-        >
-          <select
-            value={targetVmId}
-            onChange={(e) => setTargetVmId(e.target.value)}
-            className={inputClass}
-            required
-          >
-            {vms.length === 0 && <option value="">(no hay VMs)</option>}
-            {vms.map((vm) => (
-              <option key={vm.id} value={vm.id}>
-                {vm.name} ({vm.slug})
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 text-sm text-zinc-300">
-          <input
-            type="checkbox"
-            checked={exposedExternally}
-            onChange={(e) => setExposedExternally(e.target.checked)}
-            className="mt-0.5 size-4 accent-emerald-500"
-          />
-          <span className="flex flex-col gap-1">
-            <span className="font-medium text-zinc-100">
-              Exponer externamente
-            </span>
-            <span
-              className="text-xs text-zinc-500"
-              title="Por defecto el servicio solo es accesible vía red Docker interna. Actívalo solo si necesitas conectar herramientas externas (ej. DBeaver) — Aethra publicará el puerto en la VM."
-            >
-              Por defecto el servicio solo es accesible vía red Docker
-              interna. Actívalo para abrir el puerto en la VM.
-            </span>
-          </span>
-        </label>
-
-        {error && (
-          <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-            {error}
-          </p>
-        )}
-
-        <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => router.push("/services")}
-            className="rounded-full border border-zinc-700 px-5 py-2 text-sm text-zinc-300 transition hover:bg-zinc-800"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={loading || !!slugError || !name || !slug || !targetVmId}
-            className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-50"
-          >
-            {loading ? "Creando..." : "Crear servicio"}
-          </button>
-        </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => router.push("/services")}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  loading || !!slugError || !name || !slug || !targetVmId
+                }
+              >
+                {loading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Crear servicio
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </form>
     </section>
   );
@@ -259,30 +276,4 @@ export function TemplatePicker({
 function suggestSlug(tpl: ServiceTemplateDto): string {
   const base = tpl.type.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   return base.length > 0 && /^[a-z]/.test(base) ? base : `srv-${base}`;
-}
-
-const inputClass =
-  "rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none focus:border-emerald-500";
-
-function Field({
-  label,
-  required,
-  hint,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-sm text-zinc-300">
-      <span>
-        {label}
-        {required && <span className="text-rose-400"> *</span>}
-      </span>
-      {children}
-      {hint && <span className="text-xs text-zinc-500">{hint}</span>}
-    </label>
-  );
 }
