@@ -2,6 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ApiError, api } from "@/lib/api";
 
 export function DeleteRecordButton({
@@ -12,42 +23,68 @@ export function DeleteRecordButton({
   name: string;
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function onClick() {
-    const ok = window.confirm(
-      `Eliminar el DNS record "${name}"? Se borrara en Cloudflare y localmente.`,
-    );
-    if (!ok) return;
-    setError(null);
+  async function onConfirm() {
     setLoading(true);
     try {
       await api(`/api/cloudflare/records/${recordId}`, { method: "DELETE" });
+      toast.success(`Record "${name}" eliminado`);
       router.refresh();
     } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as { message?: string; detail?: string } | undefined;
-        setError(body?.message ?? body?.detail ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string; detail?: string } | undefined)
+              ?.message ??
+            (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
     } finally {
       setLoading(false);
+      setOpen(false);
     }
   }
 
   return (
-    <div className="inline-flex flex-col items-end gap-1">
-      <button
+    <>
+      <Button
         type="button"
-        onClick={onClick}
-        disabled={loading}
-        className="rounded-full border border-rose-500/30 px-3 py-1 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
+        variant="destructive"
+        size="sm"
+        onClick={() => setOpen(true)}
       >
-        {loading ? "Eliminando..." : "Eliminar"}
-      </button>
-      {error && <span className="text-[11px] text-rose-300">{error}</span>}
-    </div>
+        <Trash2 className="mr-2 h-4 w-4" />
+        Eliminar
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar DNS record "{name}"</DialogTitle>
+            <DialogDescription>
+              Se borrará en Cloudflare y localmente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={onConfirm}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

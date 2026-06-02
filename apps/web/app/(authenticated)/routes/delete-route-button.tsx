@@ -2,6 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ApiError, api } from "@/lib/api";
 
 export function DeleteRouteButton({
@@ -12,42 +23,67 @@ export function DeleteRouteButton({
   hostname: string;
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function onClick() {
-    const ok = window.confirm(
-      `¿Eliminar la ruta de "${hostname}"?\n\nEsta acción dejará de servir el host inmediatamente y revocará su entrada en el reverse proxy.`,
-    );
-    if (!ok) return;
-    setError(null);
+  async function onConfirm() {
     setLoading(true);
     try {
       await api(`/api/proxy/routes/${id}`, { method: "DELETE" });
+      toast.success(`Ruta de "${hostname}" eliminada`);
       router.refresh();
     } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as { detail?: string } | undefined;
-        setError(body?.detail ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
     } finally {
       setLoading(false);
+      setOpen(false);
     }
   }
 
   return (
-    <div className="inline-flex flex-col items-end gap-1">
-      <button
+    <>
+      <Button
         type="button"
-        onClick={onClick}
-        disabled={loading}
-        className="rounded-full border border-rose-500/30 px-3 py-1 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
+        variant="destructive"
+        size="sm"
+        onClick={() => setOpen(true)}
       >
-        {loading ? "Eliminando..." : "Eliminar"}
-      </button>
-      {error && <span className="text-[11px] text-rose-300">{error}</span>}
-    </div>
+        <Trash2 className="mr-2 h-4 w-4" />
+        Eliminar
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar la ruta de "{hostname}"</DialogTitle>
+            <DialogDescription>
+              Esta acción dejará de servir el host inmediatamente y revocará su
+              entrada en el reverse proxy.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={onConfirm}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

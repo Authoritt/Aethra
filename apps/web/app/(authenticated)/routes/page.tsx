@@ -1,8 +1,22 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Network, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { PageHeader } from "@/components/layout/page-header";
+import { CertStatusPill } from "@/components/aethra/cert-status-pill";
 import { API_URL } from "@/lib/api";
-import type { CertStatus, RouteDto } from "@/lib/types";
+import type { RouteDto } from "@/lib/types";
 import { DeleteRouteButton } from "./delete-route-button";
 
 export const dynamic = "force-dynamic";
@@ -28,112 +42,88 @@ export default async function RoutesPage() {
     redirect("/login");
   }
 
+  const errored = data === "error";
+  const routes = Array.isArray(data) ? data : [];
+
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold">Rutas</h1>
-            <p className="text-sm text-zinc-500">
-              Reverse proxy YARP con terminación TLS por hostname.
-            </p>
-          </div>
-          <Link
-            href="/routes/new"
-            className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400"
-          >
-            Nueva ruta
-          </Link>
-        </header>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        title="Rutas"
+        description="Reverse proxy YARP con terminación TLS por hostname."
+        actions={
+          <Button asChild>
+            <Link href="/routes/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva ruta
+            </Link>
+          </Button>
+        }
+      />
 
-        {data === "error" && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-            No se pudo cargar el listado. Verifica que la API esté corriendo.
-          </div>
-        )}
-
-        {Array.isArray(data) && data.length === 0 && <EmptyState />}
-
-        {Array.isArray(data) && data.length > 0 && (
-          <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3">Hostname</th>
-                  <th className="px-4 py-3">Backend</th>
-                  <th className="px-4 py-3">TLS</th>
-                  <th className="px-4 py-3">Expira</th>
-                  <th className="px-4 py-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {data.map((r) => (
-                  <tr key={r.id} className="hover:bg-zinc-900/60">
-                    <td className="px-4 py-3 font-medium text-zinc-100">
+      {errored ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            No se pudo cargar el listado. Verificá que la API esté corriendo.
+          </CardContent>
+        </Card>
+      ) : routes.length === 0 ? (
+        <EmptyState
+          icon={Network}
+          title="Aún sin rutas"
+          description="Creá tu primera ruta para exponer un backend con TLS automático."
+          action={
+            <Button asChild>
+              <Link href="/routes/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Crear ruta
+              </Link>
+            </Button>
+          }
+        />
+      ) : (
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Hostname</TableHead>
+                <TableHead>Backend</TableHead>
+                <TableHead>TLS</TableHead>
+                <TableHead>Expira</TableHead>
+                <TableHead className="text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {routes.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <Link
+                      href={`/routes/${r.id}`}
+                      className="font-medium text-foreground hover:text-primary"
+                    >
                       {r.hostname}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-300">
-                      {r.backend_url}
-                    </td>
-                    <td className="px-4 py-3">
-                      <CertPill
-                        status={r.tls_enabled ? r.cert_status : "none"}
-                        tlsEnabled={r.tls_enabled}
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-zinc-400">
-                      {formatExpires(r.cert_expires_at)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <DeleteRouteButton id={r.id} hostname={r.hostname} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </main>
-  );
-}
-
-function CertPill({
-  status,
-  tlsEnabled,
-}: {
-  status: CertStatus;
-  tlsEnabled: boolean;
-}) {
-  if (!tlsEnabled) {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800/40 px-2.5 py-0.5 text-[11px] font-medium text-zinc-400">
-        <span className="size-1.5 rounded-full bg-zinc-500" />
-        sin TLS
-      </span>
-    );
-  }
-  const styles: Record<CertStatus, string> = {
-    issued: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
-    pending: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-    renewing: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-    failed: "border-rose-500/40 bg-rose-500/10 text-rose-300",
-    none: "border-zinc-700 bg-zinc-800/40 text-zinc-400",
-  };
-  const dots: Record<CertStatus, string> = {
-    issued: "bg-emerald-400",
-    pending: "bg-amber-400",
-    renewing: "bg-amber-400",
-    failed: "bg-rose-400",
-    none: "bg-zinc-500",
-  };
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${styles[status]}`}
-    >
-      <span className={`size-1.5 rounded-full ${dots[status]}`} />
-      {status}
-    </span>
+                    </Link>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {r.backend_url}
+                  </TableCell>
+                  <TableCell>
+                    <CertStatusPill
+                      status={r.tls_enabled ? r.cert_status : "none"}
+                    />
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {formatExpires(r.cert_expires_at)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DeleteRouteButton id={r.id} hostname={r.hostname} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+    </div>
   );
 }
 
@@ -146,21 +136,4 @@ function formatExpires(iso: string | null): string {
     month: "short",
     day: "2-digit",
   });
-}
-
-function EmptyState() {
-  return (
-    <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-12 text-center">
-      <h2 className="text-xl font-semibold text-zinc-100">Aún sin rutas</h2>
-      <p className="mt-2 text-sm text-zinc-500">
-        Crea tu primera ruta para exponer un backend con TLS automático.
-      </p>
-      <Link
-        href="/routes/new"
-        className="mt-6 inline-block rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400"
-      >
-        Crear ruta
-      </Link>
-    </div>
-  );
 }

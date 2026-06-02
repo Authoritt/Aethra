@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Cloud, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import type { CloudflareZoneDto } from "@/lib/types";
 import { ZoneStatusPill } from "./ZoneStatusPill";
@@ -31,106 +36,97 @@ export default async function CloudflareZonesPage() {
     redirect("/login");
   }
 
+  const errored = data === "error";
+  const zones = Array.isArray(data) ? data : [];
+
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold">Cloudflare</h1>
-            <p className="text-sm text-zinc-500">
-              Zonas DNS gestionadas via API v4 de Cloudflare. Cada zona usa su
-              propio token, cifrado con DataProtection.
-            </p>
-          </div>
-          <Link
-            href="/cloudflare/new"
-            className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400"
-          >
-            Registrar zona
-          </Link>
-        </header>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        title="Cloudflare"
+        description="Zonas DNS gestionadas vía API v4 de Cloudflare. Cada zona usa su propio token, cifrado con DataProtection."
+        actions={
+          <Button asChild>
+            <Link href="/cloudflare/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Registrar zona
+            </Link>
+          </Button>
+        }
+      />
 
-        {data === "error" && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-            No se pudo cargar el listado. Verifica que la API este corriendo.
-          </div>
-        )}
-
-        {Array.isArray(data) && data.length === 0 && <EmptyState />}
-
-        {Array.isArray(data) && data.length > 0 && (
-          <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {data.map((zone) => (
-              <li
-                key={zone.id}
-                className="flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5"
-              >
-                <header className="flex items-start justify-between gap-3">
+      {errored ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            No se pudo cargar el listado. Verificá que la API esté corriendo.
+          </CardContent>
+        </Card>
+      ) : zones.length === 0 ? (
+        <EmptyState
+          icon={Cloud}
+          title="Aún sin zonas"
+          description="Registrá una zona de Cloudflare para gestionar sus DNS records desde Aethra. Necesitás el zone_id y un API token con scope Zone.DNS."
+          action={
+            <Button asChild>
+              <Link href="/cloudflare/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Registrar zona
+              </Link>
+            </Button>
+          }
+        />
+      ) : (
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {zones.map((zone) => (
+            <li key={zone.id}>
+              <Card>
+                <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
                   <div className="min-w-0">
                     <Link
                       href={`/cloudflare/${zone.id}`}
-                      className="block truncate text-lg font-semibold text-zinc-100 hover:text-emerald-300"
+                      className="block truncate text-base font-semibold hover:text-primary"
                     >
                       {zone.name}
                     </Link>
-                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                       {zone.external_zone_id}
                     </p>
                   </div>
                   <ZoneStatusPill status={zone.status} />
-                </header>
-
-                <dl className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <dt className="text-[10px] uppercase tracking-wider text-zinc-500">
-                      Records
-                    </dt>
-                    <dd className="mt-0.5 font-mono text-zinc-200">
-                      {zone.records_count}
-                    </dd>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        Records
+                      </div>
+                      <div className="mt-0.5 font-mono">
+                        {zone.records_count}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        Último sync
+                      </div>
+                      <div className="mt-0.5">
+                        {formatRelative(zone.last_synced_at)}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <dt className="text-[10px] uppercase tracking-wider text-zinc-500">
-                      Ultimo sync
-                    </dt>
-                    <dd className="mt-0.5 text-zinc-200">
-                      {formatRelative(zone.last_synced_at)}
-                    </dd>
-                  </div>
-                </dl>
-
-                <footer className="flex items-center justify-between border-t border-zinc-800 pt-3">
+                </CardContent>
+                <CardFooter className="justify-between border-t border-border pt-3">
                   <Link
                     href={`/cloudflare/${zone.id}`}
-                    className="text-xs text-zinc-400 hover:text-emerald-300"
+                    className="text-xs text-muted-foreground hover:text-primary"
                   >
-                    Ver records
+                    Ver records →
                   </Link>
                   <SyncZoneButton zoneId={zone.id} />
-                </footer>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </main>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-12 text-center">
-      <h2 className="text-xl font-semibold text-zinc-100">Aun sin zonas</h2>
-      <p className="mt-2 text-sm text-zinc-500">
-        Registra una zona de Cloudflare para gestionar sus DNS records desde
-        Aethra. Necesitas el zone_id y un API token con scope <em>Zone.DNS</em>.
-      </p>
-      <Link
-        href="/cloudflare/new"
-        className="mt-6 inline-block rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400"
-      >
-        Registrar zona
-      </Link>
+                </CardFooter>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -138,7 +134,7 @@ function EmptyState() {
 function formatRelative(iso: string | null): string {
   if (!iso) return "nunca";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "-";
+  if (Number.isNaN(d.getTime())) return "—";
   const diffMs = Date.now() - d.getTime();
   if (diffMs < 0) return d.toLocaleString();
   const minutes = Math.floor(diffMs / 60_000);
