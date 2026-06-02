@@ -222,6 +222,13 @@ public sealed class LetsEncryptCertManager : ICertManager
             cert.MarkFailed(ex.Message);
             try
             {
+                // F9.10 D2: integration event al outbox ANTES del SaveChanges para que
+                // Monitoring/Notes puedan reaccionar al fallo de cert (antes: pérdida total
+                // de observabilidad cross-module al fallar ACME). Mismo SaveChanges persiste
+                // outbox row + cert.MarkFailed en la misma TX (semántica all-or-nothing).
+                await _outbox.EnqueueAsync(
+                    new CertificateFailedEvent(cert.Id.ToString(), cert.Hostname.Value, ex.Message),
+                    ct).ConfigureAwait(false);
                 await _store.SaveChangesAsync(ct).ConfigureAwait(false);
             }
             catch (Exception saveEx)
