@@ -1,5 +1,6 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
 import { serverFetch } from "@/lib/server-fetch";
 import type { ProjectDetailV2 } from "@/lib/types";
 import { NewClientForm } from "./NewClientForm";
@@ -12,47 +13,37 @@ export default async function NewClientPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  const project = await serverFetch<ProjectDetailV2>(`/api/projects/${projectId}`);
+  const project = await serverFetch<ProjectDetailV2>(
+    `/api/projects/${projectId}`,
+  );
   if (project === "unauthorized") redirect("/login");
   if (project === "notfound") notFound();
   if (project === "error") {
     return (
-      <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-        <div className="mx-auto max-w-3xl rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-          Error cargando el proyecto.
-        </div>
-      </main>
+      <div className="px-6 py-8 md:px-10 md:py-10">
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 text-sm text-destructive">
+            Error cargando el proyecto.
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-        <nav className="text-xs text-zinc-500">
-          <Link href="/projects" className="hover:text-zinc-300">
-            Proyectos
-          </Link>
-          <span> / </span>
-          <Link
-            href={`/projects/${project.id}`}
-            className="hover:text-zinc-300"
-          >
-            {project.name}
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">Nuevo client</span>
-        </nav>
-
-        <header>
-          <h1 className="text-3xl font-semibold">Nuevo client</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Cada client representa un tenant: tendra sus propias instancias del
-            template que decidas.
-          </p>
-        </header>
-
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Proyectos", href: "/projects" },
+          { label: project.name, href: `/projects/${project.id}` },
+          { label: "Nuevo client" },
+        ]}
+        title="Nuevo client"
+        description="Cada client representa un tenant: tendrá sus propias instancias del template que decidas."
+      />
+      <div className="max-w-2xl">
         <NewClientForm projectId={project.id} />
       </div>
-    </main>
+    </div>
   );
 }

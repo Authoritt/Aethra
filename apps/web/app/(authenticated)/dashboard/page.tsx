@@ -1,6 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import {
+  Activity,
+  Boxes,
+  Cloud,
+  FolderKanban,
+  Network,
+  Rocket,
+  Server,
+  Settings,
+} from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/layout/page-header";
+import { KpiCard } from "@/components/aethra/kpi-card";
+import { MonitorStatusPill } from "@/components/aethra/monitor-status-pill";
 import { API_URL } from "@/lib/api";
 import type { MonitorOverviewDto } from "@/lib/types";
 
@@ -20,41 +35,13 @@ interface ContextResponse {
   generated_at: string;
 }
 
-async function getMe(): Promise<MeResponse | null> {
+async function fetchJson<T>(path: string): Promise<T | null> {
   const cookieStore = await cookies();
   const cookieHeader = cookieStore
     .getAll()
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
-  const res = await fetch(`${API_URL}/auth/me`, {
-    headers: { cookie: cookieHeader },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  return res.json();
-}
-
-async function getContext(): Promise<ContextResponse | null> {
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ");
-  const res = await fetch(`${API_URL}/context`, {
-    headers: { cookie: cookieHeader },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  return res.json();
-}
-
-async function getMonitorOverview(): Promise<MonitorOverviewDto | null> {
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ");
-  const res = await fetch(`${API_URL}/api/monitors/overview`, {
+  const res = await fetch(`${API_URL}${path}`, {
     headers: { cookie: cookieHeader },
     cache: "no-store",
   });
@@ -63,167 +50,181 @@ async function getMonitorOverview(): Promise<MonitorOverviewDto | null> {
 }
 
 export default async function Dashboard() {
-  const me = await getMe();
+  const me = await fetchJson<MeResponse>("/auth/me");
   if (!me) {
     redirect("/login");
   }
-  const ctx = await getContext();
-  const monitorOverview = await getMonitorOverview();
+  const ctx = await fetchJson<ContextResponse>("/context");
+  const monitorOverview = await fetchJson<MonitorOverviewDto>(
+    "/api/monitors/overview",
+  );
+
+  const navCards: Array<{
+    href: string;
+    title: string;
+    description: string;
+    icon: typeof FolderKanban;
+    badge?: number;
+  }> = [
+    {
+      href: "/projects",
+      title: "Proyectos",
+      description: "Agrupaciones lógicas con templates y clients multi-tenant.",
+      icon: FolderKanban,
+      badge: ctx?.projects.length ?? 0,
+    },
+    {
+      href: "/vms",
+      title: "VMs",
+      description: "Hosts Oracle gestionados con satélite y métricas.",
+      icon: Server,
+      badge: ctx?.vms.length ?? 0,
+    },
+    {
+      href: "/services",
+      title: "Servicios compartidos",
+      description: "Postgres, Redis y otros backends bindeables.",
+      icon: Boxes,
+      badge: ctx?.services.length ?? 0,
+    },
+    {
+      href: "/cloudflare",
+      title: "Cloudflare DNS",
+      description: "Zonas y records gestionados via API v4.",
+      icon: Cloud,
+      badge: ctx?.cloudflare_zones.length ?? 0,
+    },
+    {
+      href: "/routes",
+      title: "Rutas",
+      description: "Reverse proxy YARP con TLS Let's Encrypt.",
+      icon: Network,
+    },
+    {
+      href: "/builds",
+      title: "Builds",
+      description: "Git → imagen Docker, pipeline en vivo.",
+      icon: Rocket,
+    },
+    {
+      href: "/deployments",
+      title: "Deployments",
+      description: "Despliegues blue-green hacia instancias.",
+      icon: Activity,
+    },
+    {
+      href: "/settings",
+      title: "Settings",
+      description: "Integraciones, dominios, environments y API keys.",
+      icon: Settings,
+    },
+  ];
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold">Dashboard</h1>
-            <p className="text-sm text-zinc-500">{me.email}</p>
-          </div>
-          <Link
-            href="/"
-            className="rounded-full border border-zinc-700 px-4 py-2 text-sm transition hover:bg-zinc-800"
-          >
-            Volver
-          </Link>
-        </header>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        title="Dashboard"
+        description={
+          <>
+            Bienvenida, <span className="text-foreground">{me.email}</span>.
+            Esto es lo que está pasando ahora mismo.
+          </>
+        }
+      />
 
-        <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <Stat label="Proyectos" value={ctx?.projects.length ?? 0} />
-          <Stat label="VMs" value={ctx?.vms.length ?? 0} />
-          <Stat label="Servicios" value={ctx?.services.length ?? 0} />
-          <Stat label="Zonas CF" value={ctx?.cloudflare_zones.length ?? 0} />
-        </section>
+      <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <KpiCard
+          label="Proyectos"
+          value={ctx?.projects.length ?? 0}
+          icon={FolderKanban}
+        />
+        <KpiCard label="VMs" value={ctx?.vms.length ?? 0} icon={Server} />
+        <KpiCard
+          label="Servicios"
+          value={ctx?.services.length ?? 0}
+          icon={Boxes}
+        />
+        <KpiCard
+          label="Monitores down"
+          value={monitorOverview?.down ?? 0}
+          icon={Activity}
+          tone={(monitorOverview?.down ?? 0) > 0 ? "destructive" : "success"}
+        />
+      </section>
 
-        <section className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-          <NavCard
-            href="/projects"
-            title="Proyectos"
-            description="Agrupaciones lógicas que contendrán templates y clients."
-          />
-          <NavCard
-            href="/templates"
-            title="Templates"
-            description="Plantillas reutilizables de servicios multi-tenant."
-            badge={0}
-          />
-          <NavCard
-            href="/clients"
-            title="Clients"
-            description="Cuentas tenant que instancian un template."
-            badge={0}
-          />
-          <NavCard
-            href="/vms"
-            title="VMs"
-            description="Hosts Oracle gestionados con satélite y métricas."
-          />
-          <NavCard
-            href="/routes"
-            title="Rutas"
-            description="Reverse proxy YARP con TLS Let's Encrypt."
-          />
-          <NavCard
-            href="/services"
-            title="Servicios compartidos"
-            description="Postgres, Redis y otros backends bindeables."
-            badge={ctx?.services.length ?? 0}
-          />
-          <NavCard
-            href="/cloudflare"
-            title="Cloudflare"
-            description="Zonas DNS y records gestionados via API v4."
-            badge={ctx?.cloudflare_zones.length ?? 0}
-          />
-          <NavCard
-            href="/settings/api-keys"
-            title="API keys"
-            description="Tokens portadores para integrar agentes IA y herramientas externas."
-          />
-          <Link
-            href="/monitors"
-            className="block rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 transition hover:border-emerald-500/40 hover:bg-zinc-900/80"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="text-lg font-semibold text-zinc-100">Monitores uptime</h3>
-              {monitorOverview && (
-                <span className="shrink-0 rounded-full border border-zinc-700 bg-zinc-800/40 px-2 py-0.5 font-mono text-[11px] text-zinc-300">
-                  {monitorOverview.total}
-                </span>
-              )}
+      {monitorOverview ? (
+        <Card className="mt-6">
+          <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
+            <div className="space-y-1">
+              <CardTitle className="text-base">Monitores uptime</CardTitle>
+              <CardDescription>
+                Estado actual de los probes HTTP gestionados por el módulo
+                Monitoring.
+              </CardDescription>
             </div>
-            <p className="mt-1 text-sm text-zinc-400">
-              Probes HTTP periódicos contra tus apps con SignalR live.
-            </p>
-            {monitorOverview && (
-              <div className="mt-3 flex gap-2 text-[11px] font-medium">
-                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
-                  Up {monitorOverview.up}
+            <Link
+              href="/monitors"
+              className="text-xs font-medium text-primary hover:underline underline-offset-4"
+            >
+              Ver todos →
+            </Link>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">Total {monitorOverview.total}</Badge>
+            <MonitorStatusPill status="up" />
+            <span className="text-sm tabular-nums text-muted-foreground">
+              {monitorOverview.up}
+            </span>
+            {monitorOverview.degraded > 0 ? (
+              <>
+                <MonitorStatusPill status="degraded" />
+                <span className="text-sm tabular-nums text-muted-foreground">
+                  {monitorOverview.degraded}
                 </span>
-                {monitorOverview.degraded > 0 && (
-                  <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-amber-300">
-                    Deg {monitorOverview.degraded}
-                  </span>
-                )}
-                {monitorOverview.down > 0 && (
-                  <span className="rounded-full border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-rose-300">
-                    Down {monitorOverview.down}
-                  </span>
-                )}
-              </div>
-            )}
+              </>
+            ) : null}
+            {monitorOverview.down > 0 ? (
+              <>
+                <MonitorStatusPill status="down" />
+                <span className="text-sm tabular-nums text-muted-foreground">
+                  {monitorOverview.down}
+                </span>
+              </>
+            ) : null}
+            {monitorOverview.disabled > 0 ? (
+              <>
+                <MonitorStatusPill status="disabled" enabled={false} />
+                <span className="text-sm tabular-nums text-muted-foreground">
+                  {monitorOverview.disabled}
+                </span>
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <section className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {navCards.map((c) => (
+          <Link key={c.href} href={c.href} className="group">
+            <Card className="h-full transition-colors group-hover:border-primary/40">
+              <CardContent className="flex flex-col gap-2 p-5">
+                <div className="flex items-start justify-between">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                    <c.icon className="h-4 w-4" />
+                  </div>
+                  {typeof c.badge === "number" ? (
+                    <Badge variant="outline">{c.badge}</Badge>
+                  ) : null}
+                </div>
+                <h3 className="mt-1 text-base font-semibold text-foreground">
+                  {c.title}
+                </h3>
+                <p className="text-sm text-muted-foreground">{c.description}</p>
+              </CardContent>
+            </Card>
           </Link>
-        </section>
-
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-          <h2 className="mb-4 text-sm uppercase tracking-wider text-zinc-500">
-            Refactor F9 — multi-tenant
-          </h2>
-          <ol className="space-y-2 text-sm text-zinc-300">
-            <li>F9.0 — cleanup frontend (en curso)</li>
-            <li>F9.3 — Pipeline de Build y Deployments</li>
-            <li>F9.5 — Templates, Clients e Instances</li>
-          </ol>
-        </section>
-      </div>
-    </main>
-  );
-}
-
-function NavCard({
-  href,
-  title,
-  description,
-  badge,
-}: {
-  href: string;
-  title: string;
-  description: string;
-  badge?: number;
-}) {
-  return (
-    <Link
-      href={href}
-      className="block rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 transition hover:border-emerald-500/40 hover:bg-zinc-900/80"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-lg font-semibold text-zinc-100">{title}</h3>
-        {typeof badge === "number" && (
-          <span className="shrink-0 rounded-full border border-zinc-700 bg-zinc-800/40 px-2 py-0.5 font-mono text-[11px] text-zinc-300">
-            {badge}
-          </span>
-        )}
-      </div>
-      <p className="mt-1 text-sm text-zinc-400">{description}</p>
-    </Link>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-      <div className="text-xs uppercase tracking-wider text-zinc-500">
-        {label}
-      </div>
-      <div className="text-3xl font-semibold text-zinc-100">{value}</div>
+        ))}
+      </section>
     </div>
   );
 }
