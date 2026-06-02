@@ -8,6 +8,7 @@ using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Contracts.Services;
 using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Kernel.Errors;
+using Aethra.Shared.Kernel.Ids;
 using Aethra.Shared.Kernel.Results;
 using Aethra.Shared.Kernel.Time;
 using FluentValidation;
@@ -50,9 +51,15 @@ internal sealed class CreateBindingHandler(
 {
     public async Task<Result<ServiceBindingDto>> Handle(CreateBindingCommand request, CancellationToken cancellationToken)
     {
-        // EF Core 10 no traduce `Id.ToString() == arg` con ValueConverter activo.
-        var allSvcs = await db.ManagedServices.ToListAsync(cancellationToken);
-        var svc = allSvcs.FirstOrDefault(s => s.Id.ToString() == request.ServiceId);
+        // Comparamos por el wrapper tipado (ManagedServiceId) que SI traduce a SQL con el
+        // ValueConverter activo. Eso evita materializar toda la tabla en memoria.
+        if (!AethraId.TryParse(request.ServiceId, out var parsed) || parsed.Value.Prefix != "svc")
+        {
+            return Error.NotFound("service.not_found", $"ManagedService '{request.ServiceId}' no existe.");
+        }
+        var typedServiceId = new ManagedServiceId(parsed.Value);
+
+        var svc = await db.ManagedServices.FirstOrDefaultAsync(s => s.Id == typedServiceId, cancellationToken);
         if (svc is null)
         {
             return Error.NotFound("service.not_found", $"ManagedService '{request.ServiceId}' no existe.");

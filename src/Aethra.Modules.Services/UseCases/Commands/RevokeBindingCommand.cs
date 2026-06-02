@@ -4,6 +4,7 @@ using Aethra.Modules.Services.Infrastructure.Provisioning;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Kernel.Errors;
+using Aethra.Shared.Kernel.Ids;
 using Aethra.Shared.Kernel.Results;
 using Aethra.Shared.Kernel.Time;
 using Microsoft.EntityFrameworkCore;
@@ -23,9 +24,15 @@ internal sealed class RevokeBindingHandler(
 {
     public async Task<Result> Handle(RevokeBindingCommand request, CancellationToken cancellationToken)
     {
-        // EF Core 10 no traduce `Id.ToString() == arg` con ValueConverter activo.
-        var allBindings = await db.ServiceBindings.ToListAsync(cancellationToken);
-        var binding = allBindings.FirstOrDefault(b => b.Id.ToString() == request.BindingId);
+        // Comparamos por el wrapper tipado (ServiceBindingId) que SI traduce a SQL con el
+        // ValueConverter activo. Eso evita materializar toda la tabla en memoria.
+        if (!AethraId.TryParse(request.BindingId, out var parsed) || parsed.Value.Prefix != "bnd")
+        {
+            return Error.NotFound("binding.not_found", $"Binding '{request.BindingId}' no existe.");
+        }
+        var typedId = new ServiceBindingId(parsed.Value);
+
+        var binding = await db.ServiceBindings.FirstOrDefaultAsync(b => b.Id == typedId, cancellationToken);
         if (binding is null)
         {
             return Error.NotFound("binding.not_found", $"Binding '{request.BindingId}' no existe.");

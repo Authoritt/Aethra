@@ -1,6 +1,8 @@
+using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure;
 using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Kernel.Errors;
+using Aethra.Shared.Kernel.Ids;
 using Aethra.Shared.Kernel.Results;
 using Aethra.Shared.Kernel.Time;
 using Microsoft.EntityFrameworkCore;
@@ -14,9 +16,15 @@ internal sealed class RevokeApiKeyHandler(IdentityDbContext db, IClock clock)
 {
     public async Task<Result> Handle(RevokeApiKeyCommand request, CancellationToken cancellationToken)
     {
-        // EF Core 10 no traduce `Id.ToString() == arg` con ValueConverter activo.
-        var allKeys = await db.ApiKeys.ToListAsync(cancellationToken);
-        var apiKey = allKeys.FirstOrDefault(k => k.Id.ToString() == request.ApiKeyId);
+        // Comparamos por el wrapper tipado (ApiKeyId) que SI traduce a SQL con el
+        // ValueConverter activo. Eso evita materializar toda la tabla en memoria.
+        if (!AethraId.TryParse(request.ApiKeyId, out var parsed) || parsed.Value.Prefix != "apk")
+        {
+            return Error.NotFound("api_key.not_found", $"API key '{request.ApiKeyId}' no existe.");
+        }
+        var typedId = new ApiKeyId(parsed.Value);
+
+        var apiKey = await db.ApiKeys.FirstOrDefaultAsync(k => k.Id == typedId, cancellationToken);
         if (apiKey is null)
         {
             return Error.NotFound("api_key.not_found", $"API key '{request.ApiKeyId}' no existe.");
