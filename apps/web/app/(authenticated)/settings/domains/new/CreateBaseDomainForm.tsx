@@ -2,7 +2,31 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
 import type { BaseDomainDto, CreateBaseDomainRequest } from "@/lib/types";
 
@@ -12,7 +36,24 @@ interface CloudflareZoneOption {
 }
 
 // FQDN simple: dos o mas labels lowercase alfanumericos con guiones.
-const FQDN_RE = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+const FQDN_RE =
+  /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+const NO_ZONE_VALUE = "__none__";
+
+const schema = z.object({
+  hostname: z
+    .string()
+    .min(1, "Requerido")
+    .max(253, "Máximo 253 caracteres.")
+    .regex(
+      FQDN_RE,
+      "Debe ser un FQDN válido (lowercase, mínimo dos labels, sin guiones al inicio/fin).",
+    ),
+  cloudflareZoneId: z.string().optional(),
+});
+
+type FormValues = z.infer<typeof schema>;
 
 export function CreateBaseDomainForm({
   zones,
@@ -20,165 +61,171 @@ export function CreateBaseDomainForm({
   zones: CloudflareZoneOption[];
 }) {
   const router = useRouter();
-  const [hostname, setHostname] = useState("");
-  const [cloudflareZoneId, setCloudflareZoneId] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const hostnameError = useMemo(() => {
-    const trimmed = hostname.trim().toLowerCase();
-    if (!trimmed) return null;
-    if (trimmed.length > 253) return "Maximo 253 caracteres.";
-    if (!FQDN_RE.test(trimmed)) {
-      return "Debe ser un FQDN valido (lowercase, minimo dos labels, sin guiones al inicio/fin).";
-    }
-    return null;
-  }, [hostname]);
+  const form = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      hostname: "",
+      cloudflareZoneId: NO_ZONE_VALUE,
+    },
+  });
 
-  const canSubmit =
-    !loading && hostname.trim().length > 0 && !hostnameError;
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!canSubmit) return;
-    setError(null);
-    setLoading(true);
+  async function onSubmit(values: FormValues) {
+    setSubmitting(true);
     try {
+      const zoneId =
+        values.cloudflareZoneId &&
+        values.cloudflareZoneId !== NO_ZONE_VALUE &&
+        values.cloudflareZoneId.trim().length > 0
+          ? values.cloudflareZoneId.trim()
+          : null;
       const body: CreateBaseDomainRequest = {
-        hostname: hostname.trim().toLowerCase(),
-        cloudflareZoneId: cloudflareZoneId.trim() || null,
+        hostname: values.hostname.trim().toLowerCase(),
+        cloudflareZoneId: zoneId,
       };
       const created = await api<BaseDomainDto>("/api/settings/domains/", {
         method: "POST",
         body: JSON.stringify(body),
       });
-      router.push(`/settings/domains?created=${encodeURIComponent(created.id)}`);
+      toast.success("Base domain registrado");
+      router.push(
+        `/settings/domains?created=${encodeURIComponent(created.id)}`,
+      );
       router.refresh();
     } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as
-          | { message?: string; detail?: string }
-          | undefined;
-        setError(body?.message ?? body?.detail ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string; detail?: string } | undefined)
+              ?.message ??
+            (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="flex flex-col gap-6 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6"
-    >
-      <Field
-        label="Hostname"
-        required
-        hint="FQDN bajo el cual Aethra creara subdominios. Ej: aethra.tu-empresa.com."
-      >
-        <input
-          type="text"
-          value={hostname}
-          onChange={(e) => setHostname(e.target.value.toLowerCase())}
-          maxLength={253}
-          placeholder="aethra.tu-empresa.com"
-          className={inputClass}
-          autoComplete="off"
-          spellCheck={false}
-          required
-          autoFocus
-        />
-        {hostnameError && (
-          <span className="text-xs text-rose-400">{hostnameError}</span>
-        )}
-      </Field>
-
-      <Field
-        label="Zona Cloudflare (opcional)"
-        hint="Si la zona ya esta registrada en el modulo Cloudflare, enlazala para que la UI muestre el vinculo. Puedes dejarla en blanco y enlazarla despues."
-      >
-        {zones.length === 0 ? (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-400">
-            No hay zonas registradas todavia en el modulo Cloudflare.{" "}
-            <Link
-              href="/cloudflare/new"
-              className="text-emerald-300 hover:underline"
-            >
-              Registrar una zona
-            </Link>
-            .
-          </div>
-        ) : (
-          <select
-            value={cloudflareZoneId}
-            onChange={(e) => setCloudflareZoneId(e.target.value)}
-            className={inputClass}
+    <Card>
+      <CardContent className="p-6">
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex flex-col gap-5"
           >
-            <option value="">— sin enlazar —</option>
-            {zones.map((z) => (
-              <option key={z.id} value={z.id}>
-                {z.name} ({z.id.slice(0, 12)}...)
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
+            <FormField
+              control={form.control}
+              name="hostname"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Hostname *</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      onChange={(e) =>
+                        field.onChange(e.target.value.toLowerCase())
+                      }
+                      maxLength={253}
+                      placeholder="aethra.tu-empresa.com"
+                      autoComplete="off"
+                      spellCheck={false}
+                      autoFocus
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    FQDN bajo el cual Aethra creará subdominios. Ej:
+                    aethra.tu-empresa.com.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">
-        Crear un base domain no lo activa automaticamente. Despues de
-        registrarlo, marca el wildcard DNS como configurado y luego activalo.
-      </div>
+            <FormField
+              control={form.control}
+              name="cloudflareZoneId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Zona Cloudflare (opcional)</FormLabel>
+                  {zones.length === 0 ? (
+                    <Card className="border-border">
+                      <CardContent className="p-3 text-xs text-muted-foreground">
+                        No hay zonas registradas todavía en el módulo
+                        Cloudflare.{" "}
+                        <Link
+                          href="/cloudflare/new"
+                          className="text-primary underline-offset-4 hover:underline"
+                        >
+                          Registrar una zona
+                        </Link>
+                        .
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Select
+                      value={field.value || NO_ZONE_VALUE}
+                      onValueChange={field.onChange}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="— sin enlazar —" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={NO_ZONE_VALUE}>
+                          — sin enlazar —
+                        </SelectItem>
+                        {zones.map((z) => (
+                          <SelectItem key={z.id} value={z.id}>
+                            {z.name} ({z.id.slice(0, 12)}...)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <FormDescription>
+                    Si la zona ya está registrada en el módulo Cloudflare,
+                    enlazala para que la UI muestre el vínculo. Podés dejarla
+                    en blanco y enlazarla después.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-      {error && (
-        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-          {error}
-        </p>
-      )}
+            <Card className="border-warning/30 bg-warning/5">
+              <CardContent className="flex items-start gap-2 p-3 text-xs text-muted-foreground">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                <span>
+                  Crear un base domain no lo activa automáticamente. Después
+                  de registrarlo, marcá el wildcard DNS como configurado y
+                  luego activalo.
+                </span>
+              </CardContent>
+            </Card>
 
-      <div className="flex justify-end gap-3">
-        <button
-          type="button"
-          onClick={() => router.push("/settings/domains")}
-          className="rounded-full border border-zinc-700 px-5 py-2 text-sm text-zinc-300 transition hover:bg-zinc-800"
-        >
-          Cancelar
-        </button>
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-50"
-        >
-          {loading ? "Creando..." : "Registrar base domain"}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-const inputClass =
-  "rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none focus:border-emerald-500";
-
-function Field({
-  label,
-  required,
-  hint,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-sm text-zinc-300">
-      <span>
-        {label}
-        {required && <span className="text-rose-400"> *</span>}
-      </span>
-      {children}
-      {hint && <span className="text-xs text-zinc-500">{hint}</span>}
-    </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => router.push("/settings/domains")}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Registrar base domain
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
   );
 }

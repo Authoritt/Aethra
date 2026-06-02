@@ -2,6 +2,24 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { ApiError, api } from "@/lib/api";
 import type { CreateApiKeyRequest, CreateApiKeyResult } from "@/lib/types";
 import { ScopesGrid } from "./ScopesGrid";
@@ -61,51 +79,62 @@ function presetToIso(preset: ExpiresPreset, custom: string): string | null {
   return d.toISOString();
 }
 
+const schema = z
+  .object({
+    name: z
+      .string()
+      .min(1, "Requerido")
+      .max(NAME_MAX, `Maximo ${NAME_MAX} caracteres.`),
+    preset: z.enum(["never", "30d", "90d", "365d", "custom"]),
+    customDate: z.string().optional().or(z.literal("")),
+  })
+  .refine(
+    (values) => {
+      if (values.preset !== "custom") return true;
+      if (!values.customDate) return false;
+      const d = new Date(values.customDate);
+      if (Number.isNaN(d.getTime())) return false;
+      return d.getTime() > Date.now();
+    },
+    {
+      message: "Selecciona una fecha futura.",
+      path: ["customDate"],
+    },
+  );
+
+type FormValues = z.infer<typeof schema>;
+
 export function CreateKeyForm() {
   const router = useRouter();
-  const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>([]);
-  const [preset, setPreset] = useState<ExpiresPreset>("never");
-  const [customDate, setCustomDate] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [scopesTouched, setScopesTouched] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  const nameError = useMemo(() => {
-    const trimmed = name.trim();
-    if (!trimmed) return null; // se valida en submit
-    if (trimmed.length > NAME_MAX) return `Maximo ${NAME_MAX} caracteres.`;
-    return null;
-  }, [name]);
+  const form = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: "",
+      preset: "never",
+      customDate: "",
+    },
+  });
 
-  const customError = useMemo(() => {
-    if (preset !== "custom") return null;
-    if (!customDate) return "Selecciona una fecha.";
-    const d = new Date(customDate);
-    if (Number.isNaN(d.getTime())) return "Fecha invalida.";
-    if (d.getTime() <= Date.now()) return "Debe ser una fecha futura.";
-    return null;
-  }, [preset, customDate]);
+  const preset = form.watch("preset");
 
-  const canSubmit =
-    !loading &&
-    name.trim().length > 0 &&
-    !nameError &&
-    !customError &&
-    scopes.length > 0;
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!canSubmit) return;
-
-    setError(null);
-    setLoading(true);
+  async function onSubmit(values: FormValues) {
+    if (scopes.length === 0) {
+      setScopesTouched(true);
+      toast.error("Seleccioná al menos un scope.");
+      return;
+    }
+    setSubmitting(true);
     try {
       const body: CreateApiKeyRequest = {
-        name: name.trim(),
+        name: values.name.trim(),
         scopes,
-        expires_at: presetToIso(preset, customDate),
+        expires_at: presetToIso(values.preset, values.customDate ?? ""),
       };
       const created = await api<CreateApiKeyResult>(
         "/api/identity/api-keys",
@@ -114,151 +143,167 @@ export function CreateKeyForm() {
           body: JSON.stringify(body),
         },
       );
-
-      // Guardamos el secret en sessionStorage; nunca en la URL.
       persistSecretInSession(created.id, created.secret);
+      toast.success("API key creada");
       router.push(`/settings/api-keys/created?id=${encodeURIComponent(created.id)}`);
       router.refresh();
     } catch (e) {
-      if (e instanceof ApiError) {
-        const data = e.body as { detail?: string } | undefined;
-        setError(data?.detail ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
-      setLoading(false);
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
+      setSubmitting(false);
     }
   }
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="flex flex-col gap-6 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6"
-    >
-      <Field
-        label="Nombre"
-        required
-        hint="Identifica para que se usara esta key (ej: CI/CD GitHub Actions, claude agent dev)."
-      >
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={NAME_MAX}
-          placeholder="CI deploy bot"
-          className={inputClass}
-          required
-          autoFocus
-        />
-        {nameError && (
-          <span className="text-xs text-rose-400">{nameError}</span>
-        )}
-      </Field>
+    <Card>
+      <CardContent className="p-6">
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex flex-col gap-6"
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nombre *</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder="CI deploy bot"
+                      maxLength={NAME_MAX}
+                      autoFocus
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Identifica para qué se usará esta key (ej: CI/CD GitHub Actions,
+                    claude agent dev).
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-      <div className="flex flex-col gap-2 text-sm text-zinc-300">
-        <span className="flex items-center justify-between">
-          <span>
-            Scopes
-            <span className="text-rose-400"> *</span>
-          </span>
-          {scopes.length === 0 && (
-            <span className="text-xs text-zinc-500">
-              Selecciona al menos uno
-            </span>
-          )}
-        </span>
-        <ScopesGrid
-          selected={scopes}
-          onChange={setScopes}
-          disabled={loading}
-        />
-      </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <Label asLabel>Scopes *</Label>
+                {scopes.length === 0 && scopesTouched && (
+                  <span className="text-xs text-destructive">
+                    Seleccioná al menos uno
+                  </span>
+                )}
+              </div>
+              <ScopesGrid
+                selected={scopes}
+                onChange={(next) => {
+                  setScopes(next);
+                  setScopesTouched(true);
+                }}
+                disabled={submitting}
+              />
+            </div>
 
-      <Field
-        label="Expiracion"
-        hint="Una expiracion corta limita el blast radius si el secret se filtra."
-      >
-        <div className="flex flex-wrap gap-2">
-          {(Object.keys(PRESET_LABELS) as ExpiresPreset[]).map((p) => {
-            const active = preset === p;
-            return (
-              <button
-                key={p}
+            <FormField
+              control={form.control}
+              name="preset"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Expiración</FormLabel>
+                  <FormControl>
+                    <div className="flex flex-wrap gap-2">
+                      {(Object.keys(PRESET_LABELS) as ExpiresPreset[]).map((p) => {
+                        const active = field.value === p;
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => field.onChange(p)}
+                            className={cn(
+                              "rounded-full border px-3 py-1 text-xs transition",
+                              active
+                                ? "border-primary/60 bg-primary/15 text-primary"
+                                : "border-border bg-background text-foreground hover:bg-secondary",
+                            )}
+                          >
+                            {PRESET_LABELS[p]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </FormControl>
+                  <FormDescription>
+                    Una expiración corta limita el blast radius si el secret se filtra.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {preset === "custom" && (
+              <FormField
+                control={form.control}
+                name="customDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Fecha de expiración *</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="date"
+                        min={today}
+                        className="max-w-xs"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
                 type="button"
-                onClick={() => setPreset(p)}
-                className={`rounded-full border px-3 py-1 text-xs transition ${
-                  active
-                    ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-200"
-                    : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                }`}
+                variant="ghost"
+                onClick={() => router.push("/settings/api-keys")}
               >
-                {PRESET_LABELS[p]}
-              </button>
-            );
-          })}
-        </div>
-        {preset === "custom" && (
-          <input
-            type="date"
-            value={customDate}
-            min={today}
-            onChange={(e) => setCustomDate(e.target.value)}
-            className={`${inputClass} mt-2 max-w-xs`}
-          />
-        )}
-        {customError && (
-          <span className="text-xs text-rose-400">{customError}</span>
-        )}
-      </Field>
-
-      {error && (
-        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-          {error}
-        </p>
-      )}
-
-      <div className="flex justify-end gap-3">
-        <button
-          type="button"
-          onClick={() => router.push("/settings/api-keys")}
-          className="rounded-full border border-zinc-700 px-5 py-2 text-sm text-zinc-300 transition hover:bg-zinc-800"
-        >
-          Cancelar
-        </button>
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-50"
-        >
-          {loading ? "Creando..." : "Crear API key"}
-        </button>
-      </div>
-    </form>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Crear API key
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
   );
 }
 
-const inputClass =
-  "rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none focus:border-emerald-500";
-
-function Field({
-  label,
-  required,
-  hint,
+function Label({
   children,
+  asLabel,
 }: {
-  label: string;
-  required?: boolean;
-  hint?: string;
   children: React.ReactNode;
+  asLabel?: boolean;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-sm text-zinc-300">
-      <span>
-        {label}
-        {required && <span className="text-rose-400"> *</span>}
-      </span>
+    <span
+      className={cn(
+        "text-sm font-medium leading-none",
+        asLabel && "text-foreground",
+      )}
+    >
       {children}
-      {hint && <span className="text-xs text-zinc-500">{hint}</span>}
-    </label>
+    </span>
   );
 }

@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Card, CardContent } from "@/components/ui/card";
 import { api, ApiError } from "@/lib/api";
 import type {
   NoteDetail,
@@ -23,7 +26,6 @@ export function NotesList({
   const [summaries, setSummaries] = useState<NoteSummary[]>([]);
   const [details, setDetails] = useState<Record<string, NoteDetail>>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -36,7 +38,6 @@ export function NotesList({
         );
         if (cancelled) return;
         setSummaries(list);
-        // Pre-fetch full detail (small N en MVP).
         const fullDetails = await Promise.all(
           list.map((s) => api<NoteDetail>(`/api/notes/${s.id}`)),
         );
@@ -48,12 +49,14 @@ export function NotesList({
         setDetails(map);
       } catch (e) {
         if (cancelled) return;
-        if (e instanceof ApiError) {
-          const b = e.body as { message?: string } | undefined;
-          setError(b?.message ?? `Error ${e.status}`);
-        } else {
-          setError(e instanceof Error ? e.message : "Error desconocido");
-        }
+        const msg =
+          e instanceof ApiError
+            ? (e.body as { message?: string } | undefined)?.message ??
+              `Error ${e.status}`
+            : e instanceof Error
+              ? e.message
+              : "Error desconocido";
+        toast.error(msg);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -129,30 +132,33 @@ export function NotesList({
         onCreated={onCreated}
       />
       {loading && (
-        <p className="text-sm text-zinc-500">Cargando notas...</p>
-      )}
-      {error && (
-        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-          {error}
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Cargando notas...
         </p>
       )}
       {!loading && summaries.length === 0 && (
-        <p className="text-sm text-zinc-500">Aún no hay notas en este scope.</p>
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground">
+            Aún no hay notas en este scope.
+          </CardContent>
+        </Card>
       )}
       <div className="flex flex-col gap-4">
         {summaries.map((s) => {
           const detail = details[s.id];
           if (!detail) {
             return (
-              <article
-                key={s.id}
-                className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5"
-              >
-                <h3 className="text-lg font-semibold text-zinc-100">
-                  {s.title}
-                </h3>
-                <p className="mt-2 text-xs text-zinc-500">Cargando...</p>
-              </article>
+              <Card key={s.id}>
+                <CardContent className="p-5">
+                  <h3 className="text-lg font-semibold text-foreground">
+                    {s.title}
+                  </h3>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Cargando...
+                  </p>
+                </CardContent>
+              </Card>
             );
           }
           return (

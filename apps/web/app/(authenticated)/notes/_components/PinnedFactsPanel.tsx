@@ -1,7 +1,42 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  Check,
+  Copy,
+  Eye,
+  EyeOff,
+  Loader2,
+  Trash2,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type {
   NoteScopeType,
   PinnedFactDto,
@@ -22,11 +57,9 @@ export function PinnedFactsPanel({
   const [facts, setFacts] = useState<PinnedFactDto[]>([]);
   const [revealed, setRevealed] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   async function reload(reveal: boolean) {
     setLoading(true);
-    setError(null);
     try {
       const list = await api<PinnedFactDto[]>(
         `/api/pinned-facts/?scope_type=${scopeType}&scope_id=${encodeURIComponent(
@@ -36,12 +69,14 @@ export function PinnedFactsPanel({
       setFacts(list);
       setRevealed(reveal);
     } catch (e) {
-      if (e instanceof ApiError) {
-        const b = e.body as { message?: string } | undefined;
-        setError(b?.message ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string } | undefined)?.message ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -62,12 +97,14 @@ export function PinnedFactsPanel({
         setRevealed(false);
       } catch (e) {
         if (cancelled) return;
-        if (e instanceof ApiError) {
-          const b = e.body as { message?: string } | undefined;
-          setError(b?.message ?? `Error ${e.status}`);
-        } else {
-          setError(e instanceof Error ? e.message : "Error desconocido");
-        }
+        const msg =
+          e instanceof ApiError
+            ? (e.body as { message?: string } | undefined)?.message ??
+              `Error ${e.status}`
+            : e instanceof Error
+              ? e.message
+              : "Error desconocido";
+        toast.error(msg);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -97,16 +134,27 @@ export function PinnedFactsPanel({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm uppercase tracking-wider text-zinc-500">
+        <h2 className="text-sm uppercase tracking-wider text-muted-foreground">
           Pinned facts
         </h2>
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={() => reload(!revealed)}
-          className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
         >
-          {revealed ? "Ocultar secretos" : "Revelar secretos"}
-        </button>
+          {revealed ? (
+            <>
+              <EyeOff className="mr-2 h-3.5 w-3.5" />
+              Ocultar secretos
+            </>
+          ) : (
+            <>
+              <Eye className="mr-2 h-3.5 w-3.5" />
+              Revelar secretos
+            </>
+          )}
+        </Button>
       </div>
 
       <PinnedFactForm
@@ -115,14 +163,16 @@ export function PinnedFactsPanel({
         onUpserted={onUpserted}
       />
 
-      {loading && <p className="text-xs text-zinc-500">Cargando...</p>}
-      {error && (
-        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
-          {error}
+      {loading && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Cargando...
         </p>
       )}
       {!loading && facts.length === 0 && (
-        <p className="text-xs text-zinc-500">Sin facts fijados todavía.</p>
+        <p className="text-xs text-muted-foreground">
+          Sin facts fijados todavía.
+        </p>
       )}
       {facts.length > 0 && (
         <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -140,6 +190,19 @@ export function PinnedFactsPanel({
   );
 }
 
+const factSchema = z.object({
+  key: z
+    .string()
+    .min(1, "Requerido")
+    .max(128)
+    .regex(/^[A-Za-z0-9_.\-]+$/, "Solo alfanumérico, _, . o -"),
+  value: z.string().min(1, "Requerido"),
+  description: z.string().max(500).optional().or(z.literal("")),
+  isSecret: z.boolean(),
+});
+
+type FactFormValues = z.infer<typeof factSchema>;
+
 function PinnedFactForm({
   scopeType,
   scopeId,
@@ -149,23 +212,28 @@ function PinnedFactForm({
   scopeId: string;
   onUpserted: (fact: PinnedFactDto) => void;
 }) {
-  const [key, setKey] = useState("");
-  const [value, setValue] = useState("");
-  const [description, setDescription] = useState("");
-  const [isSecret, setIsSecret] = useState(true);
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
+  const form = useForm<FactFormValues>({
+    resolver: zodResolver(factSchema),
+    defaultValues: {
+      key: "",
+      value: "",
+      description: "",
+      isSecret: true,
+    },
+  });
+
+  const isSecret = form.watch("isSecret");
+
+  function onSubmit(values: FactFormValues) {
     const payload: UpsertPinnedFactRequest = {
       scopeType,
       scopeId,
-      key,
-      value,
-      isSecret,
-      description: description.trim() ? description : undefined,
+      key: values.key,
+      value: values.value,
+      isSecret: values.isSecret,
+      description: values.description?.trim() ? values.description : undefined,
     };
     startTransition(async () => {
       try {
@@ -173,73 +241,120 @@ function PinnedFactForm({
           method: "PUT",
           body: JSON.stringify(payload),
         });
+        toast.success("Fact guardado");
         onUpserted(fact);
-        setKey("");
-        setValue("");
-        setDescription("");
+        form.reset({
+          key: "",
+          value: "",
+          description: "",
+          isSecret: values.isSecret,
+        });
       } catch (e) {
-        if (e instanceof ApiError) {
-          const b = e.body as { message?: string } | undefined;
-          setError(b?.message ?? `Error ${e.status}`);
-        } else {
-          setError(e instanceof Error ? e.message : "Error desconocido");
-        }
+        const msg =
+          e instanceof ApiError
+            ? (e.body as { message?: string } | undefined)?.message ??
+              `Error ${e.status}`
+            : e instanceof Error
+              ? e.message
+              : "Error desconocido";
+        toast.error(msg);
       }
     });
   }
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="grid grid-cols-1 gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4 md:grid-cols-[1fr_1fr_auto]"
-    >
-      <input
-        type="text"
-        placeholder="key (ej. admin_password)"
-        value={key}
-        onChange={(e) => setKey(e.target.value)}
-        className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 font-mono text-sm text-zinc-100 outline-none focus:border-emerald-500"
-        required
-        maxLength={128}
-        pattern="[A-Za-z0-9_.\-]+"
-      />
-      <input
-        type={isSecret ? "password" : "text"}
-        placeholder="valor"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 font-mono text-sm text-zinc-100 outline-none focus:border-emerald-500"
-        required
-      />
-      <button
-        type="submit"
-        disabled={isPending || !key.trim()}
-        className="rounded-full bg-emerald-500 px-4 py-1.5 text-xs font-medium text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
-      >
-        {isPending ? "Guardando..." : "Guardar"}
-      </button>
-      <input
-        type="text"
-        placeholder="descripción (opcional)"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-emerald-500 md:col-span-2"
-        maxLength={500}
-      />
-      <label className="flex items-center gap-2 text-xs text-zinc-400">
-        <input
-          type="checkbox"
-          checked={isSecret}
-          onChange={(e) => setIsSecret(e.target.checked)}
-        />
-        Es secreto
-      </label>
-      {error && (
-        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300 md:col-span-3">
-          {error}
-        </p>
-      )}
-    </form>
+    <Card>
+      <CardContent className="p-4">
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto]"
+          >
+            <FormField
+              control={form.control}
+              name="key"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="sr-only">Key</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder="key (ej. admin_password)"
+                      maxLength={128}
+                      className="font-mono text-sm"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="value"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="sr-only">Valor</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      type={isSecret ? "password" : "text"}
+                      placeholder="valor"
+                      className="font-mono text-sm"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit" disabled={isPending}>
+              {isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Guardar
+            </Button>
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem className="md:col-span-2">
+                  <FormLabel className="sr-only">Descripción</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder="descripción (opcional)"
+                      maxLength={500}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="isSecret"
+              render={({ field }) => (
+                <FormItem className="flex items-center gap-2 space-y-0">
+                  <FormControl>
+                    <Checkbox
+                      id="pf-is-secret"
+                      checked={field.value}
+                      onCheckedChange={(v) => field.onChange(v === true)}
+                    />
+                  </FormControl>
+                  <Label
+                    htmlFor="pf-is-secret"
+                    className="cursor-pointer text-xs text-muted-foreground"
+                  >
+                    Es secreto
+                  </Label>
+                </FormItem>
+              )}
+            />
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -253,18 +368,19 @@ function PinnedFactRow({
   onDeleted: (id: string) => void;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
-  function remove() {
-    if (!confirm(`¿Eliminar el fact "${fact.key}"?`)) {
-      return;
-    }
+  function confirmRemove() {
     startTransition(async () => {
       try {
         await api<void>(`/api/pinned-facts/${fact.id}`, { method: "DELETE" });
+        toast.success(`Fact "${fact.key}" eliminado`);
         onDeleted(fact.id);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Error desconocido");
+        toast.error(e instanceof Error ? e.message : "Error desconocido");
+      } finally {
+        setDeleteOpen(false);
       }
     });
   }
@@ -272,47 +388,107 @@ function PinnedFactRow({
   async function copyValue() {
     try {
       await navigator.clipboard.writeText(fact.value);
+      setCopied(true);
+      toast.success("Valor copiado");
+      setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Silencio: clipboard puede fallar en HTTP sin contexto seguro.
+      toast.error("No se pudo copiar; copialo a mano.");
     }
   }
 
   const masked = fact.isSecret && !revealed;
 
   return (
-    <li className="flex flex-col gap-1 rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2">
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-xs text-zinc-200">{fact.key}</span>
-        <div className="flex gap-2 text-[10px]">
-          {fact.isSecret && (
-            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-amber-400">
-              secret
+    <li className="list-none">
+      <Card>
+        <CardContent className="flex flex-col gap-1 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-mono text-xs text-foreground">
+              {fact.key}
             </span>
+            <div className="flex items-center gap-2 text-[10px]">
+              {fact.isSecret && (
+                <Badge
+                  variant="outline"
+                  className="border-warning/40 bg-warning/10 text-warning"
+                >
+                  secret
+                </Badge>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={copyValue}
+                disabled={masked}
+                title={masked ? "Revelar primero" : "Copiar"}
+                className="h-7 px-2 text-xs"
+              >
+                {copied ? (
+                  <>
+                    <Check className="mr-1 h-3 w-3" />
+                    Copiado
+                  </>
+                ) : (
+                  <>
+                    <Copy className="mr-1 h-3 w-3" />
+                    Copiar
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setDeleteOpen(true)}
+                disabled={isPending}
+                className={cn(
+                  "h-7 px-2 text-xs text-destructive",
+                  "hover:bg-destructive/10 hover:text-destructive",
+                )}
+              >
+                <Trash2 className="mr-1 h-3 w-3" />
+                Eliminar
+              </Button>
+            </div>
+          </div>
+          <div className="break-all font-mono text-xs text-muted-foreground">
+            {fact.value}
+          </div>
+          {fact.description && (
+            <div className="text-[10px] text-muted-foreground">
+              {fact.description}
+            </div>
           )}
-          <button
-            type="button"
-            onClick={copyValue}
-            className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-300 hover:bg-zinc-800"
-            disabled={masked}
-            title={masked ? "Revelar primero" : "Copiar"}
-          >
-            Copiar
-          </button>
-          <button
-            type="button"
-            onClick={remove}
-            disabled={isPending}
-            className="rounded-full border border-rose-500/40 px-2 py-0.5 text-rose-300 hover:bg-rose-500/10"
-          >
-            Eliminar
-          </button>
-        </div>
-      </div>
-      <div className="break-all font-mono text-xs text-zinc-500">{fact.value}</div>
-      {fact.description && (
-        <div className="text-[10px] text-zinc-600">{fact.description}</div>
-      )}
-      {error && <div className="text-[10px] text-rose-400">{error}</div>}
+        </CardContent>
+      </Card>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar fact "{fact.key}"</DialogTitle>
+            <DialogDescription>
+              Esta acción no se puede deshacer. Si algún módulo lo está
+              referenciando, dejará de resolverse.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmRemove}
+              disabled={isPending}
+            >
+              {isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </li>
   );
 }

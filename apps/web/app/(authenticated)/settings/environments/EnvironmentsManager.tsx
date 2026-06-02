@@ -1,7 +1,49 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { ApiError, api } from "@/lib/api";
 import type {
   CreateEnvironmentDefinitionRequest,
@@ -17,106 +59,28 @@ export function EnvironmentsManager({
   initial: EnvironmentDefinitionDto[];
 }) {
   const router = useRouter();
-  // El estado local refleja el orden visualmente; las llamadas a la API se
-  // confirman con router.refresh() para volver a leer la fuente de verdad.
   const sortedInitial = useMemo(
     () => [...initial].sort((a, b) => a.order - b.order),
     [initial],
   );
   const [items, setItems] = useState<EnvironmentDefinitionDto[]>(sortedInitial);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] =
+    useState<EnvironmentDefinitionDto | null>(null);
 
-  // ---- Formulario inline ----
-  const [newSlug, setNewSlug] = useState("");
-  const [newDisplay, setNewDisplay] = useState("");
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  useEffect(() => {
+    setItems(sortedInitial);
+  }, [sortedInitial]);
 
-  const slugError = useMemo(() => {
-    const trimmed = newSlug.trim().toLowerCase();
-    if (!trimmed) return null;
-    if (!SLUG_RE.test(trimmed)) {
-      return "Slug lowercase alfanumerico con guiones (2-32 chars, sin guion al inicio/fin).";
-    }
-    if (items.some((i) => i.slug === trimmed)) {
-      return "Ya existe un ambiente con ese slug.";
-    }
-    return null;
-  }, [newSlug, items]);
-
-  const canCreate =
-    !creating &&
-    newSlug.trim().length > 0 &&
-    !slugError &&
-    newDisplay.trim().length > 0;
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!canCreate) return;
-    setCreateError(null);
-    setCreating(true);
-    try {
-      const body: CreateEnvironmentDefinitionRequest = {
-        slug: newSlug.trim().toLowerCase(),
-        displayName: newDisplay.trim(),
-        order: null,
-      };
-      await api("/api/settings/environments/", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      setNewSlug("");
-      setNewDisplay("");
-      router.refresh();
-    } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as
-          | { message?: string; detail?: string }
-          | undefined;
-        setCreateError(
-          body?.message ?? body?.detail ?? `Error ${e.status}`,
-        );
-      } else {
-        setCreateError(e instanceof Error ? e.message : "Error desconocido");
-      }
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function handleDelete(id: string, slug: string) {
-    const ok = window.confirm(
-      `Borrar el ambiente "${slug}"?\n\nSi algun proyecto lo referencia, esos referers quedaran apuntando a un slug invalido.`,
-    );
-    if (!ok) return;
-    setActionError(null);
-    setPending(id);
-    try {
-      await api(`/api/settings/environments/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
-      router.refresh();
-    } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as
-          | { message?: string; detail?: string }
-          | undefined;
-        setActionError(
-          body?.message ?? body?.detail ?? `Error ${e.status}`,
-        );
-      } else {
-        setActionError(e instanceof Error ? e.message : "Error desconocido");
-      }
-    } finally {
-      setPending(null);
-    }
-  }
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   async function applyReorder(nextOrder: EnvironmentDefinitionDto[]) {
-    setActionError(null);
     setPending("reorder");
-    // Optimistic update: la UI ya refleja el nuevo orden mientras llamamos.
     setItems(nextOrder);
     try {
       const body: ReorderEnvironmentDefinitionsRequest = {
@@ -126,205 +90,336 @@ export function EnvironmentsManager({
         method: "POST",
         body: JSON.stringify(body),
       });
+      toast.success("Orden actualizado");
       router.refresh();
     } catch (e) {
-      // Si falla, revertimos visualmente al orden previo.
       setItems(sortedInitial);
-      if (e instanceof ApiError) {
-        const body = e.body as
-          | { message?: string; detail?: string }
-          | undefined;
-        setActionError(
-          body?.message ?? body?.detail ?? `Error ${e.status}`,
-        );
-      } else {
-        setActionError(e instanceof Error ? e.message : "Error desconocido");
-      }
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string; detail?: string } | undefined)
+              ?.message ??
+            (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
     } finally {
       setPending(null);
     }
   }
 
-  function moveUp(index: number) {
-    if (index <= 0) return;
-    const next = [...items];
-    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+  function onDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = items.findIndex((i) => i.id === active.id);
+    const newIndex = items.findIndex((i) => i.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const next = arrayMove(items, oldIndex, newIndex);
     void applyReorder(next);
   }
 
-  function moveDown(index: number) {
-    if (index >= items.length - 1) return;
-    const next = [...items];
-    [next[index], next[index + 1]] = [next[index + 1], next[index]];
-    void applyReorder(next);
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setPending(target.id);
+    try {
+      await api(`/api/settings/environments/${encodeURIComponent(target.id)}`, {
+        method: "DELETE",
+      });
+      toast.success(`Ambiente "${target.slug}" eliminado`);
+      router.refresh();
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string; detail?: string } | undefined)
+              ?.message ??
+            (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
+    } finally {
+      setPending(null);
+      setDeleteTarget(null);
+    }
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40">
-        {items.length === 0 ? (
-          <div className="p-12 text-center">
-            <h2 className="text-xl font-semibold text-zinc-100">
-              Aun sin ambientes
+      {items.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 p-12 text-center">
+            <h2 className="text-xl font-semibold text-foreground">
+              Aún sin ambientes
             </h2>
-            <p className="mt-2 text-sm text-zinc-500">
-              Crea el primero abajo. La convencion es
-              {" "}<span className="font-mono">preview</span> → <span className="font-mono">test</span>{" "}
-              → <span className="font-mono">staging</span> →{" "}
+            <p className="text-sm text-muted-foreground">
+              Creá el primero abajo. La convención es{" "}
+              <span className="font-mono">preview</span> →{" "}
+              <span className="font-mono">test</span> →{" "}
+              <span className="font-mono">staging</span> →{" "}
               <span className="font-mono">production</span>.
             </p>
-          </div>
-        ) : (
-          <table className="w-full text-left text-sm">
-            <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
-              <tr>
-                <th className="px-4 py-3 w-16">Orden</th>
-                <th className="px-4 py-3">Slug</th>
-                <th className="px-4 py-3">Display</th>
-                <th className="px-4 py-3 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800">
-              {items.map((env, i) => {
-                const isPending = pending === env.id || pending === "reorder";
-                return (
-                  <tr
-                    key={env.id}
-                    className="transition hover:bg-zinc-900/60"
-                  >
-                    <td className="px-4 py-3 align-top">
-                      <div className="flex flex-col gap-1">
-                        <button
-                          type="button"
-                          onClick={() => moveUp(i)}
-                          disabled={i === 0 || isPending}
-                          aria-label="Mover arriba"
-                          className="rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-30"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveDown(i)}
-                          disabled={i === items.length - 1 || isPending}
-                          aria-label="Mover abajo"
-                          className="rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-30"
-                        >
-                          ↓
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <span className="rounded border border-zinc-800 bg-zinc-950 px-2 py-0.5 font-mono text-[11px] text-zinc-200">
-                        {env.slug}
-                      </span>
-                      <div className="mt-0.5 font-mono text-[10px] text-zinc-500">
-                        {env.id}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 align-top text-zinc-100">
-                      {env.displayName}
-                    </td>
-                    <td className="px-4 py-3 text-right align-top">
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(env.id, env.slug)}
-                        disabled={isPending}
-                        className="rounded-full border border-rose-500/30 px-3 py-1 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
-                      >
-                        {pending === env.id ? "Borrando..." : "Borrar"}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      {actionError && (
-        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-          {actionError}
-        </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={onDragEnd}
+        >
+          <SortableContext
+            items={items.map((i) => i.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="flex flex-col gap-2">
+              {items.map((env) => (
+                <EnvironmentRow
+                  key={env.id}
+                  env={env}
+                  busy={pending === env.id || pending === "reorder"}
+                  onDelete={() => setDeleteTarget(env)}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
 
-      <form
-        onSubmit={handleCreate}
-        className="flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5"
+      <NewEnvironmentForm
+        existingSlugs={items.map((i) => i.slug)}
+        onCreated={() => router.refresh()}
+      />
+
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
       >
-        <h3 className="text-sm font-semibold text-zinc-100">
-          Nuevo ambiente
-        </h3>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Field label="Slug" required>
-            <input
-              type="text"
-              value={newSlug}
-              onChange={(e) => setNewSlug(e.target.value.toLowerCase())}
-              maxLength={32}
-              placeholder="preview"
-              className={`${inputClass} font-mono text-xs`}
-              required
-            />
-            {slugError && (
-              <span className="text-[11px] text-rose-400">{slugError}</span>
-            )}
-          </Field>
-          <Field label="Display name" required>
-            <input
-              type="text"
-              value={newDisplay}
-              onChange={(e) => setNewDisplay(e.target.value)}
-              maxLength={100}
-              placeholder="Preview"
-              className={inputClass}
-              required
-            />
-          </Field>
-          <div className="flex items-end">
-            <button
-              type="submit"
-              disabled={!canCreate}
-              className="w-full rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-50"
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Borrar ambiente "{deleteTarget?.slug}"
+            </DialogTitle>
+            <DialogDescription>
+              Si algún proyecto lo referencia, esos referers quedarán
+              apuntando a un slug inválido. Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setDeleteTarget(null)}
+              disabled={pending !== null}
             >
-              {creating ? "Creando..." : "Crear ambiente"}
-            </button>
-          </div>
-        </div>
-        {createError && (
-          <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-            {createError}
-          </p>
-        )}
-        <p className="text-xs text-zinc-500">
-          Aethra aplica order = max(order) + 1 automaticamente; despues puedes
-          reordenarlo con las flechas.
-        </p>
-      </form>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={pending !== null}
+            >
+              {pending === deleteTarget?.id ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Borrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-const inputClass =
-  "rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none focus:border-emerald-500";
-
-function Field({
-  label,
-  required,
-  children,
+function EnvironmentRow({
+  env,
+  busy,
+  onDelete,
 }: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
+  env: EnvironmentDefinitionDto;
+  busy: boolean;
+  onDelete: () => void;
 }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: env.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   return (
-    <label className="flex flex-col gap-1 text-sm text-zinc-300">
-      <span>
-        {label}
-        {required && <span className="text-rose-400"> *</span>}
-      </span>
-      {children}
-    </label>
+    <li ref={setNodeRef} style={style} className="list-none">
+      <Card
+        className={cn(
+          "border-border bg-card transition-colors hover:bg-secondary/40",
+          isDragging && "z-10 shadow-md",
+        )}
+      >
+        <CardContent className="flex items-center gap-3 p-3">
+          <button
+            type="button"
+            className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground active:cursor-grabbing"
+            aria-label="Arrastrar para reordenar"
+            disabled={busy}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-5 w-5" />
+          </button>
+          <div className="flex flex-1 items-center gap-3">
+            <span className="rounded border border-border bg-muted px-2 py-0.5 font-mono text-[11px] text-foreground">
+              {env.slug}
+            </span>
+            <span className="text-sm text-foreground">{env.displayName}</span>
+            <span className="ml-auto hidden font-mono text-[10px] text-muted-foreground md:inline">
+              {env.id}
+            </span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onDelete}
+            disabled={busy}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="mr-1 h-3.5 w-3.5" />
+            Borrar
+          </Button>
+        </CardContent>
+      </Card>
+    </li>
+  );
+}
+
+function NewEnvironmentForm({
+  existingSlugs,
+  onCreated,
+}: {
+  existingSlugs: string[];
+  onCreated: () => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+
+  const schema = z.object({
+    slug: z
+      .string()
+      .min(1, "Requerido")
+      .regex(
+        SLUG_RE,
+        "Slug lowercase alfanumérico con guiones (2-32 chars, sin guión al inicio/fin).",
+      )
+      .refine((s) => !existingSlugs.includes(s.trim().toLowerCase()), {
+        message: "Ya existe un ambiente con ese slug.",
+      }),
+    displayName: z.string().min(1, "Requerido").max(100),
+  });
+
+  type FormValues = z.infer<typeof schema>;
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { slug: "", displayName: "" },
+  });
+
+  async function onSubmit(values: FormValues) {
+    setSubmitting(true);
+    try {
+      const body: CreateEnvironmentDefinitionRequest = {
+        slug: values.slug.trim().toLowerCase(),
+        displayName: values.displayName.trim(),
+        order: null,
+      };
+      await api("/api/settings/environments/", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      toast.success("Ambiente creado");
+      form.reset({ slug: "", displayName: "" });
+      onCreated();
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string; detail?: string } | undefined)
+              ?.message ??
+            (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4 p-5">
+        <h3 className="text-sm font-semibold text-foreground">
+          Nuevo ambiente
+        </h3>
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto]"
+          >
+            <FormField
+              control={form.control}
+              name="slug"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Slug *</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      onChange={(e) =>
+                        field.onChange(e.target.value.toLowerCase())
+                      }
+                      maxLength={32}
+                      placeholder="preview"
+                      className="font-mono text-xs"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="displayName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Display name *</FormLabel>
+                  <FormControl>
+                    <Input {...field} maxLength={100} placeholder="Preview" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="flex items-end">
+              <Button type="submit" disabled={submitting} className="w-full">
+                {submitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Crear ambiente
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground md:col-span-3">
+              Aethra aplica order = max(order) + 1 automáticamente; después
+              podés reordenarlo arrastrando con el handle.
+            </p>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
   );
 }

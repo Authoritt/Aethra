@@ -1,6 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
+import { ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
 /**
  * Catalogo de scopes disponibles (mantener alineado con backend Modules.Identity).
@@ -117,7 +122,6 @@ export function ScopesGrid({ selected, onChange, disabled }: ScopesGridProps) {
       return;
     }
     if (isAdmin) {
-      // Si admin estaba activo, lo reemplazamos por el scope individual.
       onChange([scope]);
       return;
     }
@@ -150,110 +154,130 @@ export function ScopesGrid({ selected, onChange, disabled }: ScopesGridProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={selectAll}
           disabled={disabled || allSelected}
-          className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-40"
         >
           Seleccionar todos
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={selectReadOnly}
           disabled={disabled || readOnlyMatches}
-          className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-40"
         >
           Solo lectura
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={clear}
           disabled={disabled || selected.length === 0}
-          className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400 transition hover:bg-zinc-800 disabled:opacity-40"
         >
           Limpiar
-        </button>
-        <span className="ml-auto text-xs text-zinc-500">
+        </Button>
+        <span className="ml-auto text-xs text-muted-foreground">
           {isAdmin
             ? "Admin total (*)"
             : `${selected.length}/${ALL_NON_ADMIN_SCOPES.length} scopes`}
         </span>
       </div>
 
-      <label
-        className={`flex items-start gap-3 rounded-xl border p-3 text-sm transition ${
+      <Card
+        className={cn(
+          "transition-colors",
           isAdmin
-            ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
-            : "border-zinc-800 bg-zinc-950/40 text-zinc-300"
-        }`}
+            ? "border-warning/40 bg-warning/10"
+            : "border-border bg-card",
+        )}
       >
-        <input
-          type="checkbox"
-          checked={isAdmin}
-          onChange={toggleAdmin}
-          disabled={disabled}
-          className="mt-0.5 size-4 accent-amber-500"
-        />
-        <span className="flex flex-col gap-0.5">
-          <span className="font-medium">
-            Admin total <span className="font-mono">(*)</span>
-          </span>
-          <span className="text-xs text-amber-200/80">
-            Concede acceso a todos los endpoints actuales y futuros. Usa con
-            moderacion y solo para integraciones de infraestructura.
-          </span>
-        </span>
-      </label>
+        <CardContent className="flex items-start gap-3 p-4">
+          <Checkbox
+            checked={isAdmin}
+            onCheckedChange={toggleAdmin}
+            disabled={disabled}
+            className="mt-0.5"
+            aria-label="Admin total"
+          />
+          <div className="flex flex-1 flex-col gap-0.5">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <ShieldAlert
+                className={cn(
+                  "h-4 w-4",
+                  isAdmin ? "text-warning" : "text-muted-foreground",
+                )}
+              />
+              Admin total <span className="font-mono">(*)</span>
+            </div>
+            <p
+              className={cn(
+                "text-xs",
+                isAdmin ? "text-warning-foreground/80" : "text-muted-foreground",
+              )}
+            >
+              Concede acceso a todos los endpoints actuales y futuros. Usá con
+              moderación y solo para integraciones de infraestructura.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <fieldset
         disabled={disabled || isAdmin}
-        className={`grid grid-cols-1 gap-3 md:grid-cols-2 ${
-          isAdmin ? "opacity-40" : ""
-        }`}
+        className={cn(
+          "grid grid-cols-1 gap-3 md:grid-cols-2",
+          isAdmin && "opacity-40",
+        )}
       >
         {SCOPE_CATALOG.map((cat) => (
-          <div
-            key={cat.category}
-            className="flex flex-col gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4"
-          >
-            <header>
-              <h4 className="text-sm font-semibold text-zinc-100">
-                {cat.category}
-              </h4>
-              <p className="text-[11px] text-zinc-500">{cat.description}</p>
-            </header>
-            <div className="flex flex-col gap-1.5">
-              {cat.scopes.map((s) => {
-                const checked = set.has(s.value);
-                return (
-                  <label
-                    key={s.value}
-                    className={`flex items-start gap-2 rounded-lg border p-2 text-xs transition ${
-                      checked
-                        ? "border-emerald-500/40 bg-emerald-500/5"
-                        : "border-zinc-800 bg-zinc-950/40 hover:border-zinc-700"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggle(s.value)}
-                      className="mt-0.5 size-3.5 accent-emerald-500"
-                    />
-                    <span className="flex min-w-0 flex-col">
-                      <span className="font-mono text-[11px] text-zinc-100">
-                        {s.value}
+          <Card key={cat.category} className="bg-card">
+            <CardContent className="flex flex-col gap-2 p-4">
+              <header>
+                <h4 className="text-sm font-semibold text-foreground">
+                  {cat.category}
+                </h4>
+                <p className="text-[11px] text-muted-foreground">
+                  {cat.description}
+                </p>
+              </header>
+              <div className="flex flex-col gap-1.5">
+                {cat.scopes.map((s) => {
+                  const checked = set.has(s.value);
+                  return (
+                    <label
+                      key={s.value}
+                      className={cn(
+                        "flex cursor-pointer items-start gap-2 rounded-md border p-2 text-xs transition-colors",
+                        checked
+                          ? "border-primary/40 bg-primary/5"
+                          : "border-border bg-background hover:border-border/80 hover:bg-secondary/40",
+                      )}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggle(s.value)}
+                        className="mt-0.5"
+                        aria-label={s.value}
+                      />
+                      <span className="flex min-w-0 flex-col">
+                        <span className="font-mono text-[11px] text-foreground">
+                          {s.value}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {s.description}
+                        </span>
                       </span>
-                      <span className="text-[10px] text-zinc-500">
-                        {s.description}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </fieldset>
     </div>
