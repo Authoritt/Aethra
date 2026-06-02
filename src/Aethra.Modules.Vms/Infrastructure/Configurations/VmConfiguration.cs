@@ -44,6 +44,19 @@ internal sealed class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.CpuCores).HasColumnName("cpu_cores");
         builder.Property(v => v.TotalMemoryBytes).HasColumnName("total_memory_bytes");
 
+        // F11.4 — campos de instalación remota del satélite.
+        builder.Property(v => v.SshCredentialsCipher).HasColumnName("ssh_credentials_cipher");
+        builder.Property(v => v.InstallStatus)
+            .HasColumnName("install_status")
+            .HasConversion<string>()
+            .HasMaxLength(24)
+            .IsRequired();
+        builder.Property(v => v.LastSeenAt).HasColumnName("last_seen_at");
+        builder.Property(v => v.InstallLog)
+            .HasColumnName("install_log")
+            .HasColumnType("text")
+            .IsRequired();
+
         builder.OwnsOne(v => v.Satellite, s =>
         {
             s.Property(x => x.Id)

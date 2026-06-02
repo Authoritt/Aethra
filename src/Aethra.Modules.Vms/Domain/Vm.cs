@@ -9,6 +9,9 @@ namespace Aethra.Modules.Vms.Domain;
 /// </summary>
 public sealed class Vm : AggregateRoot<VmId>
 {
+    /// <summary>Máximo de líneas conservadas en <see cref="InstallLog"/> (rolling buffer).</summary>
+    public const int MaxInstallLogLines = 200;
+
     public Slug Slug { get; private set; }
     public string Name { get; private set; }
     public string? PublicIp { get; private set; }
@@ -29,6 +32,20 @@ public sealed class Vm : AggregateRoot<VmId>
     public int? CpuCores { get; private set; }
     public long? TotalMemoryBytes { get; private set; }
 
+    // F11.4 — Auto-instalación del satélite vía SSH.
+    /// <summary>
+    /// Credenciales SSH cifradas (DataProtection purpose <c>aethra-vm-ssh-creds</c>) para
+    /// re-instalar / reparar el satélite sin pedirle al usuario que las vuelva a tipear.
+    /// El plaintext es un JSON con <c>{ host, port, user, authMethod, value }</c>.
+    /// </summary>
+    public byte[]? SshCredentialsCipher { get; private set; }
+    /// <summary>Estado de instalación del satélite. Default <see cref="InstallStatus.NotInstalled"/>.</summary>
+    public InstallStatus InstallStatus { get; private set; }
+    /// <summary>Último heartbeat del satélite (handshake o métricas). Lo usa el provisioner para verificar éxito.</summary>
+    public DateTimeOffset? LastSeenAt { get; private set; }
+    /// <summary>Log append-only del último intento de instalación. Rolling buffer de <see cref="MaxInstallLogLines"/> líneas.</summary>
+    public string InstallLog { get; private set; }
+
     private Vm(VmId id, Slug slug, string name, Satellite satellite, DateTimeOffset now) : base(id)
     {
         Slug = slug;
@@ -37,6 +54,8 @@ public sealed class Vm : AggregateRoot<VmId>
         Status = VmStatus.Pending;
         CreatedAt = now;
         UpdatedAt = now;
+        InstallStatus = InstallStatus.NotInstalled;
+        InstallLog = string.Empty;
     }
 
     /// <summary>
@@ -82,6 +101,13 @@ public sealed class Vm : AggregateRoot<VmId>
         Satellite.RecordHandshake(agentVersion, now);
         Status = VmStatus.Connected;
         LastConnectedAt = now;
+        LastSeenAt = now;
+        // Si el satélite hace handshake, la instalación se considera exitosa
+        // (transición desde Installing → Installed para cerrar el flow del provisioner).
+        if (InstallStatus is InstallStatus.Installing or InstallStatus.NotInstalled)
+        {
+            InstallStatus = InstallStatus.Installed;
+        }
         UpdatedAt = now;
         Raise(new SatelliteConnectedDomainEvent(Id, Satellite.Id, hostname, kernelVersion, cpuModel, cpuCores,
             totalMemoryBytes, agentVersion));
@@ -93,6 +119,11 @@ public sealed class Vm : AggregateRoot<VmId>
         LastDisconnectedAt = now;
         UpdatedAt = now;
         Raise(new SatelliteDisconnectedDomainEvent(Id, Satellite.Id, reason));
+    }
+
+    public void RecordHeartbeat(DateTimeOffset now)
+    {
+        LastSeenAt = now;
     }
 
     public void UpdateMetadata(string? name, string? publicIp, string? privateIp, string? description,
@@ -108,6 +139,68 @@ public sealed class Vm : AggregateRoot<VmId>
         UpdatedAt = now;
     }
 
+    /// <summary>Persiste credenciales SSH cifradas para futuros reinstalls.</summary>
+    public void SetSshCredentials(byte[]? cipher, DateTimeOffset now)
+    {
+        SshCredentialsCipher = cipher;
+        UpdatedAt = now;
+    }
+
+    /// <summary>Cambia el <see cref="InstallStatus"/> y deja constancia en el log.</summary>
+    public void BeginInstall(DateTimeOffset now)
+    {
+        InstallStatus = InstallStatus.Installing;
+        UpdatedAt = now;
+        ClearInstallLog();
+        AppendInstallLog($"[{now:HH:mm:ss}] install_started");
+    }
+
+    public void MarkInstalled(DateTimeOffset now)
+    {
+        InstallStatus = InstallStatus.Installed;
+        UpdatedAt = now;
+        AppendInstallLog($"[{now:HH:mm:ss}] install_completed");
+    }
+
+    public void MarkInstallFailed(string errorCode, string errorMessage, DateTimeOffset now)
+    {
+        InstallStatus = InstallStatus.Failed;
+        UpdatedAt = now;
+        AppendInstallLog($"[{now:HH:mm:ss}] install_failed code={errorCode} message={errorMessage}");
+    }
+
+    /// <summary>
+    /// Append una línea al rolling buffer de log. Si pasamos del máximo,
+    /// dropeamos las más viejas para conservar tamaño acotado.
+    /// </summary>
+    public void AppendInstallLog(string line)
+    {
+        if (string.IsNullOrEmpty(line))
+        {
+            return;
+        }
+        // Normaliza saltos y limita el largo individual de cada línea (8KB es razonable).
+        var safe = line.Replace("\r\n", "\n").Replace("\r", "\n").Trim('\n');
+        if (safe.Length > 8 * 1024)
+        {
+            safe = safe[..(8 * 1024)] + "…[truncated]";
+        }
+        var combined = string.IsNullOrEmpty(InstallLog) ? safe : InstallLog + "\n" + safe;
+        var lines = combined.Split('\n');
+        if (lines.Length > MaxInstallLogLines)
+        {
+            lines = lines[(lines.Length - MaxInstallLogLines)..];
+        }
+        InstallLog = string.Join('\n', lines);
+    }
+
+    public void ClearInstallLog() => InstallLog = string.Empty;
+
     // EF Core
-    private Vm() : base() { Name = string.Empty; Satellite = default!; }
+    private Vm() : base()
+    {
+        Name = string.Empty;
+        Satellite = default!;
+        InstallLog = string.Empty;
+    }
 }
