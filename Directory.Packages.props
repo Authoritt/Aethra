@@ -36,7 +36,7 @@
     <PackageVersion Include="Polly.Extensions" Version="8.5.0" />
   </ItemGroup>
   <ItemGroup Label="Reverse proxy y TLS">
-    <PackageVersion Include="Yarp.ReverseProxy" Version="2.2.0" />
+    <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
     <PackageVersion Include="Certes" Version="3.0.4" />
   </ItemGroup>
   <ItemGroup Label="Docker / Git / Servicios externos">
