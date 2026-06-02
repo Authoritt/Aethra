@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { Globe, Key, Lock, Plug2, Settings, User } from "lucide-react";
+import { Globe, Key, Lock, Plug2, Settings, User, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -12,6 +12,8 @@ export const dynamic = "force-dynamic";
 
 interface MeResponse {
   email: string;
+  displayName: string | null;
+  roles: string[];
   scopes: string[];
 }
 
@@ -43,6 +45,14 @@ export default async function SettingsPage() {
     available?: boolean;
     comingSoon?: boolean;
   }> = [
+    {
+      href: "/settings/users",
+      title: "Usuarios y roles",
+      description:
+        "Cuentas humanas con acceso a Aethra y los roles RBAC que definen sus permisos.",
+      icon: Users,
+      available: true,
+    },
     {
       href: "/settings/api-keys",
       title: "API keys",
@@ -146,13 +156,38 @@ export default async function SettingsPage() {
           <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
             <div>
               <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Email
+                Usuario
               </dt>
-              <dd className="mt-0.5 font-mono">{me.email}</dd>
+              <dd className="mt-0.5">
+                <div className="font-medium">{me.displayName ?? me.email}</div>
+                <div className="font-mono text-[11px] text-muted-foreground">
+                  {me.email}
+                </div>
+              </dd>
             </div>
             <div>
               <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Scopes
+                Roles
+              </dt>
+              <dd className="mt-0.5 flex flex-wrap gap-1">
+                {me.roles.length === 0 ? (
+                  <span className="text-muted-foreground">(sin roles)</span>
+                ) : (
+                  me.roles.map((r) => (
+                    <Badge
+                      key={r}
+                      variant={r === "admin" ? "warning" : "outline"}
+                      className="text-[10px]"
+                    >
+                      {r}
+                    </Badge>
+                  ))
+                )}
+              </dd>
+            </div>
+            <div className="md:col-span-2">
+              <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Scopes ({me.scopes.length})
               </dt>
               <dd className="mt-0.5 flex flex-wrap gap-1">
                 {me.scopes.length === 0 ? (

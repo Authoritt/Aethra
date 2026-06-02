@@ -57,7 +57,10 @@ const navGroups: NavGroup[] = [
   },
   {
     label: "Configuración",
-    items: [{ href: "/settings", label: "Settings", icon: Settings }],
+    items: [
+      { href: "/settings", label: "Settings", icon: Settings },
+      { href: "/settings/users", label: "Users", icon: Users },
+    ],
   },
 ];
 

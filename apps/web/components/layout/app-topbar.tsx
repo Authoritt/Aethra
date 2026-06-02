@@ -37,6 +37,8 @@ interface AppTopbarProps {
 
 interface MeResponse {
   email: string;
+  displayName: string | null;
+  roles: string[];
   scopes: string[];
 }
 
@@ -45,8 +47,8 @@ const FALLBACK_EMAIL = "admin@aethra.local";
 export function AppTopbar({ onOpenSidebar }: AppTopbarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [email, setEmail] = useState<string | null>(null);
-  const [loadingEmail, setLoadingEmail] = useState(true);
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [loadingMe, setLoadingMe] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,20 +56,23 @@ export function AppTopbar({ onOpenSidebar }: AppTopbarProps) {
       .then((res) => (res.ok ? (res.json() as Promise<MeResponse>) : null))
       .then((data) => {
         if (cancelled) return;
-        setEmail(data?.email ?? FALLBACK_EMAIL);
-        setLoadingEmail(false);
+        setMe(data);
+        setLoadingMe(false);
       })
       .catch(() => {
         if (cancelled) return;
-        setEmail(FALLBACK_EMAIL);
-        setLoadingEmail(false);
+        setMe(null);
+        setLoadingMe(false);
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const initial = (email ?? "A").charAt(0).toUpperCase();
+  const email = me?.email ?? FALLBACK_EMAIL;
+  const displayName = me?.displayName ?? null;
+  const roles = me?.roles ?? [];
+  const initial = ((displayName ?? email) || "A").charAt(0).toUpperCase();
 
   async function handleLogout() {
     try {
@@ -100,7 +105,9 @@ export function AppTopbar({ onOpenSidebar }: AppTopbarProps) {
       <div className="flex items-center gap-1">
         <ThemeToggle />
         <UserMenu
-          email={loadingEmail ? "Cargando..." : (email ?? FALLBACK_EMAIL)}
+          email={loadingMe ? "Cargando..." : email}
+          displayName={displayName}
+          roles={roles}
           initial={initial}
           onLogout={handleLogout}
         />
@@ -177,10 +184,14 @@ function ThemeToggle() {
 
 function UserMenu({
   email,
+  displayName,
+  roles,
   initial,
   onLogout,
 }: {
   email: string;
+  displayName: string | null;
+  roles: string[];
   initial: string;
   onLogout: () => void | Promise<void>;
 }) {
@@ -200,15 +211,37 @@ function UserMenu({
           </Avatar>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel>
-          <div className="flex flex-col">
+          <div className="flex flex-col gap-1">
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Sesión
             </span>
-            <span className="mt-0.5 truncate text-sm font-medium text-foreground">
-              {email}
+            <span className="truncate text-sm font-medium text-foreground">
+              {displayName ?? email}
             </span>
+            {displayName ? (
+              <span className="truncate text-[11px] text-muted-foreground">
+                {email}
+              </span>
+            ) : null}
+            {roles.length > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {roles.map((r) => (
+                  <span
+                    key={r}
+                    className={
+                      "rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider " +
+                      (r === "admin"
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-600"
+                        : "border-border bg-muted text-muted-foreground")
+                    }
+                  >
+                    {r}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -216,6 +249,12 @@ function UserMenu({
           <Link href="/settings" className="cursor-pointer">
             <User className="size-4" />
             Mi cuenta
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/settings/users" className="cursor-pointer">
+            <User className="size-4" />
+            Gestión de usuarios
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
