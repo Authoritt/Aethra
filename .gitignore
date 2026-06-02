@@ -52,6 +52,11 @@ buffer.db
 buffer.db-shm
 buffer.db-wal
 
+# F11.4 — tarballs del binario del satélite servidos por GET /api/satellite/binary.
+# Son output del build; los regenera scripts/publish-satellite.sh.
+/apps/api/satellite-binaries/
+/build/satellite/
+
 # Docker
 docker-compose.override.yml
 
