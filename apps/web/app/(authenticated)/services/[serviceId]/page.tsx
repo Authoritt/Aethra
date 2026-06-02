@@ -15,6 +15,8 @@ import type {
 import { ServiceStatusPill } from "../ServiceStatusPill";
 import { BindingActions } from "../BindingActions";
 import { DeleteServiceButton } from "./DeleteServiceButton";
+import { BackupsTab } from "./BackupsTab";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -150,33 +152,44 @@ export default async function ServiceDetailPage({
         </CardContent>
       </Card>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Bindings ({activeBindings.length})
-          </h2>
-          <Button asChild size="sm">
-            <Link href={`/services/${service.id}/bindings/new`}>
-              <Plus className="mr-2 h-4 w-4" />
-              Bindear aplicación
-            </Link>
-          </Button>
-        </div>
+      <Tabs defaultValue="bindings" className="w-full">
+        <TabsList>
+          <TabsTrigger value="bindings">Bindings</TabsTrigger>
+          <TabsTrigger value="backups">Backups</TabsTrigger>
+        </TabsList>
+        <TabsContent value="bindings">
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                Bindings ({activeBindings.length})
+              </h2>
+              <Button asChild size="sm">
+                <Link href={`/services/${service.id}/bindings/new`}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Bindear aplicación
+                </Link>
+              </Button>
+            </div>
 
-        {activeBindings.length === 0 ? (
-          <EmptyState
-            icon={<Plug2 className="h-6 w-6" />}
-            title="Sin bindings activos"
-            description="Bindea una application para que pueda consumir este servicio."
-          />
-        ) : (
-          <ul className="grid grid-cols-1 gap-3">
-            {activeBindings.map((b) => (
-              <BindingCard key={b.id} binding={b} />
-            ))}
-          </ul>
-        )}
-      </section>
+            {activeBindings.length === 0 ? (
+              <EmptyState
+                icon={<Plug2 className="h-6 w-6" />}
+                title="Sin bindings activos"
+                description="Bindea una application para que pueda consumir este servicio."
+              />
+            ) : (
+              <ul className="grid grid-cols-1 gap-3">
+                {activeBindings.map((b) => (
+                  <BindingCard key={b.id} binding={b} />
+                ))}
+              </ul>
+            )}
+          </section>
+        </TabsContent>
+        <TabsContent value="backups">
+          <BackupsTab serviceId={service.id} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
