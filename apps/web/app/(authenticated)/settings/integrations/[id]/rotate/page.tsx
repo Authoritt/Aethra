@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import type { IntegrationCredentialDto } from "@/lib/types";
 import { RotateIntegrationForm } from "./RotateIntegrationForm";
@@ -39,63 +41,44 @@ export default async function RotateIntegrationPage({ params }: PageProps) {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
-        <nav className="text-xs text-zinc-500">
-          <Link href="/dashboard" className="hover:text-zinc-300">
-            Dashboard
-          </Link>
-          <span> / </span>
-          <Link href="/settings" className="hover:text-zinc-300">
-            Settings
-          </Link>
-          <span> / </span>
-          <Link
-            href="/settings/integrations"
-            className="hover:text-zinc-300"
-          >
-            Integraciones
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">Rotar</span>
-        </nav>
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Settings", href: "/settings" },
+          { label: "Integraciones", href: "/settings/integrations" },
+          { label: "Rotar" },
+        ]}
+        title="Rotar credencial"
+        description="Sustituye el valor cifrado por uno nuevo. La metadata (nombre, tipo, descripción) se mantiene. El valor anterior se descarta tras el SaveChanges."
+      />
 
-        <header>
-          <h1 className="text-3xl font-semibold">Rotar credencial</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Sustituye el valor cifrado por uno nuevo. La metadata (nombre,
-            tipo, descripcion) se mantiene. El valor anterior se descarta tras
-            el SaveChanges.
-          </p>
-        </header>
-
-        {data === "error" && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-            No se pudo cargar la credencial. Verifica que la API este
-            corriendo.
-          </div>
-        )}
-
-        {data === "not_found" && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
-            No existe una credencial con id{" "}
-            <span className="font-mono">{id}</span>. Es posible que la hayan
-            borrado.
-            <div className="mt-2">
-              <Link
-                href="/settings/integrations"
-                className="text-emerald-300 hover:underline"
-              >
-                Volver al listado
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {typeof data === "object" && data !== null && (
+      <div className="max-w-2xl">
+        {data === "error" ? (
+          <Card className="border-destructive/30 bg-destructive/5">
+            <CardContent className="p-4 text-sm text-destructive">
+              No se pudo cargar la credencial.
+            </CardContent>
+          </Card>
+        ) : data === "not_found" ? (
+          <Card className="border-warning/30 bg-warning/5">
+            <CardContent className="p-4 text-sm">
+              No existe una credencial con id{" "}
+              <span className="font-mono">{id}</span>. Es posible que la hayan
+              borrado.
+              <div className="mt-2">
+                <Link
+                  href="/settings/integrations"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  Volver al listado
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
           <RotateIntegrationForm credential={data} />
         )}
       </div>
-    </main>
+    </div>
   );
 }

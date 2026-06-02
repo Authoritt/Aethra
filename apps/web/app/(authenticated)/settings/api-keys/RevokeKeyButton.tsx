@@ -2,6 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ApiError, api } from "@/lib/api";
 
 export function RevokeKeyButton({
@@ -14,50 +25,75 @@ export function RevokeKeyButton({
   alreadyRevoked: boolean;
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (alreadyRevoked) {
     return (
-      <span className="text-[11px] uppercase tracking-wider text-zinc-600">
+      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
         revocada
       </span>
     );
   }
 
-  async function onClick() {
-    const ok = window.confirm(
-      `Revocar la API key "${name}"?\n\nCualquier integracion que la use perdera acceso inmediatamente. Esta accion no se puede deshacer.`,
-    );
-    if (!ok) return;
-    setError(null);
+  async function onConfirm() {
     setLoading(true);
     try {
       await api(`/api/identity/api-keys/${id}`, { method: "DELETE" });
+      toast.success("API key revocada");
       router.refresh();
     } catch (e) {
-      if (e instanceof ApiError) {
-        const body = e.body as { detail?: string } | undefined;
-        setError(body?.detail ?? `Error ${e.status}`);
-      } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
-      }
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
     } finally {
       setLoading(false);
+      setOpen(false);
     }
   }
 
   return (
-    <div className="inline-flex flex-col items-end gap-1">
-      <button
+    <>
+      <Button
         type="button"
-        onClick={onClick}
-        disabled={loading}
-        className="rounded-full border border-rose-500/30 px-3 py-1 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
+        variant="destructive"
+        size="sm"
+        onClick={() => setOpen(true)}
       >
-        {loading ? "Revocando..." : "Revocar"}
-      </button>
-      {error && <span className="text-[11px] text-rose-300">{error}</span>}
-    </div>
+        <Trash2 className="mr-2 h-4 w-4" />
+        Revocar
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Revocar API key "{name}"</DialogTitle>
+            <DialogDescription>
+              Cualquier integración que la use perderá acceso inmediatamente.
+              Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={onConfirm}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Revocar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

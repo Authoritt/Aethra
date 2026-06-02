@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import { CreateKeyForm } from "../CreateKeyForm";
 
@@ -24,34 +24,19 @@ export default async function NewApiKeyPage() {
   if (!ok) redirect("/login");
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
-        <nav className="text-xs text-zinc-500">
-          <Link href="/dashboard" className="hover:text-zinc-300">
-            Dashboard
-          </Link>
-          <span> / </span>
-          <Link href="/settings" className="hover:text-zinc-300">
-            Settings
-          </Link>
-          <span> / </span>
-          <Link href="/settings/api-keys" className="hover:text-zinc-300">
-            API keys
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">Nueva</span>
-        </nav>
-
-        <header>
-          <h1 className="text-3xl font-semibold">Crear API key</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Define un nombre, los scopes minimos necesarios y una expiracion
-            opcional. El secret aparecera una sola vez tras guardar.
-          </p>
-        </header>
-
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Settings", href: "/settings" },
+          { label: "API keys", href: "/settings/api-keys" },
+          { label: "Nueva" },
+        ]}
+        title="Crear API key"
+        description="Definí un nombre, los scopes mínimos necesarios y una expiración opcional. El secret aparecerá una sola vez tras guardar."
+      />
+      <div className="max-w-3xl">
         <CreateKeyForm />
       </div>
-    </main>
+    </div>
   );
 }

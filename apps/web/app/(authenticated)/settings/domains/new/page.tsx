@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import { CreateBaseDomainForm } from "./CreateBaseDomainForm";
 
@@ -26,9 +26,6 @@ async function loadContext(): Promise<
   });
   if (!meRes.ok) return { authed: false };
 
-  // El listado de zonas se sirve "best-effort": si falla la llamada al modulo
-  // Cloudflare (deshabilitado, sin token, etc.) seguimos permitiendo crear el
-  // base domain sin enlazar zona — siempre puede enlazarse despues.
   let zones: CloudflareZoneOption[] = [];
   try {
     const res = await fetch(`${API_URL}/api/cloudflare/zones/`, {
@@ -41,11 +38,8 @@ async function loadContext(): Promise<
         zones = raw
           .map((z) => {
             const obj = z as Record<string, unknown>;
-            const id =
-              typeof obj.id === "string" ? obj.id : null;
-            // Aceptamos ambos casings por si la API cambia su naming policy.
-            const name =
-              typeof obj.name === "string" ? obj.name : null;
+            const id = typeof obj.id === "string" ? obj.id : null;
+            const name = typeof obj.name === "string" ? obj.name : null;
             return id && name ? { id, name } : null;
           })
           .filter((v): v is CloudflareZoneOption => v !== null);
@@ -63,34 +57,19 @@ export default async function NewBaseDomainPage() {
   if (!ctx.authed) redirect("/login");
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
-        <nav className="text-xs text-zinc-500">
-          <Link href="/dashboard" className="hover:text-zinc-300">
-            Dashboard
-          </Link>
-          <span> / </span>
-          <Link href="/settings" className="hover:text-zinc-300">
-            Settings
-          </Link>
-          <span> / </span>
-          <Link href="/settings/domains" className="hover:text-zinc-300">
-            Base domains
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">Nuevo</span>
-        </nav>
-
-        <header>
-          <h1 className="text-3xl font-semibold">Nuevo base domain</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Registra el FQDN. Opcionalmente enlazalo con una zona ya conocida
-            por el modulo Cloudflare para que la UI vincule ambos recursos.
-          </p>
-        </header>
-
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Settings", href: "/settings" },
+          { label: "Base domains", href: "/settings/domains" },
+          { label: "Nuevo" },
+        ]}
+        title="Nuevo base domain"
+        description="Registrá el FQDN. Opcionalmente enlazalo con una zona ya conocida por el módulo Cloudflare para que la UI vincule ambos recursos."
+      />
+      <div className="max-w-2xl">
         <CreateBaseDomainForm zones={ctx.zones} />
       </div>
-    </main>
+    </div>
   );
 }

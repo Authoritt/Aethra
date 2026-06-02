@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import { CreateIntegrationForm } from "./CreateIntegrationForm";
 
@@ -24,37 +24,19 @@ export default async function NewIntegrationPage() {
   if (!ok) redirect("/login");
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
-        <nav className="text-xs text-zinc-500">
-          <Link href="/dashboard" className="hover:text-zinc-300">
-            Dashboard
-          </Link>
-          <span> / </span>
-          <Link href="/settings" className="hover:text-zinc-300">
-            Settings
-          </Link>
-          <span> / </span>
-          <Link
-            href="/settings/integrations"
-            className="hover:text-zinc-300"
-          >
-            Integraciones
-          </Link>
-          <span> / </span>
-          <span className="text-zinc-300">Nueva</span>
-        </nav>
-
-        <header>
-          <h1 className="text-3xl font-semibold">Nueva credencial</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            El valor en texto plano se cifra con DataProtection y solo se
-            muestra esta vez. Si lo olvidas tendras que rotar la credencial.
-          </p>
-        </header>
-
+    <div className="px-6 py-8 md:px-10 md:py-10">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Settings", href: "/settings" },
+          { label: "Integraciones", href: "/settings/integrations" },
+          { label: "Nueva" },
+        ]}
+        title="Nueva credencial"
+        description="El valor en texto plano se cifra con DataProtection y solo se muestra esta vez. Si lo olvidás tendrás que rotar la credencial."
+      />
+      <div className="max-w-2xl">
         <CreateIntegrationForm />
       </div>
-    </main>
+    </div>
   );
 }
