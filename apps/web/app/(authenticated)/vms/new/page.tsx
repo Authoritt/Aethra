@@ -3,212 +3,147 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowRight, Copy, Loader2 } from "lucide-react";
+import { ArrowRight, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/layout/page-header";
-import { ApiError, api } from "@/lib/api";
 import type { RegisterVmResponse } from "@/lib/types";
+import { MetadataForm } from "./MetadataForm";
+import { AutoInstallForm } from "./AutoInstallForm";
+import { ManualScriptTab } from "./ManualScriptTab";
 
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
-}
-
+/**
+ * Página de registro y aprovisionamiento de VM. F11.4: 3 tabs.
+ *
+ * 1) Metadata — formulario original (nombre, slug, IPs, descripción) — registra la VM
+ *    y emite el token UNA SOLA VEZ.
+ * 2) Auto-instalar via SSH — pide credenciales SSH y ejecuta el provisioner del central,
+ *    streaming logs en vivo por SignalR.
+ * 3) Comando manual — bash one-liner para correr en la VM si Aethra no puede SSH-ear.
+ *
+ * La tab "Metadata" está siempre visible. Las otras dos se habilitan tras crear la VM.
+ */
 export default function NewVmPage() {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [slugTouched, setSlugTouched] = useState(false);
-  const [publicIp, setPublicIp] = useState("");
-  const [privateIp, setPrivateIp] = useState("");
-  const [description, setDescription] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<RegisterVmResponse | null>(null);
+  const [tab, setTab] = useState<string>("metadata");
+  const [registered, setRegistered] = useState<RegisterVmResponse | null>(null);
 
-  const suggestedSlug = useMemo(() => slugify(name), [name]);
-  const effectiveSlug = slugTouched ? slug : suggestedSlug;
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const response = await api<RegisterVmResponse>("/api/vms/", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          slug: effectiveSlug || undefined,
-          public_ip: publicIp || undefined,
-          private_ip: privateIp || undefined,
-          description: description || undefined,
-        }),
-      });
-      toast.success("VM registrada");
-      setResult(response);
-    } catch (e) {
-      const msg =
-        e instanceof ApiError
-          ? (e.body as { detail?: string } | undefined)?.detail ??
-            `Error ${e.status}`
-          : e instanceof Error
-            ? e.message
-            : "Error desconocido";
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
+  function onRegistered(r: RegisterVmResponse) {
+    setRegistered(r);
+    setTab("auto");
+    toast.success("VM registrada. Continua con la instalación.");
   }
 
-  if (result) {
-    return <SuccessScreen result={result} />;
-  }
-
-  return (
-    <div className="px-6 py-8 md:px-10 md:py-10">
-      <PageHeader
-        breadcrumbs={[{ label: "VMs", href: "/vms" }, { label: "Registrar" }]}
-        title="Registrar VM"
-        description="Genera un token de satélite para que el agente reporte métricas a Aethra."
-      />
-      <Card className="max-w-2xl">
-        <CardContent className="p-6">
-          <form onSubmit={onSubmit} className="flex flex-col gap-5">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nombre *</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="vm-prod-01"
-                required
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="slug">Slug</Label>
-              <Input
-                id="slug"
-                value={effectiveSlug}
-                onChange={(e) => {
-                  setSlug(e.target.value);
-                  setSlugTouched(true);
-                }}
-                placeholder="vm-prod-01"
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                className="font-mono text-xs"
-              />
-              <p className="text-xs text-muted-foreground">
-                URL-friendly. Se sugiere desde el nombre si lo dejas vacío.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="public">IP pública</Label>
-                <Input
-                  id="public"
-                  value={publicIp}
-                  onChange={(e) => setPublicIp(e.target.value)}
-                  placeholder="203.0.113.10"
-                  className="font-mono text-xs"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="private">IP privada</Label>
-                <Input
-                  id="private"
-                  value={privateIp}
-                  onChange={(e) => setPrivateIp(e.target.value)}
-                  placeholder="10.0.0.10"
-                  className="font-mono text-xs"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Descripción</Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                placeholder="ARM, 4 vCPU, 24 GB RAM"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => router.push("/vms")}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={loading || !name}>
-                {loading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                Registrar VM
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function SuccessScreen({ result }: { result: RegisterVmResponse }) {
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
           { label: "VMs", href: "/vms" },
-          { label: result.name },
+          { label: registered ? registered.name : "Registrar" },
         ]}
-        title={result.name}
+        title={registered ? registered.name : "Registrar VM"}
         description={
-          <span className="font-mono text-xs">{result.slug}</span>
+          registered ? (
+            <span className="font-mono text-xs">{registered.slug}</span>
+          ) : (
+            "Registra y aprovisiona el satélite para enviar métricas a Aethra."
+          )
+        }
+        actions={
+          registered ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/vms/${registered.vm_id}`}>
+                Ir al detalle <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" onClick={() => router.push("/vms")}>
+              Cancelar
+            </Button>
+          )
         }
       />
 
-      <Card className="mb-4 max-w-3xl border-warning/40 bg-warning/5">
-        <CardContent className="p-4 text-sm">
-          <p className="font-medium text-warning-foreground">
-            Este token solo se muestra una vez.
-          </p>
-          <p className="mt-1 text-muted-foreground">
-            Copialo y guárdalo en el satélite ahora. Si lo perdés tendrás que
-            generar uno nuevo.
-          </p>
-        </CardContent>
-      </Card>
+      {registered ? (
+        <TokenReminder result={registered} />
+      ) : null}
 
-      <div className="flex max-w-3xl flex-col gap-4">
-        <CopyBlock label="Token de satélite" value={result.token_plaintext} oneLine />
-        <CopyBlock label="Script de instalación" value={result.install_script} />
-      </div>
+      <Tabs value={tab} onValueChange={setTab} className="mt-2 max-w-4xl">
+        <TabsList className="h-auto w-full justify-start gap-1 p-1">
+          <TabsTrigger value="metadata" className="px-4 py-2">
+            1. Metadata
+          </TabsTrigger>
+          <TabsTrigger
+            value="auto"
+            disabled={!registered}
+            className="px-4 py-2"
+          >
+            2. Auto-instalar via SSH
+          </TabsTrigger>
+          <TabsTrigger
+            value="manual"
+            disabled={!registered}
+            className="px-4 py-2"
+          >
+            3. Comando manual
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="mt-6 flex max-w-3xl justify-end">
-        <Button asChild>
-          <Link href={`/vms/${result.vm_id}`}>
-            Ir al detalle
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-        </Button>
-      </div>
+        <TabsContent value="metadata" className="mt-4">
+          {registered ? (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                VM ya creada — usa las pestañas <strong>Auto-instalar</strong> o{" "}
+                <strong>Comando manual</strong> para instalar el satélite.
+              </CardContent>
+            </Card>
+          ) : (
+            <MetadataForm onRegistered={onRegistered} />
+          )}
+        </TabsContent>
+
+        <TabsContent value="auto" className="mt-4">
+          {registered ? (
+            <AutoInstallForm
+              vmId={registered.vm_id}
+              onFallbackManual={() => setTab("manual")}
+            />
+          ) : null}
+        </TabsContent>
+
+        <TabsContent value="manual" className="mt-4">
+          {registered ? (
+            <ManualScriptTab
+              vmId={registered.vm_id}
+              initialToken={registered.token_plaintext}
+            />
+          ) : null}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
 
-function CopyBlock({
+function TokenReminder({ result }: { result: RegisterVmResponse }) {
+  return (
+    <Card className="mb-4 max-w-4xl border-warning/40 bg-warning/5">
+      <CardContent className="p-4 text-sm">
+        <p className="font-medium text-warning-foreground">
+          Token emitido (mostrado UNA sola vez).
+        </p>
+        <p className="mt-1 text-muted-foreground">
+          Si vas a usar la auto-instalación, Aethra lo enviará a la VM por SSH.
+          Si vas a usar comando manual, copialo aquí o desde la tab 3.
+        </p>
+        <CopyableValue label="Token" value={result.token_plaintext} oneLine />
+      </CardContent>
+    </Card>
+  );
+}
+
+function CopyableValue({
   label,
   value,
   oneLine,
@@ -217,6 +152,7 @@ function CopyBlock({
   value: string;
   oneLine?: boolean;
 }) {
+  const display = useMemo(() => value, [value]);
   async function copy() {
     try {
       await navigator.clipboard.writeText(value);
@@ -225,9 +161,8 @@ function CopyBlock({
       toast.error("No se pudo copiar");
     }
   }
-
   return (
-    <Card>
+    <Card className="mt-2 bg-card">
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           {label}
@@ -243,7 +178,7 @@ function CopyBlock({
             oneLine ? "whitespace-nowrap" : "whitespace-pre"
           }`}
         >
-          {value}
+          {display}
         </pre>
       </CardContent>
     </Card>

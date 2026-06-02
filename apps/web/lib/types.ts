@@ -80,6 +80,70 @@ export interface RegisterVmResponse {
   install_script: string;
 }
 
+/* --- F11.4 auto-install via SSH --- */
+
+export type VmInstallStatus =
+  | "NotInstalled"
+  | "Installing"
+  | "Installed"
+  | "Failed";
+
+export type SshAuthMethod = "key" | "password";
+
+export interface AutoInstallSshRequest {
+  host: string;
+  port: number;
+  user: string;
+  authMethod: SshAuthMethod;
+  value: string;
+}
+
+export interface AutoInstallRequest {
+  ssh?: AutoInstallSshRequest | null;
+  installContainerRuntime: boolean;
+  containerRuntime: "docker" | "podman";
+  dryRun?: boolean;
+}
+
+export interface AutoInstallResponse {
+  vmId: string;
+  status: VmInstallStatus | "Planned";
+  installUrl: string;
+  streamHub: string;
+  plan?: string | null;
+  script?: string | null;
+}
+
+export interface InstallStatusResponse {
+  vmId: string;
+  status: VmInstallStatus;
+  lastSeenAt: string | null;
+  hasSavedCredentials: boolean;
+  lastLogLines: string[];
+}
+
+export interface InstallScriptResponse {
+  script: string;
+  lines: string[];
+  tokenPlaintext: string;
+}
+
+/** Payload del evento SignalR `VmInstallLog`. */
+export interface VmInstallLogPayload {
+  vmId: string;
+  line: string;
+  level: "info" | "warn" | "error" | "debug" | string;
+  timestamp: string;
+}
+
+/** Payload del evento SignalR `VmInstallStatusChanged`. */
+export interface VmInstallStatusChangedPayload {
+  vmId: string;
+  status: VmInstallStatus;
+  errorCode: string | null;
+  timestamp: string;
+}
+
 export interface VmMetricPoint {
   timestamp: string;
   cpu_percent: number;
