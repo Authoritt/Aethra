@@ -41,6 +41,10 @@ public static class DeploymentsModule
         services.AddScoped<IBuildOrchestrator, BuildOrchestrator>();
         services.AddHostedService<BuildWorker>();
 
+        // F10.1: builder del contexto de build (clone Git real + tar.gz). Singleton — sin estado,
+        // crea/limpia su propio directorio temporal por invocación.
+        services.AddSingleton<IBuildContextBuilder, BuildContextBuilder>();
+
         // A8 — Deployment pipeline: cola in-process + orquestador scoped + worker BackgroundService.
         // El BuildCompletedHandler se registra automáticamente vía MediatR autoscan en Program.cs
         // (scanea todos los assemblies de Aethra.Modules.*).

@@ -11,24 +11,23 @@ using Microsoft.Extensions.Logging;
 namespace Aethra.Modules.Deployments.Infrastructure.Build;
 
 /// <summary>
-/// Implementación del orquestador de builds. F9.3 entrega un pipeline en MODO DRY-RUN:
+/// Implementación del orquestador de builds. F10.1 entrega el pipeline REAL:
 ///
 /// - La state machine avanza completa (Queued → Cloning → Building → Pushing → Completed),
 ///   se persisten transiciones y se emiten logs reales.
-/// - El paso por <see cref="ISatelliteRpcClient.SendBuildAsync"/> está stubeado
-///   (<see cref="NotImplementedException"/>). Lo intentamos para validar el call site y, si
-///   lanza, registramos un warning ("satellite RPC pendiente F9.3.5") y seguimos.
-/// - El <c>ImageRef</c> que persistimos es un placeholder <c>dry-run-image:&lt;sha&gt;</c>.
-///   F9.3.5 cableará BuildKit/Podman + push real y reemplazará este placeholder por la
-///   referencia real del registry interno.
-///
-/// La razón de mantener el estado de "Completed" aunque la imagen no exista físicamente
-/// es que el resto del flujo (Deployment, UI, integration events) ya puede ejercitarse en
-/// dry-run sin esperar al satélite.
+/// - <b>Clone</b>: <see cref="IBuildContextBuilder"/> clona el repo, materializa el commit y
+///   empaqueta el contexto en un tar.gz real (gap 1 cerrado).
+/// - <b>Build</b>: el contexto + el <c>ImageRef</c> (<c>aethra/&lt;slug&gt;:&lt;shortSha&gt;</c>) se
+///   despachan al satélite vía <see cref="ISatelliteRpcClient.SendBuildAsync"/>, que ejecuta
+///   <c>docker build</c> (Docker.DotNet) y tagea la imagen. Si no hay satélite conectado, el
+///   build falla con errorCode estable <c>no_satellite</c> (no se finge éxito).
+/// - <b>Push</b>: en single-VM la imagen queda construida/tageada localmente en el mismo satélite
+///   donde luego corre el deploy, así que no se hace push a un registry (<c>pushTo: null</c>).
 /// </summary>
 public sealed class BuildOrchestrator(
     DeploymentsDbContext db,
     ITemplateLookup templateLookup,
+    IBuildContextBuilder buildContextBuilder,
     ISatelliteRpcClient satelliteClient,
     ISatelliteConnectionRegistry satelliteRegistry,
     IOutboxWriter<DeploymentsDbContext> outbox,
@@ -77,36 +76,68 @@ public sealed class BuildOrchestrator(
             // === Clone ===
             build.Transition(BuildStatus.Cloning, clock.UtcNow);
             build.AppendLog(BuildLogLevel.Info, "cloning",
-                $"dry-run: clone simulado {template.GitRepoUrl}@{build.GitRef} (sha={build.GitSha})",
+                $"Clonando {template.GitRepoUrl}@{build.GitRef} (sha solicitado={build.GitSha})",
                 clock.UtcNow);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+            // F10.1: clone real + empaquetado del contexto. El branch a clonar sale del ref que
+            // disparó el build (o el default del template); el commit exacto viaja en build.GitSha
+            // y se materializa con checkout. Si falla, el build termina con errorCode estable.
+            BuildContextResult context;
+            try
+            {
+                var cloneBranch = string.IsNullOrWhiteSpace(build.GitRef)
+                    ? template.Branch
+                    : NormalizeRef(build.GitRef);
+                context = await buildContextBuilder
+                    .BuildAsync(template.GitRepoUrl, cloneBranch, build.GitSha, template.BaseDirectory, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                FailAndPersist(build, "clone_failed",
+                    $"No se pudo clonar/empaquetar el repositorio: {ex.Message}",
+                    totalStopwatch.ElapsedMilliseconds);
+                await PersistAndPublishFailureAsync(build, ct).ConfigureAwait(false);
+                return;
+            }
+
+            foreach (var line in context.Log)
+            {
+                build.AppendLog(BuildLogLevel.Info, "cloning", line, clock.UtcNow);
+            }
+
+            // El SHA materializado (resolvedSha) puede diferir del solicitado si el checkout cayó
+            // al HEAD del branch; la imagen se tagea con el SHA real para trazabilidad.
+            var resolvedSha = string.IsNullOrWhiteSpace(context.ResolvedSha)
+                ? build.GitSha
+                : context.ResolvedSha;
+            var shortSha = resolvedSha.Length >= 7 ? resolvedSha[..7] : resolvedSha;
+            var imageRef = $"aethra/{template.Slug}:{shortSha}".ToLowerInvariant();
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
             // === Build ===
             build.Transition(BuildStatus.Building, clock.UtcNow);
             build.AppendLog(BuildLogLevel.Info, "building",
-                $"dry-run: build simulado con Dockerfile={template.DockerfilePath}, "
-                + $"base_dir={template.BaseDirectory}, build_type={template.BuildType}",
+                $"Build con Dockerfile={template.DockerfilePath}, base_dir={template.BaseDirectory}, "
+                + $"build_type={template.BuildType}, image={imageRef}",
                 clock.UtcNow);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
-            // Intento real al satélite — F9.3 lanza NotImplementedException. Atrapamos para
-            // dejar evidencia en el log del build de que el cableado no está listo.
+            // Credencial del registry interno: si en el futuro se hace push a un registry, el
+            // orquestador la descifrará vía credentialResolver. En build local single-VM no se usa.
             var credentialExists = await credentialResolver
                 .ExistsAsync(InternalRegistryCredentialName, ct).ConfigureAwait(false);
             if (!credentialExists)
             {
-                build.AppendLog(BuildLogLevel.Warn, "building",
+                build.AppendLog(BuildLogLevel.Info, "building",
                     $"Credencial '{InternalRegistryCredentialName}' no configurada — "
-                    + "F9.3.5 la requerirá para push.",
+                    + "build local sin push (single-VM).",
                     clock.UtcNow);
             }
 
-            var shortSha = build.GitSha.Length >= 7 ? build.GitSha[..7] : build.GitSha;
-            var placeholderImageRef = $"aethra-image:{template.Slug}-{shortSha}";
-
-            // F9.8C: el build necesita un satélite connecté para ejecutar BuildImage real.
-            // F9.4/F9.5 cablearán routing por VM/Cluster; por ahora elegimos cualquier satélite
-            // conectado (single-VM smoke). Si ninguno está conectado, falla con errorCode estable.
+            // El build necesita un satélite conectado para ejecutar BuildImage. Si ninguno está
+            // conectado, falla con errorCode estable.
             var targetVmId = satelliteRegistry.ConnectedVmIds.FirstOrDefault();
             if (string.IsNullOrWhiteSpace(targetVmId))
             {
@@ -119,15 +150,16 @@ public sealed class BuildOrchestrator(
             }
 
             build.AppendLog(BuildLogLevel.Info, "building",
-                $"Despachando BuildImage al satélite vmId={targetVmId}",
+                $"Despachando BuildImage al satélite vmId={targetVmId} "
+                + $"({context.TarGz.Length / 1024} KiB de contexto)",
                 clock.UtcNow);
 
             BuildResult buildResult;
             try
             {
                 var spec = new BuildSpec(
-                    ImageRef: placeholderImageRef,
-                    BuildContextTarGz: Array.Empty<byte>(),
+                    ImageRef: imageRef,
+                    BuildContextTarGz: context.TarGz,
                     DockerfilePath: template.DockerfilePath,
                     BuildArgs: new Dictionary<string, string>(),
                     BuildSecrets: null);
@@ -168,19 +200,19 @@ public sealed class BuildOrchestrator(
             // === Push ===
             build.Transition(BuildStatus.Pushing, clock.UtcNow);
             build.AppendLog(BuildLogLevel.Info, "pushing",
-                $"Imagen construida: {placeholderImageRef} (imageId={buildResult.ImageId})",
+                $"Imagen construida: {imageRef} (imageId={buildResult.ImageId})",
                 clock.UtcNow);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
             // === Complete ===
             totalStopwatch.Stop();
-            build.RecordImageRef(placeholderImageRef, totalStopwatch.ElapsedMilliseconds, clock.UtcNow);
+            build.RecordImageRef(imageRef, totalStopwatch.ElapsedMilliseconds, clock.UtcNow);
             build.Complete(clock.UtcNow);
 
             await outbox.EnqueueAsync(new BuildCompletedIntegrationEvent(
                 BuildId: build.Id.ToString(),
                 TemplateId: build.TemplateId,
-                ImageRef: placeholderImageRef,
+                ImageRef: imageRef,
                 GitSha: build.GitSha,
                 CompletedAt: clock.UtcNow), ct).ConfigureAwait(false);
 
@@ -203,6 +235,16 @@ public sealed class BuildOrchestrator(
             FailAndPersist(build, "internal_error", ex.Message, totalStopwatch.ElapsedMilliseconds);
             await PersistAndPublishFailureAsync(build, ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Normaliza un git ref a su shorthand de branch: <c>refs/heads/v2</c> → <c>v2</c>. LibGit2Sharp
+    /// (CloneOptions.BranchName) espera el shorthand, no el ref completo del webhook.
+    /// </summary>
+    private static string NormalizeRef(string gitRef)
+    {
+        const string prefix = "refs/heads/";
+        return gitRef.StartsWith(prefix, StringComparison.Ordinal) ? gitRef[prefix.Length..] : gitRef;
     }
 
     private void FailAndPersist(Domain.Build.Build build, string code, string message,
