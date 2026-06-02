@@ -41,6 +41,9 @@ public static class ProjectsModule
         services.AddScoped<IInstanceLookup, EfInstanceLookup>();
         services.AddScoped<ITenantContext, EfTenantContext>();
         services.AddScoped<IEnvVarWriter, EfEnvVarWriter>();
+        // F10.1c: resolver de entorno runtime (cascade env vars + secretos descifrados) que el
+        // orquestador de deployment consume para alimentar el RunSpec del satélite.
+        services.AddScoped<IEnvironmentResolver, EfEnvironmentResolver>();
         // F10.2: EfSecretWriter real contra la tabla cifrada projects.secrets (reemplaza el
         // stub NoOpSecretWriter — antes los secrets de bindings no persistían).
         services.AddScoped<ISecretWriter, EfSecretWriter>();
