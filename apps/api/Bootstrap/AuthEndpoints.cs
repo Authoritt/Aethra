@@ -41,12 +41,16 @@ public static class AuthEndpoints
         .WithName("Login")
         .AllowAnonymous();
 
+        // Restringido a cookie: una API key NO debe poder invalidar la sesión humana
+        // (default policy es 'cookie OR apikey', así que sin esta restricción cualquier
+        // owner de una key con scope mínimo podría sign-out al admin).
         group.MapPost("/logout", async (HttpContext http) =>
         {
             await http.SignOutAsync(AuthSchemes.Cookie);
             return Results.Ok(new { logged_out = true });
         })
-        .WithName("Logout");
+        .WithName("Logout")
+        .RequireAuthorization("CookieOnly");
 
         // /auth/me reporta la sesión humana (cookie). Si una API key consulta este
         // endpoint, los claims emitidos por el handler de API key no coinciden con la
