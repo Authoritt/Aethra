@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { NotesList } from "@/app/notes/_components/NotesList";
-import { PinnedFactsPanel } from "@/app/notes/_components/PinnedFactsPanel";
+import { NotesList } from "@/app/(authenticated)/notes/_components/NotesList";
+import { PinnedFactsPanel } from "@/app/(authenticated)/notes/_components/PinnedFactsPanel";
 
 export const dynamic = "force-dynamic";
 
