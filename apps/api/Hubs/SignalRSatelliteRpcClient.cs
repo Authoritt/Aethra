@@ -35,6 +35,7 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
     private readonly ILogger<SignalRSatelliteRpcClient> _logger;
     private readonly TimeSpan _defaultTimeout;
     private readonly TimeSpan _buildTimeout;
+    private readonly TimeSpan _streamChunkTimeout;
 
     /// <summary>Requests Task-based (build, run, stop, remove, list). Resueltas en <see cref="CompleteRequest"/>.</summary>
     private readonly ConcurrentDictionary<string, TaskCompletionSource<object?>> _pending = new();
@@ -56,6 +57,10 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
         // Satellite:RpcTimeoutSeconds (default) y Satellite:BuildTimeoutSeconds (builds).
         _defaultTimeout = TimeSpan.FromSeconds(cfg.GetValue("Satellite:RpcTimeoutSeconds", 60));
         _buildTimeout = TimeSpan.FromSeconds(cfg.GetValue("Satellite:BuildTimeoutSeconds", 900));
+        // Watchdog del StreamLogs: si no llega un nuevo chunk en N segundos asumimos que el
+        // satélite murió sin enviar LogStreamCompleted y abortamos el `await foreach`.
+        // Configurable vía Satellite:StreamChunkTimeoutSeconds (default 60s).
+        _streamChunkTimeout = TimeSpan.FromSeconds(cfg.GetValue("Satellite:StreamChunkTimeoutSeconds", 60));
     }
 
     // -------------------------------------------------------------------------
@@ -140,14 +145,52 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
             await _hub.Clients.Client(connectionId)
                 .SendAsync("StreamLogs", req, ct).ConfigureAwait(false);
 
-            await foreach (var chunk in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+            // Watchdog por chunk: si pasa _streamChunkTimeout sin recibir nada del satélite,
+            // asumimos que murió silenciosamente (sin enviar LogStreamCompleted) y abortamos
+            // el await foreach con un TimeoutException. Se rearma cada vez que llega un chunk.
+            // No podemos hacer try/catch alrededor de un `yield return` en un iterator, así
+            // que envolvemos cada ReadAsync por separado y propagamos la excepción adecuada.
+            while (true)
             {
+                var chunk = await ReadNextChunkAsync(channel, correlationId, ct).ConfigureAwait(false);
+                if (chunk is null)
+                {
+                    // Stream completado normalmente (channel.Writer.Complete sin error).
+                    yield break;
+                }
                 yield return chunk;
             }
         }
         finally
         {
             _streams.TryRemove(correlationId, out _);
+        }
+    }
+
+    /// <summary>
+    /// Lee el siguiente <see cref="LogChunk"/> del canal aplicando el watchdog
+    /// <c>_streamChunkTimeout</c>. Devuelve <c>null</c> si el stream se completó normalmente.
+    /// Lanza <see cref="TimeoutException"/> si el satélite no envió ningún chunk en el tiempo
+    /// configurado y <see cref="OperationCanceledException"/> si el caller canceló.
+    /// </summary>
+    private async Task<LogChunk?> ReadNextChunkAsync(
+        Channel<LogChunk> channel, string correlationId, CancellationToken ct)
+    {
+        using var watchdog = new CancellationTokenSource(_streamChunkTimeout);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, watchdog.Token);
+        try
+        {
+            if (!await channel.Reader.WaitToReadAsync(linked.Token).ConfigureAwait(false))
+            {
+                // Channel completado sin error → fin natural del stream.
+                return null;
+            }
+            return channel.Reader.TryRead(out var chunk) ? chunk : null;
+        }
+        catch (OperationCanceledException) when (watchdog.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"Sin chunks del satélite en {_streamChunkTimeout.TotalSeconds}s (correlationId={correlationId}).");
         }
     }
 
