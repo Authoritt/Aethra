@@ -39,6 +39,11 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
 
     public async Task<BuildResult> BuildImageAsync(BuildSpec spec, CancellationToken ct)
     {
+        if (spec.Mode == BuildMode.Nixpacks)
+        {
+            return await BuildImageNixpacksAsync(spec, ct).ConfigureAwait(false);
+        }
+
         // 1. Materializar el tarball en un tempdir y extraerlo.
         var tempDir = Path.Combine(Path.GetTempPath(), "aethra-podman-build-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
@@ -84,6 +89,158 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
         {
             TryDeleteDirectory(tempDir);
         }
+    }
+
+    /// <summary>
+    /// F11.2 — Build via Nixpacks contra el daemon Podman local. Requiere que <c>nixpacks</c>
+    /// esté en el PATH; el binario delega el build al socket Podman si <c>DOCKER_HOST</c> apunta
+    /// allí (típicamente <c>unix:///run/user/$UID/podman/podman.sock</c> en rootless).
+    /// </summary>
+    private async Task<BuildResult> BuildImageNixpacksAsync(BuildSpec spec, CancellationToken ct)
+    {
+        var logs = new List<string>();
+        var tempDir = Path.Combine(Path.GetTempPath(), "aethra-nixpacks-build-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            if (!IsNixpacksAvailable())
+            {
+                const string msg = "El CLI 'nixpacks' no está instalado o no está en el PATH del satélite. "
+                    + "Instalalo con: curl -fsSL https://nixpacks.com/install.sh | bash";
+                logs.Add(msg);
+                return new BuildResult(Success: false, ImageId: null,
+                    ErrorMessage: "nixpacks_not_installed", logs);
+            }
+
+            logs.Add($"Extrayendo contexto de build a {tempDir}...");
+            await ExtractTarGzAsync(spec.BuildContextTarGz, tempDir, ct).ConfigureAwait(false);
+
+            var args = new List<string> { "build", tempDir, "--name", spec.ImageRef };
+            foreach (var (k, v) in spec.BuildArgs)
+            {
+                args.Add("--build-arg");
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"{k}={v}"));
+            }
+            if (!string.IsNullOrWhiteSpace(spec.NixpacksConfig))
+            {
+                args.Add("--config");
+                args.Add(spec.NixpacksConfig);
+            }
+
+            logs.Add($"Ejecutando: nixpacks {string.Join(' ', args)}");
+
+            var (exitCode, stdout, stderr) = await RunArbitraryAsync("nixpacks", args, ct).ConfigureAwait(false);
+            logs.AddRange(SplitLines(stdout));
+            logs.AddRange(SplitLines(stderr));
+
+            if (exitCode != 0)
+            {
+                return new BuildResult(Success: false, ImageId: null,
+                    ErrorMessage: $"nixpacks build salió con código {exitCode.ToString(CultureInfo.InvariantCulture)}",
+                    logs);
+            }
+
+            // Verificar que la imagen existe localmente: podman images <ref> --format '{{.ID}}'
+            var (inspectExit, inspectOut, inspectErr) = await RunPodmanAsync(
+                ["images", spec.ImageRef, "--format", "{{.ID}}"], ct).ConfigureAwait(false);
+            if (inspectExit != 0 || string.IsNullOrWhiteSpace(inspectOut))
+            {
+                return new BuildResult(Success: false, ImageId: null,
+                    ErrorMessage: $"nixpacks build terminó OK pero la imagen {spec.ImageRef} no aparece en podman. "
+                        + $"stderr={inspectErr.Trim()}",
+                    logs);
+            }
+
+            var imageId = inspectOut.Trim().Split('\n').FirstOrDefault()?.Trim();
+            logs.Add($"Imagen {spec.ImageRef} disponible en podman (id={imageId}).");
+            return new BuildResult(Success: true, imageId, ErrorMessage: null, logs);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Build nixpacks (podman) de imagen {ImageRef} falló", spec.ImageRef);
+            return new BuildResult(Success: false, ImageId: null, ex.Message, logs);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
+        }
+    }
+
+    private static bool IsNixpacksAvailable()
+    {
+        try
+        {
+            using var p = new Process
+            {
+                StartInfo = new ProcessStartInfo("nixpacks", "--version")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                },
+            };
+            p.Start();
+            p.WaitForExit(5_000);
+            return p.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<(int ExitCode, string Stdout, string Stderr)> RunArbitraryAsync(
+        string fileName, IReadOnlyList<string> args, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        foreach (var a in args)
+        {
+            psi.ArgumentList.Add(a);
+        }
+        using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        var stdoutBuilder = new StringBuilder();
+        var stderrBuilder = new StringBuilder();
+        proc.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) { stdoutBuilder.AppendLine(e.Data); }
+        };
+        proc.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) { stderrBuilder.AppendLine(e.Data); }
+        };
+        proc.Start();
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+        try
+        {
+            await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            if (!proc.HasExited)
+            {
+                try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+            }
+            throw;
+        }
+        var stderrText = stderrBuilder.ToString();
+        if (!string.IsNullOrWhiteSpace(stderrText))
+        {
+            _logger.LogDebug("{Bin} stderr: {Stderr}", fileName, stderrText);
+        }
+        return (proc.ExitCode, stdoutBuilder.ToString(), stderrText);
     }
 
     public async Task<PushResult> PushImageAsync(string imageRef, RegistryAuth auth, CancellationToken ct)

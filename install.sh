@@ -89,6 +89,15 @@ else
   warn "Ni docker ni podman en PATH. El central arrancará igual, pero el satélite no podrá ejecutar builds reales."
 fi
 
+# Nixpacks es opcional — solo se usa cuando un Template tiene BuildType=Nixpacks (F11.2).
+# Si falta, los builds Nixpacks devuelven 'nixpacks_not_installed' con instrucciones de instalación.
+if command -v nixpacks >/dev/null 2>&1; then
+  ok "nixpacks $(nixpacks --version 2>/dev/null | head -n1)"
+else
+  warn "nixpacks no encontrado. Builds con BuildType=Nixpacks fallarán hasta instalarlo en el satélite:"
+  warn "  curl -fsSL https://nixpacks.com/install.sh | bash"
+fi
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Configuración (env o interactivo)
 # ─────────────────────────────────────────────────────────────────────────────

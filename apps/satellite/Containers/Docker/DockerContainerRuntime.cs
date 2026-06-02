@@ -1,5 +1,8 @@
 using System.Buffers;
+using System.Diagnostics;
+using System.Formats.Tar;
 using System.Globalization;
+using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -34,9 +37,18 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
     /// Construye una imagen. El central envía un tarball gzip-encoded como bytes; lo pasamos
     /// como stream al cliente Docker. Los progress messages se acumulan en una lista para
     /// retornarlos junto al resultado (útil para diagnóstico de builds fallidos).
+    /// <para>
+    /// F11.2: si <c>spec.Mode == BuildMode.Nixpacks</c>, delegamos a <see cref="BuildImageNixpacksAsync"/>
+    /// que extrae el tarball y ejecuta <c>nixpacks build</c> contra el daemon Docker local.
+    /// </para>
     /// </summary>
     public async Task<BuildResult> BuildImageAsync(BuildSpec spec, CancellationToken ct)
     {
+        if (spec.Mode == BuildMode.Nixpacks)
+        {
+            return await BuildImageNixpacksAsync(spec, ct).ConfigureAwait(false);
+        }
+
         var logs = new List<string>();
         try
         {
@@ -103,6 +115,93 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
         {
             _logger.LogError(ex, "Build de imagen {ImageRef} falló", spec.ImageRef);
             return new BuildResult(Success: false, ImageId: null, ErrorMessage: ex.Message, logs);
+        }
+    }
+
+    /// <summary>
+    /// F11.2 — Build via Nixpacks. Requiere que el CLI <c>nixpacks</c> esté en el PATH del
+    /// satélite (instalable con <c>curl -fsSL https://nixpacks.com/install.sh | bash</c>).
+    /// El binario detecta el lenguaje (Node, Python, Go, Rust, Ruby, PHP, ...) del contexto
+    /// y delega el build al daemon Docker local. La imagen queda etiquetada con <c>spec.ImageRef</c>.
+    /// </summary>
+    private async Task<BuildResult> BuildImageNixpacksAsync(BuildSpec spec, CancellationToken ct)
+    {
+        var logs = new List<string>();
+        var tempDir = Path.Combine(Path.GetTempPath(), "aethra-nixpacks-build-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            // 1. Pre-check: nixpacks debe existir en el PATH.
+            if (!IsNixpacksAvailable())
+            {
+                const string msg = "El CLI 'nixpacks' no está instalado o no está en el PATH del satélite. "
+                    + "Instalalo con: curl -fsSL https://nixpacks.com/install.sh | bash";
+                logs.Add(msg);
+                return new BuildResult(Success: false, ImageId: null,
+                    ErrorMessage: "nixpacks_not_installed", logs);
+            }
+
+            // 2. Extraer el tarball gzip al tempdir.
+            logs.Add($"Extrayendo contexto de build a {tempDir}...");
+            await ExtractTarGzAsync(spec.BuildContextTarGz, tempDir, ct).ConfigureAwait(false);
+
+            // 3. Construir args: nixpacks build <dir> --name <imageRef> [--build-arg ...] [--config ...]
+            var args = new List<string> { "build", tempDir, "--name", spec.ImageRef };
+            foreach (var (k, v) in spec.BuildArgs)
+            {
+                args.Add("--build-arg");
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"{k}={v}"));
+            }
+            if (!string.IsNullOrWhiteSpace(spec.NixpacksConfig))
+            {
+                args.Add("--config");
+                args.Add(spec.NixpacksConfig);
+            }
+
+            logs.Add($"Ejecutando: nixpacks {string.Join(' ', args)}");
+
+            // 4. Ejecutar nixpacks capturando stdout/stderr en logs.
+            var (exitCode, stdout, stderr) = await RunProcessAsync("nixpacks", args, ct).ConfigureAwait(false);
+            logs.AddRange(SplitLines(stdout));
+            logs.AddRange(SplitLines(stderr));
+
+            if (exitCode != 0)
+            {
+                return new BuildResult(Success: false, ImageId: null,
+                    ErrorMessage: $"nixpacks build salió con código {exitCode.ToString(CultureInfo.InvariantCulture)}",
+                    logs);
+            }
+
+            // 5. Verificar que la imagen quedó en el daemon Docker local.
+            string? imageId = null;
+            try
+            {
+                var inspect = await _client.Images.InspectImageAsync(spec.ImageRef, ct).ConfigureAwait(false);
+                imageId = inspect.ID;
+                logs.Add($"Imagen {spec.ImageRef} disponible en el daemon Docker local (id={imageId}).");
+            }
+            catch (DockerImageNotFoundException)
+            {
+                return new BuildResult(Success: false, ImageId: null,
+                    ErrorMessage: $"nixpacks build terminó OK pero la imagen {spec.ImageRef} no aparece en el daemon Docker. "
+                        + "Posible mismatch de socket o registry.",
+                    logs);
+            }
+
+            return new BuildResult(Success: true, imageId, ErrorMessage: null, logs);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Build nixpacks de imagen {ImageRef} falló", spec.ImageRef);
+            return new BuildResult(Success: false, ImageId: null, ex.Message, logs);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
         }
     }
 
@@ -456,6 +555,114 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
             return (imageRef[..colonIdx], imageRef[(colonIdx + 1)..]);
         }
         return (imageRef, "latest");
+    }
+
+    // -------------------------------------------------------------------------
+    // F11.2 helpers compartidos con la rama Nixpacks.
+    // -------------------------------------------------------------------------
+
+    private static bool IsNixpacksAvailable()
+    {
+        // Estrategia simple: lanzar "nixpacks --version" y considerarlo disponible si arranca
+        // sin Win32Exception. Evita un cache para no romper cuando el operador instala nixpacks
+        // tras arrancar el satélite.
+        try
+        {
+            using var p = new Process
+            {
+                StartInfo = new ProcessStartInfo("nixpacks", "--version")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                },
+            };
+            p.Start();
+            p.WaitForExit(5_000);
+            return p.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static async Task<(int ExitCode, string Stdout, string Stderr)> RunProcessAsync(
+        string fileName, IReadOnlyList<string> args, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        foreach (var a in args)
+        {
+            psi.ArgumentList.Add(a);
+        }
+
+        using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        var stdoutBuilder = new StringBuilder();
+        var stderrBuilder = new StringBuilder();
+
+        proc.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) { stdoutBuilder.AppendLine(e.Data); }
+        };
+        proc.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) { stderrBuilder.AppendLine(e.Data); }
+        };
+
+        proc.Start();
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+
+        try
+        {
+            await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            if (!proc.HasExited)
+            {
+                try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+            }
+            throw;
+        }
+
+        return (proc.ExitCode, stdoutBuilder.ToString(), stderrBuilder.ToString());
+    }
+
+    private static async Task ExtractTarGzAsync(byte[] tarGz, string destDir, CancellationToken ct)
+    {
+        await using var ms = new MemoryStream(tarGz, writable: false);
+        await using var gz = new GZipStream(ms, CompressionMode.Decompress);
+        await TarFile.ExtractToDirectoryAsync(gz, destDir, overwriteFiles: true, ct).ConfigureAwait(false);
+    }
+
+    private static IEnumerable<string> SplitLines(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            yield break;
+        }
+        using var sr = new StringReader(text);
+        while (sr.ReadLine() is { } line)
+        {
+            yield return line;
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try { Directory.Delete(path, recursive: true); }
+        catch (DirectoryNotFoundException) { }
+        catch (IOException) { /* best-effort */ }
+        catch (UnauthorizedAccessException) { /* best-effort */ }
     }
 
     public void Dispose() => _client.Dispose();
