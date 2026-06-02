@@ -1,3 +1,4 @@
+using Aethra.Modules.Projects.Domain.Secrets;
 using Aethra.Modules.Projects.Domain.Templates;
 using Aethra.Modules.Projects.Infrastructure;
 using Aethra.Modules.Projects.Infrastructure.Lookups;
@@ -40,12 +41,18 @@ public static class ProjectsModule
         services.AddScoped<IInstanceLookup, EfInstanceLookup>();
         services.AddScoped<ITenantContext, EfTenantContext>();
         services.AddScoped<IEnvVarWriter, EfEnvVarWriter>();
-        // F9.1 cableará EfSecretWriter contra la nueva tabla cifrada.
-        services.AddScoped<ISecretWriter, NoOpSecretWriter>();
+        // F10.1c: resolver de entorno runtime (cascade env vars + secretos descifrados) que el
+        // orquestador de deployment consume para alimentar el RunSpec del satélite.
+        services.AddScoped<IEnvironmentResolver, EfEnvironmentResolver>();
+        // F10.2: EfSecretWriter real contra la tabla cifrada projects.secrets (reemplaza el
+        // stub NoOpSecretWriter — antes los secrets de bindings no persistían).
+        services.AddScoped<ISecretWriter, EfSecretWriter>();
 
         // F9.9: codec del Template.WebhookSecret. DataProtection ya está registrado en
         // apps/api/Program.cs con KeyRing persistente.
         services.AddSingleton<IWebhookSecretCodec, DataProtectionWebhookSecretCodec>();
+        // F10.2: codec de secretos (purpose aethra-secrets), usado por EfSecretWriter.
+        services.AddSingleton<ISecretCodec, DataProtectionSecretCodec>();
 
         return services;
     }

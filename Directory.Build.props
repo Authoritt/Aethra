@@ -43,7 +43,11 @@
                 En .NET moderno sufijos descriptivos son idiomáticos (Channel<T>, ConcurrentQueue<T>).
                 Aethra usa "Queue", "Worker", "Behavior", "Provider" como sufijos semánticos legítimos.
     -->
-    <NoWarn>$(NoWarn);CA1716;CA1000;CA1711;CA1848;IDE0005</NoWarn>
+    <!--
+      - CA1873: misma familia que CA1848 — evaluar args de log potencialmente caros con el nivel
+                deshabilitado. Mismo criterio (single-user, logs no son bottleneck). No rompe build.
+    -->
+    <NoWarn>$(NoWarn);CA1716;CA1000;CA1711;CA1848;CA1873;IDE0005</NoWarn>
   </PropertyGroup>
 
   <!-- Activa Central Package Management (versiones en Directory.Packages.props) -->

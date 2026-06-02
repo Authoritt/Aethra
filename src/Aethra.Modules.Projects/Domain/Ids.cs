@@ -17,3 +17,9 @@ public readonly record struct EnvVarId(AethraId Value)
     public static EnvVarId New() => new(AethraId.NewId("var"));
     public override string ToString() => Value.ToString();
 }
+
+public readonly record struct SecretId(AethraId Value)
+{
+    public static SecretId New() => new(AethraId.NewId("sec"));
+    public override string ToString() => Value.ToString();
+}

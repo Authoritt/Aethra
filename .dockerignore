@@ -1,0 +1,10 @@
+# Mantiene el build context liviano para deploy/api.Dockerfile.
+**/bin/
+**/obj/
+**/node_modules/
+**/.next/
+**/.aspnet-keys/
+**/.vs/
+.git/
+*.user
+*.log

@@ -2,6 +2,7 @@ using Aethra.Modules.Projects.Domain;
 using Aethra.Modules.Projects.Domain.Clients;
 using Aethra.Modules.Projects.Domain.EnvVars;
 using Aethra.Modules.Projects.Domain.Instances;
+using Aethra.Modules.Projects.Domain.Secrets;
 using Aethra.Modules.Projects.Domain.Templates;
 using Aethra.Modules.Projects.Infrastructure.Configurations;
 using Aethra.Shared.Infrastructure.Persistence;
@@ -27,6 +28,7 @@ public sealed class ProjectsDbContext(DbContextOptions<ProjectsDbContext> option
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Instance> Instances => Set<Instance>();
     public DbSet<EnvironmentVariable> EnvironmentVariables => Set<EnvironmentVariable>();
+    public DbSet<Secret> Secrets => Set<Secret>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,5 +38,6 @@ public sealed class ProjectsDbContext(DbContextOptions<ProjectsDbContext> option
         modelBuilder.ApplyConfiguration(new ClientConfiguration());
         modelBuilder.ApplyConfiguration(new InstanceConfiguration());
         modelBuilder.ApplyConfiguration(new EnvironmentVariableConfiguration());
+        modelBuilder.ApplyConfiguration(new SecretConfiguration());
     }
 }
