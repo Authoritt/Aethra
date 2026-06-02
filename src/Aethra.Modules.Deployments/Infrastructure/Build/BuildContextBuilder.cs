@@ -1,6 +1,7 @@
+using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO.Compression;
-using LibGit2Sharp;
+using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace Aethra.Modules.Deployments.Infrastructure.Build;
@@ -28,15 +29,19 @@ public interface IBuildContextBuilder
 }
 
 /// <summary>
-/// Implementación sobre LibGit2Sharp (clone full + checkout del SHA). Empaqueta con
-/// <see cref="TarWriter"/> + GZip (built-in .NET). Excluye <c>.git</c> del contexto.
+/// Implementación sobre el <b>git CLI</b> (clone shallow + checkout del SHA). Empaqueta con
+/// <see cref="TarWriter"/> + GZip (built-in .NET) excluyendo <c>.git</c>, respetando
+/// <c>BaseDirectory</c>.
 ///
-/// Nota: LibGit2Sharp no hace shallow clone; para repos grandes conviene migrar a
-/// <c>git clone --depth</c> vía CLI. Para el caso normal (repos de apps) el clone full es
-/// aceptable y evita depender de que <c>git</c> esté en el PATH del proceso de la API.
+/// Usamos el binario <c>git</c> en lugar de LibGit2Sharp porque su transporte HTTPS nativo es
+/// fiable en Linux/ARM (el bundle nativo de LibGit2Sharp suele fallar en HTTPS en esos targets)
+/// y soporta shallow clone, que es más rápido para el caso típico. Requiere <c>git</c> en el PATH
+/// del proceso central (la imagen Docker del central lo instala).
 /// </summary>
 public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : IBuildContextBuilder
 {
+    private static readonly TimeSpan GitTimeout = TimeSpan.FromMinutes(5);
+
     public async Task<BuildContextResult> BuildAsync(
         string gitRepoUrl,
         string branch,
@@ -51,37 +56,49 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
 
         try
         {
-            // === Clone ===
-            var cloneOptions = new CloneOptions { Checkout = true };
-            if (!string.IsNullOrWhiteSpace(branch))
-            {
-                cloneOptions.BranchName = branch;
-            }
+            // === Clone shallow del branch ===
             log.Add($"Clonando {gitRepoUrl} (branch={branch})...");
-            await Task.Run(() => Repository.Clone(gitRepoUrl, workDir, cloneOptions), ct)
-                .ConfigureAwait(false);
+            var hasBranch = !string.IsNullOrWhiteSpace(branch);
+            string[] cloneArgs = hasBranch
+                ? ["clone", "--depth", "1", "--branch", branch, "--single-branch", gitRepoUrl, workDir]
+                : ["clone", "--depth", "1", gitRepoUrl, workDir];
 
-            // === Checkout del SHA solicitado (si es real y existe en el historial) ===
-            string resolvedSha;
-            using (var repo = new Repository(workDir))
+            var clone = await RunGitAsync(cloneArgs, workingDir: null, ct).ConfigureAwait(false);
+            if (clone.ExitCode != 0)
             {
-                if (!string.IsNullOrWhiteSpace(gitSha)
-                    && repo.Head.Tip is not null
-                    && !string.Equals(repo.Head.Tip.Sha, gitSha, StringComparison.OrdinalIgnoreCase))
+                // Reintento sin --branch: el ref puede no ser un branch (tag/sha) o el default
+                // difiere del pedido. Clonamos el default y luego intentamos el checkout.
+                Directory.Delete(workDir, recursive: true);
+                Directory.CreateDirectory(workDir);
+                var retry = await RunGitAsync(["clone", "--depth", "1", gitRepoUrl, workDir], null, ct)
+                    .ConfigureAwait(false);
+                if (retry.ExitCode != 0)
                 {
-                    try
-                    {
-                        Commands.Checkout(repo, gitSha);
-                        log.Add($"Checkout commit {Short(gitSha)} OK.");
-                    }
-                    catch (LibGit2SharpException)
-                    {
-                        log.Add($"No se pudo hacer checkout de {Short(gitSha)} (no está en el historial "
-                            + $"del clone); se usa HEAD del branch {branch}.");
-                    }
+                    throw new InvalidOperationException(
+                        $"git clone falló: {Trim(retry.StdErr.Length > 0 ? retry.StdErr : clone.StdErr)}");
                 }
-                resolvedSha = repo.Head.Tip?.Sha ?? gitSha ?? string.Empty;
             }
+
+            // === Checkout del SHA solicitado (best-effort) ===
+            if (!string.IsNullOrWhiteSpace(gitSha))
+            {
+                var head = await RunGitAsync(["rev-parse", "HEAD"], workDir, ct).ConfigureAwait(false);
+                var currentSha = head.StdOut.Trim();
+                if (!string.Equals(currentSha, gitSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    // El clone shallow puede no contener el commit: lo traemos puntualmente.
+                    await RunGitAsync(["fetch", "--depth", "1", "origin", gitSha!], workDir, ct)
+                        .ConfigureAwait(false);
+                    var checkout = await RunGitAsync(["checkout", "--detach", gitSha!], workDir, ct)
+                        .ConfigureAwait(false);
+                    log.Add(checkout.ExitCode == 0
+                        ? $"Checkout commit {Short(gitSha!)} OK."
+                        : $"No se pudo hacer checkout de {Short(gitSha!)}; se usa HEAD del branch {branch}.");
+                }
+            }
+
+            var resolved = await RunGitAsync(["rev-parse", "HEAD"], workDir, ct).ConfigureAwait(false);
+            var resolvedSha = resolved.StdOut.Trim();
 
             // === Resolver raíz del contexto (BaseDirectory) ===
             var contextRoot = workDir;
@@ -120,7 +137,7 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
             foreach (var file in Directory.EnumerateFiles(rootFull, "*", SearchOption.AllDirectories))
             {
                 var rel = Path.GetRelativePath(rootFull, file).Replace('\\', '/');
-                // Excluir metadata de git y artefactos pesados habituales.
+                // Excluir metadata de git.
                 if (rel.StartsWith(".git/", StringComparison.Ordinal) || rel == ".git")
                 {
                     continue;
@@ -131,7 +148,72 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
         return ms.ToArray();
     }
 
+    /// <summary>Ejecuta <c>git</c> con los argumentos dados y captura stdout/stderr.</summary>
+    private async Task<(int ExitCode, string StdOut, string StdErr)> RunGitAsync(
+        string[] args, string? workingDir, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo("git")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = workingDir ?? Environment.CurrentDirectory,
+        };
+        foreach (var a in args)
+        {
+            psi.ArgumentList.Add(a);
+        }
+        // Evita prompts interactivos de credenciales que colgarían el proceso.
+        psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
+
+        using var proc = new Process { StartInfo = psi };
+        var stdout = new StringBuilder();
+        var stderr = new StringBuilder();
+        proc.OutputDataReceived += (_, e) => { if (e.Data is not null) { stdout.AppendLine(e.Data); } };
+        proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) { stderr.AppendLine(e.Data); } };
+
+        try
+        {
+            proc.Start();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                "No se pudo ejecutar 'git'. ¿Está instalado en el PATH del central?", ex);
+        }
+
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(GitTimeout);
+        try
+        {
+            await proc.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            TryKill(proc);
+            throw new TimeoutException($"git {args[0]} excedió {GitTimeout.TotalMinutes:0} min.");
+        }
+        catch (OperationCanceledException)
+        {
+            TryKill(proc);
+            throw;
+        }
+
+        return (proc.ExitCode, stdout.ToString(), stderr.ToString());
+    }
+
+    private static void TryKill(Process proc)
+    {
+        try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+    }
+
     private static string Short(string sha) => sha.Length >= 7 ? sha[..7] : sha;
+
+    private static string Trim(string s) => s.Length > 500 ? s[..500] : s.Trim();
 
     private void TryDelete(string dir)
     {
