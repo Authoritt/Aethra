@@ -106,6 +106,17 @@ public static class ProjectsEndpoints
         app.MapGet("/api/templates/{id}", async (string id, IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new GetTemplateByIdQuery(id), ct)))
             .WithTags("Templates").RequireAuthorization(ScopeProjectsRead).WithName("GetTemplate");
+
+        // F11.2: inspecciona un repo Git (shallow clone) y devuelve qué BuildType usar.
+        app.MapPost("/api/templates/discover", async (
+            [FromBody] DiscoverTemplateRequest body,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            var query = new DiscoverTemplateQuery(body.GitRepoUrl, body.Branch);
+            var r = await m.Send(query, ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
+        }).WithTags("Templates").RequireAuthorization(ScopeProjectsRead).WithName("DiscoverTemplate");
     }
 
     // -------------------------------------------------------------------------
@@ -234,6 +245,9 @@ public static class ProjectsEndpoints
         bool AutoDeployOnNewBuild);
 
     public sealed record SetCustomDomainRequest(string? CustomDomain);
+
+    /// <summary>F11.2 — Body de <c>POST /api/templates/discover</c>.</summary>
+    public sealed record DiscoverTemplateRequest(string GitRepoUrl, string? Branch);
 
     // -------------------------------------------------------------------------
     // Helpers

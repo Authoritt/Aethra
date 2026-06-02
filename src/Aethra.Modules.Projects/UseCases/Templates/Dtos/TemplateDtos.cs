@@ -50,3 +50,16 @@ public sealed record TemplateCreatedResult(
     DateTimeOffset createdAt);
 
 public sealed record TemplateBuildArgDto(string key, string value);
+
+/// <summary>
+/// F11.2 — Resultado del POST <c>/api/templates/discover</c>. Indica qué estrategia de build
+/// recomendamos para el repo inspeccionado y qué puertos exponer por defecto en el form.
+/// </summary>
+public sealed record TemplateDiscoverResult(
+    IReadOnlyList<string> detectedLanguages,
+    bool hasDockerfile,
+    bool hasCompose,
+    bool hasNixpacksToml,
+    string suggestedBuildType,
+    IReadOnlyList<int> exposedPorts);
+
