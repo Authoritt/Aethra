@@ -12,11 +12,13 @@ public sealed class ServicesDbContext(DbContextOptions<ServicesDbContext> option
 
     public DbSet<ManagedService> ManagedServices => Set<ManagedService>();
     public DbSet<ServiceBinding> ServiceBindings => Set<ServiceBinding>();
+    public DbSet<ServiceBackup> ServiceBackups => Set<ServiceBackup>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfiguration(new ManagedServiceConfiguration());
         modelBuilder.ApplyConfiguration(new ServiceBindingConfiguration());
+        modelBuilder.ApplyConfiguration(new ServiceBackupConfiguration());
     }
 }

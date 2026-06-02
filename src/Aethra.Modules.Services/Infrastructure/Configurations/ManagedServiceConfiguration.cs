@@ -63,6 +63,19 @@ internal sealed class ManagedServiceConfiguration : IEntityTypeConfiguration<Man
         builder.Property(s => s.ErrorCode).HasColumnName("error_code").HasMaxLength(64);
         builder.Property(s => s.ErrorMessage).HasColumnName("error_message").HasMaxLength(2000);
 
+        // F11.3B: BackupPolicy como owned value object (3 columnas en la misma tabla).
+        builder.OwnsOne(s => s.BackupPolicy, bp =>
+        {
+            bp.Property(p => p.CronExpression)
+                .HasColumnName("backup_cron").HasMaxLength(64);
+            bp.Property(p => p.RetentionCount)
+                .HasColumnName("backup_retention");
+            bp.Property(p => p.Destination)
+                .HasColumnName("backup_destination").HasMaxLength(500);
+        });
+        builder.Property(s => s.LastBackupAt).HasColumnName("last_backup_at");
+        builder.Property(s => s.LastRestoredAt).HasColumnName("last_restored_at");
+
         builder.Ignore(s => s.DomainEvents);
     }
 

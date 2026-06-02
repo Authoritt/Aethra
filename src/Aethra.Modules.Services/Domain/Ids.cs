@@ -13,3 +13,9 @@ public readonly record struct ServiceBindingId(AethraId Value)
     public static ServiceBindingId New() => new(AethraId.NewId("bnd"));
     public override string ToString() => Value.ToString();
 }
+
+public readonly record struct ServiceBackupId(AethraId Value)
+{
+    public static ServiceBackupId New() => new(AethraId.NewId("bkp"));
+    public override string ToString() => Value.ToString();
+}

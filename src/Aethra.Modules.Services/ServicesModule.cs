@@ -1,4 +1,5 @@
 using Aethra.Modules.Services.Infrastructure;
+using Aethra.Modules.Services.Infrastructure.Backup;
 using Aethra.Modules.Services.Infrastructure.Binding;
 using Aethra.Modules.Services.Infrastructure.Provisioning;
 using Aethra.Modules.Services.Presentation;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Aethra.Modules.Services;
 
@@ -36,6 +38,19 @@ public static class ServicesModule
         // Codec de credenciales del binding y mapper de env vars (DATABASE_URL, etc.).
         services.AddSingleton<IBindingCredentialsCodec, DataProtectionBindingCredentialsCodec>();
         services.AddSingleton<IBindingEnvVarMapper, DefaultBindingEnvVarMapper>();
+
+        // F11.3B: backups. Engines por tipo + storages por scheme + orchestrator scoped.
+        services.AddScoped<IBackupEngine, PostgresBackupEngine>();
+        services.AddScoped<IBackupEngine, RedisBackupEngine>();
+        services.AddScoped<IBackupEngine, RabbitMqBackupEngine>();
+        services.AddScoped<IBackupStorage, VolumeBackupStorage>();
+        services.AddScoped<IBackupStorage, S3BackupStorage>();
+        services.AddScoped<BackupOrchestrator>();
+
+        // HttpClient para llamadas HTTP del rabbit engine y S3 storage.
+        services.AddHttpClient("services-backup", c => c.Timeout = TimeSpan.FromMinutes(5));
+
+        services.AddHostedService<BackupWorker>();
 
         return services;
     }

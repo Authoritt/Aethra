@@ -29,6 +29,9 @@ public sealed class ManagedService : AggregateRoot<ManagedServiceId>
     public DateTimeOffset? ProvisionedAt { get; private set; }
     public string? ErrorCode { get; private set; }
     public string? ErrorMessage { get; private set; }
+    public BackupPolicy? BackupPolicy { get; private set; }
+    public DateTimeOffset? LastBackupAt { get; private set; }
+    public DateTimeOffset? LastRestoredAt { get; private set; }
 
     private ManagedService(ManagedServiceId id, string slug, string name, ServiceType type, string version,
         string targetVmId, string containerName, string image, int internalPort, string networkName,
@@ -107,6 +110,28 @@ public sealed class ManagedService : AggregateRoot<ManagedServiceId>
     public void UpdateAdminCredentials(byte[] cipher, DateTimeOffset now)
     {
         AdminCredentialsCipher = cipher;
+        UpdatedAt = now;
+    }
+
+    public void SetBackupPolicy(BackupPolicy? policy, DateTimeOffset now)
+    {
+        if (policy is not null && !policy.IsValid())
+        {
+            throw new ArgumentException("BackupPolicy invalida (cron/retention/destination).", nameof(policy));
+        }
+        BackupPolicy = policy;
+        UpdatedAt = now;
+    }
+
+    public void MarkBackupCompleted(DateTimeOffset now)
+    {
+        LastBackupAt = now;
+        UpdatedAt = now;
+    }
+
+    public void MarkRestored(DateTimeOffset now)
+    {
+        LastRestoredAt = now;
         UpdatedAt = now;
     }
 

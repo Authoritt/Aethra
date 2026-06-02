@@ -1,4 +1,5 @@
 using Aethra.Modules.Services.Domain;
+using Aethra.Modules.Services.UseCases.Backups;
 using Aethra.Modules.Services.UseCases.Commands;
 using Aethra.Modules.Services.UseCases.Queries;
 using Aethra.Shared.Contracts.Services;
@@ -120,8 +121,54 @@ public static class ServicesEndpoints
         .RequireAuthorization(ScopeWrite)
         .WithName("RotateBindingCredentials");
 
+        // ----------- F11.3B: Backups -----------
+        services.MapGet("/{serviceId}/backups", async (string serviceId, [FromQuery] int? limit,
+            IMediator m, CancellationToken ct) =>
+            ToResult(await m.Send(new ListBackupsQuery(serviceId, limit ?? 50), ct)))
+            .RequireAuthorization(ScopeRead)
+            .WithName("ListServiceBackups");
+
+        services.MapPost("/{serviceId}/backups/run", async (string serviceId, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new RunBackupCommand(serviceId), ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/services/{serviceId}/backups/{r.Value.Id}", r.Value)
+                : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("RunServiceBackup");
+
+        services.MapPost("/{serviceId}/backups/{backupId}/restore", async (string serviceId, string backupId,
+            IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new RestoreBackupCommand(serviceId, backupId), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("RestoreServiceBackup");
+
+        services.MapDelete("/{serviceId}/backups/{backupId}", async (string serviceId, string backupId,
+            IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new DeleteBackupCommand(backupId), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("DeleteServiceBackup");
+
+        services.MapPut("/{serviceId}/backup-policy", async (string serviceId, [FromBody] SetBackupPolicyRequest body,
+            IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new SetBackupPolicyCommand(serviceId, body.CronExpression, body.RetentionCount, body.Destination), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("SetBackupPolicy");
+
         return app;
     }
+
+    public sealed record SetBackupPolicyRequest(string? CronExpression, int? RetentionCount, string? Destination);
 
     public sealed record CreateServiceRequest(string TemplateId, string Slug, string Name, string TargetVmId, bool? ExposedExternally);
     public sealed record CreateBindingRequest(

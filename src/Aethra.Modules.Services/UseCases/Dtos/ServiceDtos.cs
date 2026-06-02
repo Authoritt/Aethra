@@ -53,3 +53,18 @@ public sealed record ServiceBindingDto(
     DateTimeOffset? ProvisionedAt,
     DateTimeOffset? RevokedAt,
     DateTimeOffset? LastRotatedAt);
+
+public sealed record ServiceBackupDto(
+    string Id,
+    string ServiceId,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? FinishedAt,
+    string Status,
+    long? SizeBytes,
+    string DestinationPath,
+    string? ErrorMessage);
+
+public sealed record BackupPolicyDto(
+    string CronExpression,
+    int RetentionCount,
+    string Destination);
