@@ -26,6 +26,7 @@ public interface ITemplateLookup
 /// Proyección read-only de un Template con los campos necesarios para orquestar un build
 /// (clone Git + decisión Dockerfile/Compose/Nixpacks).
 /// </summary>
+/// <param name="ComposeFilePath">Ruta al <c>docker-compose.yml</c> si <c>BuildType=DockerCompose</c>; null en otros modos.</param>
 public sealed record TemplateForBuildView(
     string TemplateId,
     string ProjectId,
@@ -37,4 +38,5 @@ public sealed record TemplateForBuildView(
     string BaseDirectory,
     IReadOnlyList<string> WatchPaths,
     string BuildType,
-    string DockerfilePath);
+    string DockerfilePath,
+    string? ComposeFilePath = null);
