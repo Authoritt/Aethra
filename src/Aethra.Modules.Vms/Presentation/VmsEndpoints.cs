@@ -12,16 +12,21 @@ namespace Aethra.Modules.Vms.Presentation;
 
 public static class VmsEndpoints
 {
+    private const string ScopeRead = "scope:vms:read";
+    private const string ScopeWrite = "scope:vms:write";
+
     public static IEndpointRouteBuilder MapVmsEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/vms").WithTags("Vms").RequireAuthorization();
+        var group = app.MapGroup("/api/vms").WithTags("Vms");
 
         group.MapGet("/", async (IMediator mediator, CancellationToken ct) =>
             ToResult(await mediator.Send(new ListVmsQuery(), ct)))
+            .RequireAuthorization(ScopeRead)
             .WithName("ListVms");
 
         group.MapGet("/{vmId}", async (string vmId, IMediator mediator, CancellationToken ct) =>
             ToResult(await mediator.Send(new GetVmByIdQuery(vmId), ct)))
+            .RequireAuthorization(ScopeRead)
             .WithName("GetVm");
 
         group.MapPost("/", async ([FromBody] RegisterVmRequest body, IMediator mediator, CancellationToken ct) =>
@@ -30,6 +35,7 @@ public static class VmsEndpoints
             var r = await mediator.Send(cmd, ct);
             return r.IsSuccess ? Results.Created($"/api/vms/{r.Value.VmId}", r.Value) : MapError(r.Error);
         })
+        .RequireAuthorization(ScopeWrite)
         .WithName("RegisterVm")
         .WithDescription("Registra una VM. La respuesta incluye el TOKEN UNA SOLA VEZ.");
 
