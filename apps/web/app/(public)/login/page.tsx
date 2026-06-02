@@ -2,86 +2,137 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Loader2, LogIn } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Logo } from "@/components/brand/logo";
 import { ApiError, api } from "@/lib/api";
+
+const schema = z.object({
+  email: z.string().email("Correo inválido"),
+  password: z.string().min(1, "Requerido"),
+});
+
+type FormValues = z.infer<typeof schema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@aethra.local");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const form = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { email: "admin@aethra.local", password: "" },
+  });
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
+  async function onSubmit(values: FormValues) {
+    setSubmitting(true);
     try {
       await api<{ email: string }>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(values),
       });
+      toast.success("Sesión iniciada");
       router.push("/dashboard");
       router.refresh();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        setError("Credenciales inválidas");
+        toast.error("Credenciales inválidas");
+        form.setError("password", { message: "Credenciales inválidas" });
       } else {
-        setError(e instanceof Error ? e.message : "Error desconocido");
+        const msg = e instanceof Error ? e.message : "Error desconocido";
+        toast.error(msg);
       }
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-950 px-6">
-      <form
-        onSubmit={onSubmit}
-        className="flex w-full max-w-sm flex-col gap-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8"
-      >
-        <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold text-zinc-100">Aethra</h1>
-          <p className="text-sm text-zinc-500">Inicia sesión para continuar.</p>
-        </header>
-
-        <label className="flex flex-col gap-1 text-sm text-zinc-300">
-          Correo
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none focus:border-emerald-500"
-            required
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-zinc-300">
-          Contraseña
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none focus:border-emerald-500"
-            required
-          />
-        </label>
-
-        {error && (
-          <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-            {error}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-50"
-        >
-          {loading ? "Entrando..." : "Entrar"}
-        </button>
-      </form>
+    <main className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="items-center space-y-3 text-center">
+          <Logo variant="lockup" className="mb-1" />
+          <CardTitle>Iniciá sesión</CardTitle>
+          <CardDescription>
+            Plataforma unificada de despliegue y operación.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="flex flex-col gap-4"
+            >
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Correo</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        autoComplete="email"
+                        placeholder="admin@aethra.local"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contraseña</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        autoComplete="current-password"
+                        placeholder="••••••••"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" disabled={submitting} className="mt-2 w-full">
+                {submitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <LogIn className="mr-2 h-4 w-4" />
+                )}
+                {submitting ? "Entrando…" : "Entrar"}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+        <CardFooter className="justify-center text-xs text-muted-foreground">
+          v1 · construido sobre tu propia infra Oracle.
+        </CardFooter>
+      </Card>
     </main>
   );
 }
