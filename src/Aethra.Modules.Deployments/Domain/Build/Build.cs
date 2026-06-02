@@ -134,8 +134,11 @@ public sealed class Build : AggregateRoot<BuildId>
     /// <summary>
     /// Marca el build como fallido. Idempotente cuando ya está en estado terminal:
     /// no genera evento adicional para evitar duplicados ante reintentos del orquestador.
+    /// <paramref name="durationMs"/> se pasa cuando el orquestador tiene un Stopwatch real
+    /// (p.ej. tras un TimeoutException de minutos) — si es null, no se persiste duración,
+    /// lo cual es correcto para fallos tempranos (clone fail, template_not_found, etc).
     /// </summary>
-    public void Fail(string code, string message, DateTimeOffset now)
+    public void Fail(string code, string message, DateTimeOffset now, long? durationMs = null)
     {
         if (Status.IsTerminal())
         {
@@ -144,6 +147,10 @@ public sealed class Build : AggregateRoot<BuildId>
         ErrorCode = code;
         ErrorMessage = message;
         FailedAtStage = Status;
+        if (durationMs is not null)
+        {
+            BuildDurationMs = durationMs;
+        }
         AppendLog(BuildLogLevel.Error, Status.ToString().ToLowerInvariant(), $"[{code}] {message}", now);
         var from = Status;
         Status = BuildStatus.Failed;

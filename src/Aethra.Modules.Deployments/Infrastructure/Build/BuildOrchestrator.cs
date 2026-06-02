@@ -71,10 +71,9 @@ public sealed class BuildOrchestrator(
             return;
         }
 
+        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
             // === Clone ===
             build.Transition(BuildStatus.Cloning, clock.UtcNow);
             build.AppendLog(BuildLogLevel.Info, "cloning",
@@ -113,7 +112,8 @@ public sealed class BuildOrchestrator(
             {
                 FailAndPersist(build, "no_satellite",
                     "No hay satélite conectado al central. Verificar que el satélite esté corriendo "
-                    + "y que su token sea válido.");
+                    + "y que su token sea válido.",
+                    totalStopwatch.ElapsedMilliseconds);
                 await PersistAndPublishFailureAsync(build, ct).ConfigureAwait(false);
                 return;
             }
@@ -137,13 +137,15 @@ public sealed class BuildOrchestrator(
             }
             catch (SatelliteNotConnectedException ex)
             {
-                FailAndPersist(build, "no_satellite", ex.Message);
+                FailAndPersist(build, "no_satellite", ex.Message, totalStopwatch.ElapsedMilliseconds);
                 await PersistAndPublishFailureAsync(build, ct).ConfigureAwait(false);
                 return;
             }
             catch (TimeoutException ex)
             {
-                FailAndPersist(build, "satellite_timeout", ex.Message);
+                // F9.10 D2: capturar ANTES de Fail() para que BuildDurationMs refleje el tiempo
+                // real del RPC (típicamente varios minutos), no ~1ms del clock posterior.
+                FailAndPersist(build, "satellite_timeout", ex.Message, totalStopwatch.ElapsedMilliseconds);
                 await PersistAndPublishFailureAsync(build, ct).ConfigureAwait(false);
                 return;
             }
@@ -157,7 +159,8 @@ public sealed class BuildOrchestrator(
             if (!buildResult.Success)
             {
                 FailAndPersist(build, "runtime_failed",
-                    buildResult.ErrorMessage ?? "Build falló en el satélite sin mensaje.");
+                    buildResult.ErrorMessage ?? "Build falló en el satélite sin mensaje.",
+                    totalStopwatch.ElapsedMilliseconds);
                 await PersistAndPublishFailureAsync(build, ct).ConfigureAwait(false);
                 return;
             }
@@ -197,17 +200,21 @@ public sealed class BuildOrchestrator(
         catch (Exception ex)
         {
             logger.LogError(ex, "BuildOrchestrator: falla inesperada en build {Id}", build.Id);
-            FailAndPersist(build, "internal_error", ex.Message);
+            FailAndPersist(build, "internal_error", ex.Message, totalStopwatch.ElapsedMilliseconds);
             await PersistAndPublishFailureAsync(build, ct).ConfigureAwait(false);
         }
     }
 
-    private void FailAndPersist(Domain.Build.Build build, string code, string message)
+    private void FailAndPersist(Domain.Build.Build build, string code, string message,
+        long? durationMs = null)
     {
         // Si el build ya falló antes (p.ej. dentro del try), no duplicamos transición.
         if (!build.Status.IsTerminal())
         {
-            build.Fail(code, message, clock.UtcNow);
+            // F9.10 D2: durationMs viene del Stopwatch del orquestador para fallos tardíos
+            // (timeout, runtime_failed, internal_error). Para fallos tempranos pre-stopwatch
+            // (template_not_found) viaja como null y BuildDurationMs queda en null — correcto.
+            build.Fail(code, message, clock.UtcNow, durationMs);
         }
     }
 
