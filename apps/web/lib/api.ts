@@ -2,13 +2,13 @@
  * Helper para llamar al backend de Aethra. Envía cookies automáticamente
  * y normaliza errores en `ApiError`.
  *
- * URL base configurable vía `NEXT_PUBLIC_API_URL` (por defecto http://localhost:5080).
+ * URL base configurable vía `NEXT_PUBLIC_API_URL` (por defecto http://localhost:5000).
  */
 
 // TODO F9.3+: añadir helpers para templates, clients, instances, builds, deployments.
 
 export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5080";
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
 export class ApiError extends Error {
   constructor(public status: number, public body: unknown, message?: string) {

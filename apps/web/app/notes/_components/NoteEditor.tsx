@@ -339,7 +339,7 @@ function NoteImageUploader({
       form.append("file", file);
       const res = await fetch(
         `${
-          process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5080"
+          process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000"
         }/api/notes/${noteId}/images`,
         {
           method: "POST",
