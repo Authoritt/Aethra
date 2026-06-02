@@ -235,6 +235,16 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
             var completed = await Task.WhenAny(tcs.Task, timeoutTask).ConfigureAwait(false);
             if (completed != tcs.Task)
             {
+                // Distinguir cancelación del caller vs timeout real. Si el ct externo fue
+                // cancelado, el Task.Delay también termina pero NO es un timeout: el caller
+                // pidió aborto. Reportar TimeoutException en ese caso enmascaraba la causa
+                // real en logs y en el errorMessage del Build/Deployment.
+                if (ct.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException(
+                        $"Operación cancelada por el caller (vmId={vmId}, method={method}, correlationId={correlationId}).",
+                        ct);
+                }
                 _logger.LogWarning(
                     "Timeout {Seconds}s esperando respuesta del satélite para vmId={VmId} method={Method} correlationId={CorrelationId}.",
                     timeout.TotalSeconds, vmId, method, correlationId);
