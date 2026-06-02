@@ -3,7 +3,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowRight, Copy, Loader2, Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Copy,
+  Loader2,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +30,7 @@ import { ApiError, api } from "@/lib/api";
 import type {
   BuildType,
   CreateTemplateRequest,
+  DiscoverTemplateResult,
   TemplateBuildArg,
   TemplateDetail,
 } from "@/lib/types";
@@ -42,6 +52,9 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
   const [buildArgs, setBuildArgs] = useState<TemplateBuildArg[]>([]);
   const [loading, setLoading] = useState(false);
   const [created, setCreated] = useState<TemplateDetail | null>(null);
+  // F11.2 — estado del discover (Detectar) que prellena el form a partir del repo.
+  const [detecting, setDetecting] = useState(false);
+  const [detection, setDetection] = useState<DiscoverTemplateResult | null>(null);
 
   const slugError = useMemo(() => {
     if (!slug) return null;
@@ -81,6 +94,51 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
   }
   function removeArg(i: number) {
     setBuildArgs((rows) => rows.filter((_, idx) => idx !== i));
+  }
+
+  /**
+   * F11.2 — Llama a `POST /api/templates/discover` con el repo + branch del form,
+   * prellena `buildType` segun `suggestedBuildType` del backend y guarda la respuesta
+   * en `detection` para mostrar los detalles (lenguaje, puertos, archivos detectados).
+   */
+  async function onDetect() {
+    if (!gitRepoUrl.trim()) {
+      toast.error("Pone primero el git repo URL.");
+      return;
+    }
+    setDetecting(true);
+    setDetection(null);
+    try {
+      const result = await api<DiscoverTemplateResult>(
+        `/api/templates/discover`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            gitRepoUrl: gitRepoUrl.trim(),
+            branch: branch.trim() || null,
+          }),
+        },
+      );
+      setDetection(result);
+      setBuildType(result.suggestedBuildType);
+      toast.success(
+        `Detectado: ${result.suggestedBuildType}` +
+          (result.detectedLanguages.length > 0
+            ? ` (${result.detectedLanguages.join(", ")})`
+            : ""),
+      );
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string } | undefined)?.message ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(`Discover falló: ${msg}`);
+    } finally {
+      setDetecting(false);
+    }
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -183,14 +241,73 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
             </legend>
             <div className="space-y-2">
               <Label htmlFor="git">Git repo URL *</Label>
-              <Input
-                id="git"
-                value={gitRepoUrl}
-                onChange={(e) => setGitRepoUrl(e.target.value)}
-                placeholder="git@github.com:org/repo.git"
-                className="font-mono text-xs"
-                required
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="git"
+                  value={gitRepoUrl}
+                  onChange={(e) => {
+                    setGitRepoUrl(e.target.value);
+                    // Si el operador edita el URL, el resultado del detect previo deja
+                    // de ser confiable: limpiamos para no mostrar info engañosa.
+                    if (detection) setDetection(null);
+                  }}
+                  placeholder="git@github.com:org/repo.git"
+                  className="font-mono text-xs"
+                  required
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onDetect}
+                  disabled={detecting || !gitRepoUrl.trim()}
+                  title="Hace shallow clone del repo y autodetecta Dockerfile / Compose / Nixpacks"
+                >
+                  {detecting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
+                  <span className="ml-2">Detectar</span>
+                </Button>
+              </div>
+              {detection ? (
+                <div className="rounded-md border border-success/30 bg-success/5 p-3 text-xs space-y-1">
+                  <div className="flex items-center gap-2 text-success-foreground">
+                    <CheckCircle2 className="h-4 w-4 text-success" />
+                    <strong>Sugerido:</strong>
+                    <span className="font-mono">{detection.suggestedBuildType}</span>
+                  </div>
+                  <ul className="ml-6 list-disc text-muted-foreground space-y-0.5">
+                    <li>
+                      Lenguajes detectados:{" "}
+                      <span className="font-mono">
+                        {detection.detectedLanguages.length > 0
+                          ? detection.detectedLanguages.join(", ")
+                          : "ninguno"}
+                      </span>
+                    </li>
+                    <li>
+                      Archivos en raíz:{" "}
+                      {detection.hasDockerfile ? "Dockerfile " : ""}
+                      {detection.hasCompose ? "compose.yml " : ""}
+                      {detection.hasNixpacksToml ? "nixpacks.toml " : ""}
+                      {!detection.hasDockerfile &&
+                      !detection.hasCompose &&
+                      !detection.hasNixpacksToml
+                        ? "ninguno de los típicos"
+                        : ""}
+                    </li>
+                    {detection.exposedPorts.length > 0 ? (
+                      <li>
+                        Puertos sugeridos:{" "}
+                        <span className="font-mono">
+                          {detection.exposedPorts.join(", ")}
+                        </span>
+                      </li>
+                    ) : null}
+                  </ul>
+                </div>
+              ) : null}
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -253,7 +370,7 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
                     Docker Compose — varios servicios desde <code className="font-mono">compose.yml</code>
                   </SelectItem>
                   <SelectItem value="Nixpacks">
-                    Nixpacks — auto-detecta lenguaje (sin Dockerfile)
+                    Nixpacks — auto-detecta lenguaje (Node, Python, Go, Rust, ...). No requiere Dockerfile.
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -288,6 +405,12 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
             ) : (
               <p className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
                 Nixpacks detecta el stack automáticamente. No requiere Dockerfile.
+                El satélite que ejecute el build debe tener <code className="font-mono">nixpacks</code>{" "}
+                en el PATH (instalar con{" "}
+                <code className="font-mono">
+                  curl -fsSL https://nixpacks.com/install.sh | bash
+                </code>
+                ).
               </p>
             )}
 

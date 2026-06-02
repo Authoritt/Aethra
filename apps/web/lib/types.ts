@@ -482,6 +482,85 @@ export interface CreateApiKeyRequest {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Identity — Users & Roles (F11.1 multi-user RBAC)                           */
+/* -------------------------------------------------------------------------- */
+
+export interface RoleRef {
+  id: string;
+  slug: string;
+  displayName: string;
+}
+
+export interface UserSummary {
+  id: string;
+  email: string;
+  displayName: string | null;
+  roles: RoleRef[];
+  isActive: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatedUser {
+  id: string;
+  email: string;
+  displayName: string | null;
+  roles: RoleRef[];
+}
+
+export interface CreateUserRequest {
+  email: string;
+  password: string;
+  displayName?: string | null;
+  roleSlugs: string[];
+}
+
+export interface UpdateUserRequest {
+  displayName?: string | null;
+  roleSlugs?: string[];
+}
+
+export interface ResetPasswordRequest {
+  newPassword: string;
+}
+
+export interface ResetPasswordResult {
+  id: string;
+  email: string;
+}
+
+export interface RoleDto {
+  id: string;
+  slug: string;
+  displayName: string;
+  scopes: string[];
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatedRole {
+  id: string;
+  slug: string;
+  displayName: string;
+  scopes: string[];
+}
+
+export interface CreateRoleRequest {
+  slug: string;
+  displayName: string;
+  scopes: string[];
+}
+
+export interface MeResponse {
+  email: string;
+  displayName: string | null;
+  roles: string[];
+  scopes: string[];
+}
+
+/* -------------------------------------------------------------------------- */
 /* Settings (F9.1) — integrations, base domains, environments                 */
 /* -------------------------------------------------------------------------- */
 /* Convención: PascalCase en C# → camelCase en JSON (default de minimal APIs   */
@@ -646,6 +725,28 @@ export interface CreateTemplateRequest {
 
 export interface RotateWebhookSecretResponse {
   webhookSecret: string;
+}
+
+/**
+ * F11.2 — Request body para `POST /api/templates/discover`. Inspecciona un repo y devuelve
+ * que estrategia de build se puede usar (Dockerfile / DockerCompose / Nixpacks).
+ */
+export interface DiscoverTemplateRequest {
+  gitRepoUrl: string;
+  branch?: string | null;
+}
+
+/**
+ * F11.2 — Respuesta del endpoint de discovery. `suggestedBuildType` se aplica al form para
+ * prellenar el select; los puertos sugeridos se muestran como hint.
+ */
+export interface DiscoverTemplateResult {
+  detectedLanguages: string[];
+  hasDockerfile: boolean;
+  hasCompose: boolean;
+  hasNixpacksToml: boolean;
+  suggestedBuildType: BuildType;
+  exposedPorts: number[];
 }
 
 export interface ClientSummary {
