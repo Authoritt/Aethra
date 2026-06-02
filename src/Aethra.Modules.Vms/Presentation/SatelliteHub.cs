@@ -98,6 +98,15 @@ public sealed class SatelliteHub(
     public async Task ReportMetrics(VmMetricSnapshot snapshot)
     {
         var vmId = ResolveVmId() ?? throw new HubException("VM no resoluble.");
+        // F11.4: cada métrica es un heartbeat. Tocamos LastSeenAt para que la UI pueda
+        // mostrar "última actividad hace 5s" y para que el provisioner SSH pueda confirmar
+        // que el satélite está vivo aun si el handshake ya pasó.
+        var vm = await db.Vms.FindAsync([vmId], Context.ConnectionAborted);
+        if (vm is not null)
+        {
+            vm.RecordHeartbeat(clock.UtcNow);
+            await db.SaveChangesAsync(Context.ConnectionAborted);
+        }
         await integrationBus.PublishAsync(
             new VmMetricsReportedEvent(vmId.ToString()!, snapshot),
             Context.ConnectionAborted);

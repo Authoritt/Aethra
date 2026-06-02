@@ -122,6 +122,10 @@ builder.Services.AddSingleton<Aethra.Shared.Contracts.Containers.ISatelliteRpcCl
 builder.Services.AddSingleton<Aethra.Shared.Contracts.Containers.ISatelliteRpcCallbacks>(
     sp => sp.GetRequiredService<SignalRSatelliteRpcClient>());
 
+// F11.4 — Notifier que reenvía progreso de install al frontend via DashboardHub.
+builder.Services.AddSingleton<Aethra.Shared.Contracts.Vms.IInstallProgressNotifier,
+    InstallProgressNotifier>();
+
 // -----------------------------------------------------------------------------
 // Módulos — cada uno se hace cargo de su DbContext, handlers específicos y endpoints.
 // -----------------------------------------------------------------------------
