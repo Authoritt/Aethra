@@ -5,7 +5,7 @@ namespace Aethra.Shared.Infrastructure.Pipelines;
 
 /// <summary>
 /// Implementación EF Core de <see cref="IIdempotencyStore"/> contra <see cref="SharedDbContext"/>.
-/// Limpieza de keys expiradas: TODO en F2+ — agregar BackgroundService que purgue cada hora.
+/// La limpieza de keys expiradas la hace <see cref="IdempotencyPurgeWorker"/> cada 1h.
 /// </summary>
 public sealed class EfIdempotencyStore(SharedDbContext dbContext) : IIdempotencyStore
 {

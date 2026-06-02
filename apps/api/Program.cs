@@ -24,6 +24,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -98,6 +99,10 @@ var aethraConnection = builder.Configuration.GetConnectionString("Aethra")
     ?? throw new InvalidOperationException("ConnectionStrings:Aethra no configurado.");
 builder.Services.AddDbContext<SharedDbContext>(o => o.UseNpgsql(aethraConnection));
 builder.Services.AddScoped<IIdempotencyStore, EfIdempotencyStore>();
+// F9.10 D1: purga periódica de keys expiradas (antes la tabla crecía sin tope).
+// TryAddSingleton — el módulo Proxy también lo registra; gana el primero.
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddHostedService<IdempotencyPurgeWorker>();
 
 // -----------------------------------------------------------------------------
 // SignalR central→satélite (F9.8C): RPC real con correlation tracking.
