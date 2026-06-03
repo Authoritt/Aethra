@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -41,6 +42,8 @@ async function fetchVms(): Promise<VmDto[]> {
 }
 
 export default async function NewServicePage() {
+  const t = await getTranslations("pages.services_new");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const templates = await fetchTemplates();
   if (templates === "unauthorized") redirect("/login");
 
@@ -50,21 +53,21 @@ export default async function NewServicePage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Servicios", href: "/services" },
-          { label: "Nuevo" },
+          { label: tBreadcrumbs("services"), href: "/services" },
+          { label: t("breadcrumb") },
         ]}
-        title="Crear servicio"
-        description="Elegí una plantilla. Aethra crea el contenedor con red interna y credenciales aisladas listas para bindear desde una application."
+        title={t("title")}
+        description={t("description")}
       />
 
       {templates === "error" ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el catálogo de plantillas.
+            {t("error_unknown")}
           </CardContent>
         </Card>
       ) : Array.isArray(templates) && templates.length === 0 ? (
-        <EmptyState title="No hay plantillas disponibles" />
+        <EmptyState title={t("title")} />
       ) : Array.isArray(templates) ? (
         <TemplatePicker templates={templates} vms={vms} />
       ) : null}
