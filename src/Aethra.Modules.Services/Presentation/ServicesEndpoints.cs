@@ -2,6 +2,7 @@ using Aethra.Modules.Services.Domain;
 using Aethra.Modules.Services.UseCases.Backups;
 using Aethra.Modules.Services.UseCases.Commands;
 using Aethra.Modules.Services.UseCases.Queries;
+using Aethra.Modules.Services.UseCases.ScheduledJobs;
 using Aethra.Shared.Contracts.Services;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Results;
@@ -165,8 +166,83 @@ public static class ServicesEndpoints
         .RequireAuthorization(ScopeWrite)
         .WithName("SetBackupPolicy");
 
+        // ----------- F12.1A: Scheduled Jobs -----------
+        services.MapGet("/{serviceId}/scheduled-jobs", async (string serviceId, IMediator m, CancellationToken ct) =>
+            ToResult(await m.Send(new ListScheduledJobsQuery(serviceId), ct)))
+            .RequireAuthorization(ScopeRead)
+            .WithName("ListScheduledJobs");
+
+        services.MapPost("/{serviceId}/scheduled-jobs", async (string serviceId,
+            [FromBody] CreateScheduledJobRequest body, IMediator m, CancellationToken ct) =>
+        {
+            var cmd = new CreateScheduledJobCommand(serviceId, body.Name, body.Description,
+                body.Command, body.CronExpression, body.TimeZone, body.MaxConcurrent, body.TimeoutSeconds);
+            var r = await m.Send(cmd, ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/services/{serviceId}/scheduled-jobs/{r.Value.Id}", r.Value)
+                : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("CreateScheduledJob");
+
+        var jobs = app.MapGroup("/api/scheduled-jobs").WithTags("Services");
+
+        jobs.MapPatch("/{jobId}", async (string jobId, [FromBody] UpdateScheduledJobRequest body,
+            IMediator m, CancellationToken ct) =>
+        {
+            var cmd = new UpdateScheduledJobCommand(jobId, body.Name, body.Description, body.Command,
+                body.CronExpression, body.TimeZone, body.MaxConcurrent, body.TimeoutSeconds, body.Enabled);
+            var r = await m.Send(cmd, ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("UpdateScheduledJob");
+
+        jobs.MapDelete("/{jobId}", async (string jobId, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new DeleteScheduledJobCommand(jobId), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("DeleteScheduledJob");
+
+        jobs.MapPost("/{jobId}/run-now", async (string jobId, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new TriggerScheduledJobCommand(jobId), ct);
+            return r.IsSuccess
+                ? Results.Accepted($"/api/scheduled-jobs/{jobId}/runs", new { run_id = r.Value })
+                : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("TriggerScheduledJob");
+
+        jobs.MapGet("/{jobId}/runs", async (string jobId, [FromQuery] int? limit,
+            IMediator m, CancellationToken ct) =>
+            ToResult(await m.Send(new ListScheduledJobRunsQuery(jobId, limit ?? 50), ct)))
+            .RequireAuthorization(ScopeRead)
+            .WithName("ListScheduledJobRuns");
+
         return app;
     }
+
+    public sealed record CreateScheduledJobRequest(
+        string Name,
+        string? Description,
+        string Command,
+        string CronExpression,
+        string? TimeZone,
+        int? MaxConcurrent,
+        int? TimeoutSeconds);
+
+    public sealed record UpdateScheduledJobRequest(
+        string? Name,
+        string? Description,
+        string? Command,
+        string? CronExpression,
+        string? TimeZone,
+        int? MaxConcurrent,
+        int? TimeoutSeconds,
+        bool? Enabled);
 
     public sealed record SetBackupPolicyRequest(string? CronExpression, int? RetentionCount, string? Destination);
 
