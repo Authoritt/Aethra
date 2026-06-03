@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { api, ApiError } from "@/lib/api";
@@ -23,6 +24,8 @@ export function NotesList({
   scopeType: NoteScopeType;
   scopeId: string;
 }) {
+  const t = useTranslations("pages.notes");
+  const tCommon = useTranslations("common");
   const [summaries, setSummaries] = useState<NoteSummary[]>([]);
   const [details, setDetails] = useState<Record<string, NoteDetail>>({});
   const [loading, setLoading] = useState(true);
@@ -55,7 +58,7 @@ export function NotesList({
               `Error ${e.status}`
             : e instanceof Error
               ? e.message
-              : "Error desconocido";
+              : t("error_unknown");
         toast.error(msg);
       } finally {
         if (!cancelled) setLoading(false);
@@ -134,13 +137,13 @@ export function NotesList({
       {loading && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Cargando notas...
+          {tCommon("loading")}
         </p>
       )}
       {!loading && summaries.length === 0 && (
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">
-            Aún no hay notas en este scope.
+            {t("empty_description")}
           </CardContent>
         </Card>
       )}
@@ -155,7 +158,7 @@ export function NotesList({
                     {s.title}
                   </h3>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Cargando...
+                    {tCommon("loading_short")}
                   </p>
                 </CardContent>
               </Card>
