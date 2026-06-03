@@ -1,0 +1,37 @@
+id: ghost-5
+display_name: Ghost 5
+type: Application
+version: "5"
+image: ghost:5-alpine
+internal_port: 2368
+admin_user: admin
+admin_password_generator: random(24)
+env:
+  database__client: mysql
+  database__connection__host: "${MYSQL_HOST}"
+  database__connection__port: "${MYSQL_PORT}"
+  database__connection__user: "${MYSQL_USER}"
+  database__connection__password: "${MYSQL_PASSWORD}"
+  database__connection__database: "${MYSQL_DB}"
+  NODE_ENV: production
+volumes:
+  - name: content
+    container_path: /var/lib/ghost/content
+healthcheck:
+  test: ["CMD-SHELL", "wget -qO- http://localhost:2368/ghost/api/admin/site/ > /dev/null || exit 1"]
+  interval_seconds: 20
+  retries: 10
+category: CMS
+description: |
+  Ghost 5 publishing platform (Node.js). Requiere MariaDB/MySQL binding.
+tags:
+  - ghost
+  - cms
+  - blog
+  - node
+icon_url: https://cdn.simpleicons.org/ghost/738A05
+binding_supported: false
+dependencies:
+  - MariaDB
+notes: |
+  Recomendado MariaDB 11 como BD. Ghost no soporta Postgres oficialmente.

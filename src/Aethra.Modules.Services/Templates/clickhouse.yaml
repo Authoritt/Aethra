@@ -1,0 +1,33 @@
+id: clickhouse
+display_name: ClickHouse
+type: ClickHouse
+version: "24"
+image: clickhouse/clickhouse-server:24-alpine
+internal_port: 9000
+management_port: 8123
+admin_user: default
+admin_password_generator: random(32)
+env:
+  CLICKHOUSE_USER: "${admin_user}"
+  CLICKHOUSE_PASSWORD: "${admin_password}"
+  CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+volumes:
+  - name: data
+    container_path: /var/lib/clickhouse
+healthcheck:
+  test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping | grep -q Ok"]
+  interval_seconds: 15
+  retries: 10
+category: Database
+description: |
+  ClickHouse 24 columnar database. TCP native protocol en 9000, HTTP en 8123.
+tags:
+  - clickhouse
+  - olap
+  - analytics
+  - columnar
+  - database
+icon_url: https://cdn.simpleicons.org/clickhouse/FFCC01
+binding_supported: false
+notes: |
+  Provisioner de bindings aún no implementado: por ahora gestionar users vía SQL directo.

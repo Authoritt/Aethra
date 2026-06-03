@@ -1,0 +1,30 @@
+id: mysql-8
+display_name: MySQL 8
+type: MySQL
+version: "8.4"
+image: mysql:8.4
+internal_port: 3306
+admin_user: root
+admin_password_generator: random(32)
+env:
+  MYSQL_ROOT_PASSWORD: "${admin_password}"
+  MYSQL_DATABASE: aethra
+volumes:
+  - name: data
+    container_path: /var/lib/mysql
+healthcheck:
+  test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root --password=${admin_password}"]
+  interval_seconds: 10
+  retries: 10
+category: Database
+description: |
+  MySQL 8 LTS con InnoDB y volume persistente en /var/lib/mysql.
+tags:
+  - mysql
+  - sql
+  - database
+  - rdbms
+icon_url: https://cdn.simpleicons.org/mysql/4479A1
+binding_supported: true
+notes: |
+  Cada binding crea una BD + user dedicado vía MySqlProvisioner. Idempotente.

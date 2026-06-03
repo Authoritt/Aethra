@@ -1,0 +1,38 @@
+id: n8n
+display_name: n8n
+type: Application
+version: "1"
+image: docker.n8n.io/n8nio/n8n:1
+internal_port: 5678
+admin_user: admin
+admin_password_generator: random(24)
+env:
+  N8N_BASIC_AUTH_ACTIVE: "true"
+  N8N_BASIC_AUTH_USER: "${admin_user}"
+  N8N_BASIC_AUTH_PASSWORD: "${admin_password}"
+  N8N_HOST: localhost
+  N8N_PORT: "5678"
+  N8N_PROTOCOL: http
+  # SQLite por defecto; si se hace binding contra Postgres se sobreescribe DB_TYPE=postgresdb.
+  DB_TYPE: sqlite
+volumes:
+  - name: data
+    container_path: /home/node/.n8n
+healthcheck:
+  test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz > /dev/null || exit 1"]
+  interval_seconds: 15
+  retries: 10
+category: Automation
+description: |
+  n8n workflow automation. Funciona con SQLite local o Postgres binding (recomendado prod).
+tags:
+  - n8n
+  - workflow
+  - automation
+  - integration
+icon_url: https://cdn.simpleicons.org/n8n/EA4B71
+binding_supported: false
+dependencies:
+  - Postgres
+notes: |
+  Para producción, hacer binding con Postgres y setear DB_TYPE=postgresdb vía env override.

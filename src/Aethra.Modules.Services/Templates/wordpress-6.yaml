@@ -1,0 +1,36 @@
+id: wordpress-6
+display_name: WordPress 6
+type: Application
+version: "6"
+image: wordpress:6-apache
+internal_port: 80
+admin_user: admin
+admin_password_generator: random(24)
+env:
+  # Estos valores se completan al crear binding contra el MariaDB/MySQL elegido.
+  WORDPRESS_DB_HOST: "${MYSQL_HOST}:${MYSQL_PORT}"
+  WORDPRESS_DB_USER: "${MYSQL_USER}"
+  WORDPRESS_DB_PASSWORD: "${MYSQL_PASSWORD}"
+  WORDPRESS_DB_NAME: "${MYSQL_DB}"
+volumes:
+  - name: data
+    container_path: /var/www/html
+healthcheck:
+  test: ["CMD-SHELL", "curl -fsS http://localhost/wp-login.php > /dev/null"]
+  interval_seconds: 15
+  retries: 10
+category: CMS
+description: |
+  WordPress 6 (Apache). Requiere binding contra una instancia MySQL o MariaDB.
+tags:
+  - wordpress
+  - cms
+  - blog
+  - php
+icon_url: https://cdn.simpleicons.org/wordpress/21759B
+binding_supported: false
+dependencies:
+  - MariaDB
+  - MySQL
+notes: |
+  Crea primero un MariaDB/MySQL y luego un binding hacia esta Wordpress instance.

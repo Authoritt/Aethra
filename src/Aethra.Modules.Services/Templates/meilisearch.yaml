@@ -1,0 +1,31 @@
+id: meilisearch
+display_name: MeiliSearch
+type: Application
+version: "v1.10"
+image: getmeili/meilisearch:v1.10
+internal_port: 7700
+admin_user: master
+admin_password_generator: random(48)
+env:
+  MEILI_MASTER_KEY: "${admin_password}"
+  MEILI_ENV: production
+  MEILI_NO_ANALYTICS: "true"
+volumes:
+  - name: data
+    container_path: /meili_data
+healthcheck:
+  test: ["CMD-SHELL", "curl -fsS http://localhost:7700/health > /dev/null"]
+  interval_seconds: 10
+  retries: 8
+category: Search
+description: |
+  MeiliSearch v1.x. Search engine open-source típo-tolerante. Una sola env var (master key).
+tags:
+  - meilisearch
+  - search
+  - fulltext
+  - typesense
+icon_url: https://cdn.simpleicons.org/meilisearch/FF5CAA
+binding_supported: false
+notes: |
+  Single-tenant: cada app que use MeiliSearch debería tener su propia instancia.

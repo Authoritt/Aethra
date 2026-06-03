@@ -1,0 +1,35 @@
+id: supabase
+display_name: Supabase (stub)
+type: Application
+version: "2024.10"
+image: supabase/postgres:15.6.1.115
+internal_port: 8000
+admin_user: postgres
+admin_password_generator: random(40)
+env:
+  POSTGRES_PASSWORD: "${admin_password}"
+  JWT_SECRET: "${admin_password}"
+volumes:
+  - name: data
+    container_path: /var/lib/postgresql/data
+healthcheck:
+  test: ["CMD-SHELL", "pg_isready -U postgres"]
+  interval_seconds: 20
+  retries: 12
+category: Database
+description: |
+  Supabase backend completo (Postgres + Auth + Realtime + Studio + Storage). Multi-container.
+tags:
+  - supabase
+  - postgres
+  - baas
+  - auth
+  - realtime
+icon_url: https://cdn.simpleicons.org/supabase/3ECF8E
+binding_supported: false
+multi_container: true
+notes: |
+  TODO F12.X: Supabase requiere docker-compose multi-container (kong/postgrest/auth/realtime/
+  storage/studio). El motor de plantillas actual sólo soporta single-container, por lo que
+  este YAML registra un placeholder con la BD core (Postgres) y marca multi_container=true.
+  El orchestrator debe rechazar el deploy hasta que F12.X añada soporte para compose.

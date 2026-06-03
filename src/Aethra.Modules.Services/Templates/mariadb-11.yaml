@@ -1,0 +1,31 @@
+id: mariadb-11
+display_name: MariaDB 11
+type: MariaDB
+version: "11"
+image: mariadb:11
+internal_port: 3306
+admin_user: root
+admin_password_generator: random(32)
+env:
+  MARIADB_ROOT_PASSWORD: "${admin_password}"
+  MARIADB_DATABASE: aethra
+volumes:
+  - name: data
+    container_path: /var/lib/mysql
+healthcheck:
+  test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized"]
+  interval_seconds: 10
+  retries: 10
+category: Database
+description: |
+  MariaDB 11 LTS (fork de MySQL). Drop-in para apps Wordpress/Ghost que exigen MySQL.
+tags:
+  - mariadb
+  - mysql
+  - sql
+  - database
+  - rdbms
+icon_url: https://cdn.simpleicons.org/mariadb/003545
+binding_supported: true
+notes: |
+  Wire protocol idéntico a MySQL: comparte MariaDbProvisioner (alias del MySqlProvisioner).

@@ -1,0 +1,36 @@
+id: plausible
+display_name: Plausible Analytics
+type: Application
+version: "v2.1"
+image: ghcr.io/plausible/community-edition:v2.1
+internal_port: 8000
+admin_user: admin
+admin_password_generator: random(32)
+env:
+  # Bindings posteriores rellenan POSTGRES_* (events DB en Postgres) y CLICKHOUSE_URL.
+  BASE_URL: http://localhost:8000
+  SECRET_KEY_BASE: "${admin_password}"
+  DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
+  CLICKHOUSE_DATABASE_URL: "http://default@${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/plausible_events_db"
+volumes:
+  - name: data
+    container_path: /var/lib/plausible
+healthcheck:
+  test: ["CMD-SHELL", "wget -qO- http://localhost:8000/api/health > /dev/null || exit 1"]
+  interval_seconds: 20
+  retries: 12
+category: Analytics
+description: |
+  Plausible Community Edition. Analítica web GDPR-friendly. Requiere Postgres + ClickHouse.
+tags:
+  - plausible
+  - analytics
+  - tracking
+  - privacy
+icon_url: https://cdn.simpleicons.org/plausibleanalytics/5850EC
+binding_supported: false
+dependencies:
+  - Postgres
+  - ClickHouse
+notes: |
+  Plausible necesita dos data stores: Postgres (config/users) + ClickHouse (eventos).

@@ -1,0 +1,33 @@
+id: pocketbase
+display_name: PocketBase
+type: Application
+version: "0.22"
+image: ghcr.io/muchobien/pocketbase:0.22
+internal_port: 8090
+admin_user: admin@aethra.local
+admin_password_generator: random(24)
+env:
+  # PocketBase no consume env para admin: el bootstrap usa CLI al primer arranque.
+  # Aethra escribe estas vars como hint y el orchestrator corre `pocketbase admin create`.
+  POCKETBASE_ADMIN_EMAIL: "${admin_user}"
+  POCKETBASE_ADMIN_PASSWORD: "${admin_password}"
+volumes:
+  - name: data
+    container_path: /pb_data
+healthcheck:
+  test: ["CMD-SHELL", "wget -qO- http://localhost:8090/api/health > /dev/null || exit 1"]
+  interval_seconds: 15
+  retries: 8
+category: Database
+description: |
+  PocketBase 0.22+ backend-in-a-file (SQLite + auth + realtime + S3-compatible storage).
+tags:
+  - pocketbase
+  - sqlite
+  - backend
+  - baas
+  - realtime
+icon_url: https://cdn.simpleicons.org/pocketbase/B8DBE4
+binding_supported: false
+notes: |
+  Admin se crea al primer arranque vía `pocketbase admin create ${admin_user} ${admin_password}`.

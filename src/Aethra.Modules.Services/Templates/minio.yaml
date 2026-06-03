@@ -1,0 +1,37 @@
+id: minio
+display_name: MinIO
+type: Application
+version: "RELEASE.2025-05-01"
+image: minio/minio:RELEASE.2025-05-01T00-00-00Z
+internal_port: 9000
+management_port: 9001
+admin_user: aethra
+admin_password_generator: random(40)
+env:
+  MINIO_ROOT_USER: "${admin_user}"
+  MINIO_ROOT_PASSWORD: "${admin_password}"
+  MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
+command:
+  - server
+  - /data
+  - --console-address
+  - ":9001"
+volumes:
+  - name: data
+    container_path: /data
+healthcheck:
+  test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/ready > /dev/null"]
+  interval_seconds: 15
+  retries: 10
+category: Storage
+description: |
+  MinIO S3-compatible object storage. API en 9000, consola web en 9001.
+tags:
+  - minio
+  - s3
+  - storage
+  - object
+icon_url: https://cdn.simpleicons.org/minio/C72E49
+binding_supported: false
+notes: |
+  El management_port 9001 expone la consola web (admin/${admin_password}).
