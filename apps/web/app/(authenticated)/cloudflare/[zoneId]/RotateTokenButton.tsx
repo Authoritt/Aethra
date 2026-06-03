@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { ApiError, api } from "@/lib/api";
 import type { RotateCloudflareTokenRequest } from "@/lib/types";
 
 export function RotateTokenButton({ zoneId }: { zoneId: string }) {
+  const t = useTranslations("pages.cloudflare_detail.rotate_token");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState("");
@@ -27,7 +29,7 @@ export function RotateTokenButton({ zoneId }: { zoneId: string }) {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (token.trim().length < 8) {
-      toast.error("Token demasiado corto");
+      toast.error(t("validation_short"));
       return;
     }
     setLoading(true);
@@ -37,7 +39,7 @@ export function RotateTokenButton({ zoneId }: { zoneId: string }) {
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success("Token rotado");
+      toast.success(t("toast_success"));
       setToken("");
       setOpen(false);
       router.refresh();
@@ -50,7 +52,7 @@ export function RotateTokenButton({ zoneId }: { zoneId: string }) {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -61,25 +63,22 @@ export function RotateTokenButton({ zoneId }: { zoneId: string }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         <KeyRound className="mr-2 h-4 w-4" />
-        Rotar token
+        {t("button_label")}
       </Button>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rotar API token</DialogTitle>
-          <DialogDescription>
-            Aethra verificará el nuevo token contra la API de Cloudflare antes
-            de reemplazar el actual.
-          </DialogDescription>
+          <DialogTitle>{t("dialog_title")}</DialogTitle>
+          <DialogDescription>{t("dialog_description")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex flex-col gap-3">
           <div className="space-y-2">
-            <Label htmlFor="token">Nuevo API token</Label>
+            <Label htmlFor="token">{t("label_new_token")}</Label>
             <Input
               id="token"
               type="password"
               value={token}
               onChange={(e) => setToken(e.target.value)}
-              placeholder="••••••••••••••••"
+              placeholder={t("placeholder_token")}
               autoComplete="off"
               spellCheck={false}
               required
@@ -87,13 +86,13 @@ export function RotateTokenButton({ zoneId }: { zoneId: string }) {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)} type="button">
-              Cancelar
+              {t("cancel")}
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Rotar
+              {t("submit")}
             </Button>
           </DialogFooter>
         </form>

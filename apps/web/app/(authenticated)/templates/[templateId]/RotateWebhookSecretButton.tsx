@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Copy, KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export function RotateWebhookSecretButton({
 }: {
   templateId: string;
 }) {
+  const t = useTranslations("pages.templates_detail.rotate_webhook");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
@@ -33,7 +35,7 @@ export function RotateWebhookSecretButton({
       );
       setSecret(response.webhookSecret);
       setConfirmOpen(false);
-      toast.success("Webhook secret rotado");
+      toast.success(t("toast_rotated"));
     } catch (e) {
       const msg =
         e instanceof ApiError
@@ -41,7 +43,7 @@ export function RotateWebhookSecretButton({
               ?.message ?? `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -52,9 +54,9 @@ export function RotateWebhookSecretButton({
     if (!secret) return;
     try {
       await navigator.clipboard.writeText(secret);
-      toast.success("Copiado al portapapeles");
+      toast.success(t("toast_copied"));
     } catch {
-      toast.error("No se pudo copiar");
+      toast.error(t("toast_copy_failed"));
     }
   }
 
@@ -62,27 +64,26 @@ export function RotateWebhookSecretButton({
     <>
       <Button variant="outline" onClick={() => setConfirmOpen(true)}>
         <KeyRound className="mr-2 h-4 w-4" />
-        Rotar webhook secret
+        {t("button_label")}
       </Button>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rotar webhook secret</DialogTitle>
+            <DialogTitle>{t("confirm_dialog_title")}</DialogTitle>
             <DialogDescription>
-              Rotar el webhook secret invalida el anterior inmediatamente.
-              Tendrás que reconfigurar el provider Git (GitHub/Gitlab).
+              {t("confirm_dialog_description")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
-              Cancelar
+              {t("confirm_cancel")}
             </Button>
             <Button variant="destructive" onClick={rotate} disabled={loading}>
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Rotar
+              {t("confirm_submit")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -96,20 +97,20 @@ export function RotateWebhookSecretButton({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nuevo webhook secret</DialogTitle>
+            <DialogTitle>{t("result_dialog_title")}</DialogTitle>
             <DialogDescription>
-              Copialo y configurarlo en tu provider Git. No volverá a mostrarse.
+              {t("result_dialog_description")}
             </DialogDescription>
           </DialogHeader>
           {secret ? (
             <div className="rounded-md border border-border bg-card">
               <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Secret
+                  {t("secret_label")}
                 </span>
                 <Button variant="outline" size="sm" onClick={copy}>
                   <Copy className="mr-2 h-4 w-4" />
-                  Copiar
+                  {t("copy")}
                 </Button>
               </div>
               <pre className="overflow-x-auto whitespace-nowrap px-3 py-2 font-mono text-xs text-foreground">
@@ -118,7 +119,7 @@ export function RotateWebhookSecretButton({
             </div>
           ) : null}
           <DialogFooter>
-            <Button onClick={() => setSecret(null)}>Cerrar</Button>
+            <Button onClick={() => setSecret(null)}>{t("close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

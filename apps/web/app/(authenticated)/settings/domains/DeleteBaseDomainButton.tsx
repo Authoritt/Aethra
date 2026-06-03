@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export function DeleteBaseDomainButton({
   hostname: string;
   isActive: boolean;
 }) {
+  const t = useTranslations("pages.settings_domains.delete");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,10 +33,10 @@ export function DeleteBaseDomainButton({
   if (isActive) {
     return (
       <span
-        title="Activá otro base domain primero para poder borrar este"
+        title={t("active_tooltip")}
         className="text-[11px] uppercase tracking-wider text-muted-foreground"
       >
-        activo
+        {t("active_label")}
       </span>
     );
   }
@@ -45,7 +47,7 @@ export function DeleteBaseDomainButton({
       await api(`/api/settings/domains/${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
-      toast.success(`Base domain "${hostname}" eliminado`);
+      toast.success(t("toast_success", { hostname }));
       router.refresh();
     } catch (e) {
       const msg =
@@ -56,7 +58,7 @@ export function DeleteBaseDomainButton({
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -68,19 +70,17 @@ export function DeleteBaseDomainButton({
     <>
       <Button variant="destructive" size="sm" onClick={() => setOpen(true)}>
         <Trash2 className="mr-2 h-4 w-4" />
-        Borrar
+        {t("button_label")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar base domain "{hostname}"</DialogTitle>
-            <DialogDescription>
-              Esta acción no se puede deshacer.
-            </DialogDescription>
+            <DialogTitle>{t("dialog_title", { hostname })}</DialogTitle>
+            <DialogDescription>{t("dialog_description")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancelar
+              {t("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -90,7 +90,7 @@ export function DeleteBaseDomainButton({
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Borrar
+              {t("confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

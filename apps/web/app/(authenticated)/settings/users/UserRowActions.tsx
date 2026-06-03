@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Key, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ export function UserRowActions({
   email: string;
   isActive: boolean;
 }) {
+  const t = useTranslations("pages.settings_users.actions");
   const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
@@ -43,10 +45,10 @@ export function UserRowActions({
     setLoading(true);
     try {
       await api(`/api/identity/users/${id}`, { method: "DELETE" });
-      toast.success("Usuario desactivado");
+      toast.success(t("deactivate_toast"));
       router.refresh();
     } catch (e) {
-      toast.error(extractMsg(e));
+      toast.error(extractMsg(e, t("error_unknown")));
     } finally {
       setLoading(false);
       setConfirmDelete(false);
@@ -55,7 +57,7 @@ export function UserRowActions({
 
   async function onResetPassword() {
     if (newPassword.length < 8) {
-      toast.error("La contraseña debe tener al menos 8 caracteres.");
+      toast.error(t("reset_validation_short"));
       return;
     }
     setLoading(true);
@@ -64,12 +66,12 @@ export function UserRowActions({
         method: "POST",
         body: JSON.stringify({ newPassword }),
       });
-      toast.success("Contraseña restablecida. Compartila por canal seguro.");
+      toast.success(t("reset_toast"));
       setResetOpen(false);
       setNewPassword("");
       router.refresh();
     } catch (e) {
-      toast.error(extractMsg(e));
+      toast.error(extractMsg(e, t("error_unknown")));
     } finally {
       setLoading(false);
     }
@@ -79,14 +81,14 @@ export function UserRowActions({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon">
+          <Button type="button" variant="ghost" size="icon" aria-label={t("menu_aria")}>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={() => setResetOpen(true)}>
             <Key className="size-4" />
-            Reset password
+            {t("menu_reset")}
           </DropdownMenuItem>
           {isActive && (
             <>
@@ -96,7 +98,7 @@ export function UserRowActions({
                 className="text-destructive focus:bg-destructive/10 focus:text-destructive"
               >
                 <Trash2 className="size-4" />
-                Desactivar
+                {t("menu_deactivate")}
               </DropdownMenuItem>
             </>
           )}
@@ -106,15 +108,14 @@ export function UserRowActions({
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Desactivar usuario {email}</DialogTitle>
+            <DialogTitle>{t("deactivate_dialog_title", { email })}</DialogTitle>
             <DialogDescription>
-              El usuario no podrá iniciar sesión hasta que sea reactivado. Las
-              referencias históricas (notas, deployments) se preservan.
+              {t("deactivate_dialog_description")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
-              Cancelar
+              {t("deactivate_cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -124,7 +125,7 @@ export function UserRowActions({
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Desactivar
+              {t("deactivate_confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -133,32 +134,29 @@ export function UserRowActions({
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reset contraseña — {email}</DialogTitle>
-            <DialogDescription>
-              Definí una nueva contraseña. Comunicala al usuario por un canal
-              seguro — Aethra todavía no envía emails automáticos.
-            </DialogDescription>
+            <DialogTitle>{t("reset_dialog_title", { email })}</DialogTitle>
+            <DialogDescription>{t("reset_dialog_description")}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2 py-2">
-            <Label htmlFor="new-pass">Nueva contraseña</Label>
+            <Label htmlFor="new-pass">{t("reset_label")}</Label>
             <Input
               id="new-pass"
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="mínimo 8 caracteres"
+              placeholder={t("reset_placeholder")}
               autoComplete="new-password"
             />
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setResetOpen(false)}>
-              Cancelar
+              {t("reset_cancel")}
             </Button>
             <Button onClick={onResetPassword} disabled={loading}>
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Resetear
+              {t("reset_submit")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -167,11 +165,11 @@ export function UserRowActions({
   );
 }
 
-function extractMsg(e: unknown): string {
+function extractMsg(e: unknown, fallback: string): string {
   if (e instanceof ApiError) {
     const body = e.body as { message?: string; detail?: string } | undefined;
     return body?.message ?? body?.detail ?? `Error ${e.status}`;
   }
   if (e instanceof Error) return e.message;
-  return "Error desconocido";
+  return fallback;
 }
