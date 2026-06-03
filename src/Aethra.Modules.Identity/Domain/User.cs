@@ -24,6 +24,22 @@ public sealed class User : AggregateRoot<UserId>
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>
+    /// F12.3 — Username del usuario en GitHub. Lo usa el webhook handler para mapear el
+    /// <c>pull_request.user.login</c> a un <see cref="User"/> Aethra y registrar autoría en la
+    /// Instance ephemeral. Único globalmente para evitar suplantación: dos users no pueden
+    /// reclamar el mismo handle. <c>null</c> hasta que el operador lo configura en su profile.
+    /// </summary>
+    public string? GitHubUsername { get; private set; }
+
+    // F12.1B — 2FA TOTP (RFC 6238). Secret y recovery codes se persisten cifrados con
+    // DataProtection (purpose 'aethra-totp-secrets').
+    public byte[]? TotpSecretCipher { get; private set; }
+    public bool TotpEnabled { get; private set; }
+    public DateTimeOffset? TotpEnabledAt { get; private set; }
+    public byte[]? TotpRecoveryCodesCipher { get; private set; }
+    public int TotpRecoveryCodesUsedMask { get; private set; }
+
     private readonly List<UserRole> _roles = [];
     public IReadOnlyList<UserRole> Roles => _roles.AsReadOnly();
 
@@ -72,6 +88,39 @@ public sealed class User : AggregateRoot<UserId>
         UpdatedAt = now;
     }
 
+    /// <summary>
+    /// F12.3 — Configura el handle de GitHub. <c>null</c>/whitespace limpia el campo. Lanza
+    /// <see cref="ArgumentException"/> si el formato no respeta la convención GitHub (alfanumérico
+    /// + guion, 1-39 chars, no inicia/termina con guion).
+    /// </summary>
+    public void SetGitHubUsername(string? gitHubUsername, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(gitHubUsername))
+        {
+            GitHubUsername = null;
+            UpdatedAt = now;
+            return;
+        }
+        var normalized = gitHubUsername.Trim();
+        if (normalized.Length > 39)
+        {
+            throw new ArgumentException("GitHub username no puede exceder 39 caracteres.", nameof(gitHubUsername));
+        }
+        if (normalized.StartsWith('-') || normalized.EndsWith('-'))
+        {
+            throw new ArgumentException("GitHub username no puede iniciar o terminar con '-'.", nameof(gitHubUsername));
+        }
+        foreach (var ch in normalized)
+        {
+            if (!(char.IsLetterOrDigit(ch) || ch == '-'))
+            {
+                throw new ArgumentException("GitHub username solo admite letras, dígitos y '-'.", nameof(gitHubUsername));
+            }
+        }
+        GitHubUsername = normalized;
+        UpdatedAt = now;
+    }
+
     public void ResetPassword(byte[] newPasswordHashCipher, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(newPasswordHashCipher);
@@ -108,6 +157,93 @@ public sealed class User : AggregateRoot<UserId>
     public void MarkLogin(DateTimeOffset now)
     {
         LastLoginAt = now;
+    }
+
+    // F12.1B — TOTP enrollment lifecycle.
+
+    /// <summary>
+    /// Persiste el secret cifrado tras el enroll inicial. El user aun no esta TotpEnabled
+    /// hasta que verifique un primer codigo.
+    /// </summary>
+    public void BeginTotpEnrollment(byte[] secretCipher, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(secretCipher);
+        if (secretCipher.Length == 0)
+        {
+            throw new ArgumentException("TotpSecretCipher no puede estar vacío.", nameof(secretCipher));
+        }
+        TotpSecretCipher = secretCipher;
+        TotpEnabled = false;
+        TotpEnabledAt = null;
+        TotpRecoveryCodesCipher = null;
+        TotpRecoveryCodesUsedMask = 0;
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// Confirma la activacion del 2FA tras verificar el primer codigo y persiste los
+    /// recovery codes cifrados.
+    /// </summary>
+    public void CompleteTotpEnrollment(byte[] recoveryCodesCipher, DateTimeOffset now)
+    {
+        if (TotpSecretCipher is null || TotpSecretCipher.Length == 0)
+        {
+            throw new InvalidOperationException("No hay enrollment en curso (TotpSecretCipher vacío).");
+        }
+        ArgumentNullException.ThrowIfNull(recoveryCodesCipher);
+        if (recoveryCodesCipher.Length == 0)
+        {
+            throw new ArgumentException("RecoveryCodesCipher no puede estar vacío.", nameof(recoveryCodesCipher));
+        }
+        TotpEnabled = true;
+        TotpEnabledAt = now;
+        TotpRecoveryCodesCipher = recoveryCodesCipher;
+        TotpRecoveryCodesUsedMask = 0;
+        UpdatedAt = now;
+    }
+
+    /// <summary>Desactiva 2FA y limpia secret + recovery codes.</summary>
+    public void DisableTotp(DateTimeOffset now)
+    {
+        TotpEnabled = false;
+        TotpEnabledAt = null;
+        TotpSecretCipher = null;
+        TotpRecoveryCodesCipher = null;
+        TotpRecoveryCodesUsedMask = 0;
+        UpdatedAt = now;
+    }
+
+    /// <summary>Marca un recovery code como usado por bit index (0..9).</summary>
+    public void ConsumeRecoveryCode(int index, DateTimeOffset now)
+    {
+        var mask = TotpRecoveryCodesUsedMask;
+        var bit = 1 << index;
+        if ((mask & bit) != 0)
+        {
+            throw new InvalidOperationException("Recovery code ya fue usado.");
+        }
+        TotpRecoveryCodesUsedMask = mask | bit;
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// Regenera los recovery codes (manteniendo TOTP activo). Devuelve el cipher nuevo;
+    /// se asume que el caller ya cifro la lista nueva.
+    /// </summary>
+    public void RotateRecoveryCodes(byte[] newCipher, DateTimeOffset now)
+    {
+        if (!TotpEnabled)
+        {
+            throw new InvalidOperationException("No se pueden rotar recovery codes sin TOTP activo.");
+        }
+        ArgumentNullException.ThrowIfNull(newCipher);
+        if (newCipher.Length == 0)
+        {
+            throw new ArgumentException("Cipher vacio.", nameof(newCipher));
+        }
+        TotpRecoveryCodesCipher = newCipher;
+        TotpRecoveryCodesUsedMask = 0;
+        UpdatedAt = now;
     }
 
     public void AssignRole(RoleId roleId, DateTimeOffset now)

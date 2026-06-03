@@ -65,6 +65,31 @@ public sealed class Instance : AggregateRoot<InstanceId>
     /// </summary>
     public string? AutoHostname { get; private set; }
 
+    /// <summary>
+    /// F12.3 — Git ref que esta Instance trackea explícitamente. <c>null</c> ⇒ usar la cascada
+    /// <see cref="Template.EnvironmentMapping"/> → <c>Template.Source.DefaultBranch</c> resuelta en
+    /// <see cref="ResolveTrackedRef"/>. Ejemplos: <c>refs/heads/develop</c>, <c>refs/pull/42/head</c>.
+    /// </summary>
+    public string? TrackedRef { get; private set; }
+
+    /// <summary>
+    /// F12.3 — <c>true</c> si la Instance fue creada automáticamente para previsualizar un Pull
+    /// Request. Se borra cuando el PR cierra. No se permite mutar manualmente desde la UI.
+    /// </summary>
+    public bool IsEphemeral { get; private set; }
+
+    /// <summary>
+    /// F12.3 — Si está seteado, la Instance debe ser eliminada por el cleanup service tras esta
+    /// fecha (safety net para previews que nunca recibieron el webhook <c>closed</c>).
+    /// </summary>
+    public DateTimeOffset? ExpiresAt { get; private set; }
+
+    /// <summary>
+    /// F12.3 — UserId del operador que creó la Instance. Permite filtrar "Mis previews" en la UI y
+    /// notificar al autor del PR cuando se rompe el deploy de preview. <c>null</c> en datos legacy.
+    /// </summary>
+    public string? CreatedByUserId { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -102,7 +127,11 @@ public sealed class Instance : AggregateRoot<InstanceId>
         Healthcheck? healthcheck,
         bool autoDeployOnNewBuild,
         DateTimeOffset now,
-        string? slugOverride = null)
+        string? slugOverride = null,
+        string? trackedRef = null,
+        bool isEphemeral = false,
+        DateTimeOffset? expiresAt = null,
+        string? createdByUserId = null)
     {
         if (string.IsNullOrWhiteSpace(environment))
         {
@@ -149,6 +178,10 @@ public sealed class Instance : AggregateRoot<InstanceId>
             instance._volumes.AddRange(PrefixVolumes(volumes, tslug, cslug));
         }
         instance.Healthcheck = healthcheck;
+        instance.TrackedRef = string.IsNullOrWhiteSpace(trackedRef) ? null : trackedRef.Trim();
+        instance.IsEphemeral = isEphemeral;
+        instance.ExpiresAt = expiresAt;
+        instance.CreatedByUserId = string.IsNullOrWhiteSpace(createdByUserId) ? null : createdByUserId.Trim();
 
         instance.Raise(new InstanceCreatedEvent(
             instance.Id,
@@ -158,6 +191,42 @@ public sealed class Instance : AggregateRoot<InstanceId>
             instance.TargetVmId,
             containerName));
         return instance;
+    }
+
+    /// <summary>
+    /// F12.3 — Resuelve el git ref efectivo de la Instance, aplicando la cascada:
+    /// <c>TrackedRef</c> propio (si seteado) → mapping del Template para este <c>Environment</c> →
+    /// <c>Template.Source.DefaultBranch</c>. Siempre devuelve un ref Git válido (formato
+    /// <c>refs/heads/...</c> para branches normales o <c>refs/pull/N/head</c> para previews).
+    /// </summary>
+    public string ResolveTrackedRef(Template template)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        if (!string.IsNullOrWhiteSpace(TrackedRef))
+        {
+            return TrackedRef;
+        }
+        var fromMapping = template.EnvironmentMapping.FirstOrDefault(m => m.Environment == Environment);
+        if (fromMapping is not null)
+        {
+            return $"refs/heads/{fromMapping.Branch}";
+        }
+        return $"refs/heads/{template.Source.DefaultBranch}";
+    }
+
+    /// <summary>
+    /// F12.3 — Setea o limpia el <see cref="TrackedRef"/>. Pasar <c>null</c>/whitespace para volver
+    /// a la cascada de resolución del Template.
+    /// </summary>
+    public void SetTrackedRef(string? trackedRef, DateTimeOffset now)
+    {
+        var normalized = string.IsNullOrWhiteSpace(trackedRef) ? null : trackedRef.Trim();
+        if (normalized == TrackedRef)
+        {
+            return;
+        }
+        TrackedRef = normalized;
+        UpdatedAt = now;
     }
 
     /// <summary>

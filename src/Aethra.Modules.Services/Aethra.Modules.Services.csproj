@@ -17,6 +17,8 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="MySqlConnector" />
+    <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 

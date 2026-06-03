@@ -44,7 +44,14 @@ internal static class ServiceMappers
         Version: t.Version,
         Image: t.Image,
         InternalPort: t.InternalPort,
-        Notes: t.Notes);
+        Notes: t.Notes,
+        Category: t.Category,
+        Description: t.Description,
+        Tags: t.Tags,
+        IconUrl: t.IconUrl,
+        BindingSupported: t.BindingSupported,
+        Dependencies: t.Dependencies,
+        MultiContainer: t.MultiContainer);
 
     public static ServiceBindingDto ToDto(ServiceBinding b, string? instanceSlug) => new(
         Id: b.Id.ToString(),

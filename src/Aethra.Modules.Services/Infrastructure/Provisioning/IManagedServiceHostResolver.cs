@@ -31,6 +31,7 @@ internal sealed class DirectContainerNameResolver : IManagedServiceHostResolver
         return Task.FromResult(service.Type switch
         {
             ServiceType.RabbitMQ => 15672,
+            ServiceType.ClickHouse => 8123,     // HTTP interface separado del TCP nativo (9000).
             _ => service.InternalPort,
         });
     }

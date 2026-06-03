@@ -48,7 +48,7 @@ internal sealed class GetTemplateByIdHandler(ProjectsDbContext db)
             name: t.Name,
             description: t.Description,
             gitRepoUrl: t.Source.GitRepoUrl.Value,
-            branch: t.Source.Branch,
+            branch: t.Source.DefaultBranch,
             baseDirectory: t.Source.BaseDirectory,
             watchPaths: t.Source.WatchPaths,
             accessTokenCredentialName: t.Source.AccessTokenCredentialName,

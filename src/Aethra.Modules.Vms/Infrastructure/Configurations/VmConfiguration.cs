@@ -57,6 +57,12 @@ internal sealed class VmConfiguration : IEntityTypeConfiguration<Vm>
             .HasColumnType("text")
             .IsRequired();
 
+        // F12.3 — opt-in al pool de previews.
+        builder.Property(v => v.AcceptsPreviews)
+            .HasColumnName("accepts_previews")
+            .IsRequired()
+            .HasDefaultValue(true);
+
         builder.OwnsOne(v => v.Satellite, s =>
         {
             s.Property(x => x.Id)

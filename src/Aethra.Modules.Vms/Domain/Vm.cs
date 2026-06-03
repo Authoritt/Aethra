@@ -46,6 +46,13 @@ public sealed class Vm : AggregateRoot<VmId>
     /// <summary>Log append-only del último intento de instalación. Rolling buffer de <see cref="MaxInstallLogLines"/> líneas.</summary>
     public string InstallLog { get; private set; }
 
+    /// <summary>
+    /// F12.3 — Cuando <c>true</c>, esta VM forma parte del pool round-robin de previews. Si el
+    /// operador la apaga, las nuevas Instances ephemerals no se le asignan (las existentes no se
+    /// mueven — solo el siguiente PR busca otra VM).
+    /// </summary>
+    public bool AcceptsPreviews { get; private set; }
+
     private Vm(VmId id, Slug slug, string name, Satellite satellite, DateTimeOffset now) : base(id)
     {
         Slug = slug;
@@ -56,6 +63,7 @@ public sealed class Vm : AggregateRoot<VmId>
         UpdatedAt = now;
         InstallStatus = InstallStatus.NotInstalled;
         InstallLog = string.Empty;
+        AcceptsPreviews = true;
     }
 
     /// <summary>
@@ -196,11 +204,26 @@ public sealed class Vm : AggregateRoot<VmId>
 
     public void ClearInstallLog() => InstallLog = string.Empty;
 
+    /// <summary>
+    /// F12.3 — Marca esta VM como elegible o no para hospedar previews ephemerals.
+    /// Idempotente: si el estado ya es el deseado, no toca <see cref="UpdatedAt"/>.
+    /// </summary>
+    public void SetAcceptsPreviews(bool accepts, DateTimeOffset now)
+    {
+        if (AcceptsPreviews == accepts)
+        {
+            return;
+        }
+        AcceptsPreviews = accepts;
+        UpdatedAt = now;
+    }
+
     // EF Core
     private Vm() : base()
     {
         Name = string.Empty;
         Satellite = default!;
         InstallLog = string.Empty;
+        AcceptsPreviews = true;
     }
 }

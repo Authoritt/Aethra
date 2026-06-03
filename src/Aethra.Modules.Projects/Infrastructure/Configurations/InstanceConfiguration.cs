@@ -81,6 +81,15 @@ internal sealed class InstanceConfiguration : IEntityTypeConfiguration<Instance>
         builder.Property(i => i.CustomDomain).HasColumnName("custom_domain").HasMaxLength(253);
         builder.Property(i => i.AutoHostname).HasColumnName("auto_hostname").HasMaxLength(253);
 
+        // F12.3 — branch-per-instance + preview lifecycle metadata.
+        builder.Property(i => i.TrackedRef).HasColumnName("tracked_ref").HasMaxLength(255);
+        builder.Property(i => i.IsEphemeral).HasColumnName("is_ephemeral").IsRequired().HasDefaultValue(false);
+        builder.Property(i => i.ExpiresAt).HasColumnName("expires_at");
+        builder.Property(i => i.CreatedByUserId).HasColumnName("created_by_user_id").HasMaxLength(64);
+
+        builder.HasIndex(i => i.IsEphemeral).HasDatabaseName("ix_instances_is_ephemeral");
+        builder.HasIndex(i => i.TrackedRef).HasDatabaseName("ix_instances_tracked_ref");
+
         builder.Property(i => i.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(i => i.UpdatedAt).HasColumnName("updated_at").IsRequired();
 

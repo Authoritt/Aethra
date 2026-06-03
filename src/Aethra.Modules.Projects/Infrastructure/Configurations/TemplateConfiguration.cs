@@ -79,6 +79,12 @@ internal sealed class TemplateConfiguration : IEntityTypeConfiguration<Template>
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(t => t.UpdatedAt).HasColumnName("updated_at").IsRequired();
 
+        // F12.3 — flag para opt-in al auto-preview de PRs.
+        builder.Property(t => t.AutoPreviewPullRequests)
+            .HasColumnName("auto_preview_pull_requests")
+            .IsRequired()
+            .HasDefaultValue(false);
+
         builder.OwnsOne(t => t.Source, src =>
         {
             src.Property(s => s.GitRepoUrl)
@@ -89,7 +95,7 @@ internal sealed class TemplateConfiguration : IEntityTypeConfiguration<Template>
                 .HasMaxLength(500)
                 .IsRequired();
 
-            src.Property(s => s.Branch).HasColumnName("source_branch").HasMaxLength(255).IsRequired();
+            src.Property(s => s.DefaultBranch).HasColumnName("default_branch").HasMaxLength(255).IsRequired();
             src.Property(s => s.BaseDirectory).HasColumnName("source_base_directory").HasMaxLength(255).IsRequired();
             src.Property(s => s.AccessTokenCredentialName)
                 .HasColumnName("source_access_token_credential_name")
@@ -106,6 +112,27 @@ internal sealed class TemplateConfiguration : IEntityTypeConfiguration<Template>
                     v => v == null ? 0 : v.Aggregate(0, (h, item) => HashCode.Combine(h, item)),
                     v => CloneStringList(v)));
         });
+
+        // F12.3 — tabla hija con el mapping Environment → Branch por Template.
+        builder.OwnsMany(t => t.EnvironmentMapping, m =>
+        {
+            m.ToTable("templates_environment_mappings");
+            m.WithOwner().HasForeignKey("TemplateId");
+            m.HasKey("TemplateId", "Environment");
+
+            m.Property<TemplateId>("TemplateId")
+                .HasColumnName("template_id")
+                .HasConversion(new ValueConverter<TemplateId, string>(
+                    id => id.ToString(),
+                    s => ParseTemplateId(s)))
+                .HasMaxLength(64);
+
+            m.Property(x => x.Environment).HasColumnName("environment").HasMaxLength(32).IsRequired();
+            m.Property(x => x.Branch).HasColumnName("branch").HasMaxLength(255).IsRequired();
+        });
+
+        builder.Metadata.FindNavigation(nameof(Template.EnvironmentMapping))!
+            .SetPropertyAccessMode(PropertyAccessMode.Field);
 
         builder.OwnsOne(t => t.Build, b =>
         {

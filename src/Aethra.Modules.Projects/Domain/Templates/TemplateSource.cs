@@ -17,7 +17,12 @@ namespace Aethra.Modules.Projects.Domain.Templates;
 public sealed class TemplateSource
 {
     public GitRepoUrl GitRepoUrl { get; private set; }
-    public string Branch { get; private set; }
+    /// <summary>
+    /// Branch por defecto cuando una <c>Instance</c> no define <c>TrackedRef</c> ni hay un
+    /// <c>EnvironmentMapping</c> aplicable. Rebautizada de <c>Branch</c> a <c>DefaultBranch</c>
+    /// en F12.3 para reflejar su rol como fallback y no como la única rama del template.
+    /// </summary>
+    public string DefaultBranch { get; private set; }
 
     /// <summary>
     /// Subdirectorio del repo que sirve como build context. <c>"/"</c> para repos no-monorepo.
@@ -40,13 +45,13 @@ public sealed class TemplateSource
 
     private TemplateSource(
         GitRepoUrl gitRepoUrl,
-        string branch,
+        string defaultBranch,
         string baseDirectory,
         IReadOnlyList<string> watchPaths,
         string? accessTokenCredentialName)
     {
         GitRepoUrl = gitRepoUrl;
-        Branch = branch;
+        DefaultBranch = defaultBranch;
         BaseDirectory = baseDirectory;
         WatchPaths = watchPaths;
         AccessTokenCredentialName = accessTokenCredentialName;
@@ -54,25 +59,25 @@ public sealed class TemplateSource
 
     public static TemplateSource Create(
         GitRepoUrl gitRepoUrl,
-        string branch,
+        string defaultBranch,
         string? baseDirectory = null,
         IReadOnlyList<string>? watchPaths = null,
         string? accessTokenCredentialName = null)
     {
-        var b = string.IsNullOrWhiteSpace(branch) ? "main" : branch.Trim();
+        var b = string.IsNullOrWhiteSpace(defaultBranch) ? "main" : defaultBranch.Trim();
         var dir = NormalizeBaseDirectory(baseDirectory);
         var paths = watchPaths is { Count: > 0 } ? watchPaths : [];
         var token = string.IsNullOrWhiteSpace(accessTokenCredentialName) ? null : accessTokenCredentialName.Trim();
         return new TemplateSource(gitRepoUrl, b, dir, paths, token);
     }
 
-    public void UpdateBranch(string branch)
+    public void UpdateDefaultBranch(string defaultBranch)
     {
-        if (string.IsNullOrWhiteSpace(branch))
+        if (string.IsNullOrWhiteSpace(defaultBranch))
         {
-            throw new ArgumentException("Branch no puede estar vacío.", nameof(branch));
+            throw new ArgumentException("DefaultBranch no puede estar vacío.", nameof(defaultBranch));
         }
-        Branch = branch.Trim();
+        DefaultBranch = defaultBranch.Trim();
     }
 
     public void UpdateBaseDirectory(string? baseDirectory) => BaseDirectory = NormalizeBaseDirectory(baseDirectory);
@@ -102,4 +107,42 @@ public sealed class TemplateSource
 
     // EF Core
     private TemplateSource() : this(default!, "main", "/", [], null) { }
+}
+
+/// <summary>
+/// F12.3 — Branch-per-Instance: define qué <c>Branch</c> usar cuando una <c>Instance</c> tiene un
+/// <see cref="Environment"/> dado y NO especifica <c>TrackedRef</c> propio. Owned entity de
+/// <see cref="Template"/>; un Template tiene <c>N</c> mappings (uno por environment como mucho).
+///
+/// <para>
+/// Ejemplo: prod→main, stage→develop, qa→qa. Si una Instance de environment="prod" no setea
+/// TrackedRef, hereda <c>refs/heads/main</c>. Si no hay mapping para su environment, cae al
+/// <see cref="TemplateSource.DefaultBranch"/>. Ver <c>Instance.ResolveTrackedRef</c>.
+/// </para>
+/// </summary>
+public sealed class TemplateEnvironmentMapping
+{
+    public string Environment { get; private set; }
+    public string Branch { get; private set; }
+
+    public TemplateEnvironmentMapping(string environment, string branch)
+    {
+        if (string.IsNullOrWhiteSpace(environment))
+        {
+            throw new ArgumentException("Environment requerido.", nameof(environment));
+        }
+        if (string.IsNullOrWhiteSpace(branch))
+        {
+            throw new ArgumentException("Branch requerido.", nameof(branch));
+        }
+        Environment = environment.Trim().ToLowerInvariant();
+        Branch = branch.Trim();
+    }
+
+    // EF Core
+    private TemplateEnvironmentMapping()
+    {
+        Environment = string.Empty;
+        Branch = string.Empty;
+    }
 }

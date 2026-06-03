@@ -36,6 +36,7 @@ public sealed class DefaultBindingEnvVarMapper : IBindingEnvVarMapper
             ServiceType.Redis => BuildRedis(prefix, host, port, binding.ResourceName, creds),
             ServiceType.RabbitMQ => BuildRabbitMQ(prefix, host, port, binding.ResourceName, creds),
             ServiceType.MySQL => BuildMySQL(prefix, host, port, binding.ResourceName, creds),
+            ServiceType.MariaDB => BuildMySQL(prefix, host, port, binding.ResourceName, creds),
             ServiceType.MongoDB => BuildMongoDB(prefix, host, port, binding.ResourceName, creds),
             _ => [],
         };
@@ -73,6 +74,8 @@ public sealed class DefaultBindingEnvVarMapper : IBindingEnvVarMapper
 
     private static List<EnvVarUpsert> BuildMySQL(string prefix, string host, int port, string db, BindingCredentials creds) =>
     [
+        // DATABASE_URL canónico (mysql://...) + connection string ADO.NET para apps .NET.
+        Var(prefix, "DATABASE_URL", $"mysql://{creds.Username}:{creds.Password}@{host}:{port}/{db}"),
         Var(prefix, "MYSQL_URL", $"Server={host};Port={port};Database={db};Uid={creds.Username};Pwd={creds.Password};"),
         Var(prefix, "MYSQL_HOST", host),
         Var(prefix, "MYSQL_PORT", port.ToString(CultureInfo.InvariantCulture)),
@@ -83,6 +86,8 @@ public sealed class DefaultBindingEnvVarMapper : IBindingEnvVarMapper
 
     private static List<EnvVarUpsert> BuildMongoDB(string prefix, string host, int port, string db, BindingCredentials creds) =>
     [
+        // Convención Mongo: URI (no URL) y se incluye también DATABASE_URL para frameworks que la asumen.
+        Var(prefix, "MONGODB_URI", $"mongodb://{creds.Username}:{creds.Password}@{host}:{port}/{db}"),
         Var(prefix, "MONGODB_URL", $"mongodb://{creds.Username}:{creds.Password}@{host}:{port}/{db}"),
         Var(prefix, "MONGODB_HOST", host),
         Var(prefix, "MONGODB_PORT", port.ToString(CultureInfo.InvariantCulture)),

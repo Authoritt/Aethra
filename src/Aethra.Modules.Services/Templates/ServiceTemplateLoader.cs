@@ -193,6 +193,23 @@ internal sealed class EmbeddedServiceTemplateCatalog : IServiceTemplateCatalog
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             : new Dictionary<string, string>(dto.Env, StringComparer.Ordinal);
 
+        // Categoría: si no la trae, intentamos derivarla del ServiceType para mantener compat
+        // con templates legacy (postgres/redis/rabbit) que no la declaran.
+        var category = string.IsNullOrWhiteSpace(dto.Category)
+            ? DeriveCategory(parsedType)
+            : dto.Category.Trim();
+
+        var tags = (dto.Tags ?? [])
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim().ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var dependencies = (dto.Dependencies ?? [])
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .Select(d => d.Trim())
+            .ToArray();
+
         return new ServiceTemplate(
             Id: dto.Id,
             DisplayName: dto.DisplayName,
@@ -207,8 +224,35 @@ internal sealed class EmbeddedServiceTemplateCatalog : IServiceTemplateCatalog
             Command: dto.Command,
             Volumes: volumes,
             Healthcheck: hc,
-            Notes: dto.Notes);
+            Notes: dto.Notes,
+            Category: category,
+            Description: dto.Description,
+            Tags: tags,
+            IconUrl: dto.IconUrl,
+            BindingSupported: dto.BindingSupported ?? DeriveBindingSupported(parsedType),
+            Dependencies: dependencies,
+            MultiContainer: dto.MultiContainer ?? false);
     }
+
+    private static string DeriveCategory(ServiceType type) => type switch
+    {
+        ServiceType.Postgres => TemplateCategories.Database,
+        ServiceType.MySQL => TemplateCategories.Database,
+        ServiceType.MariaDB => TemplateCategories.Database,
+        ServiceType.MongoDB => TemplateCategories.Database,
+        ServiceType.ClickHouse => TemplateCategories.Database,
+        ServiceType.Redis => TemplateCategories.Database,
+        ServiceType.RabbitMQ => TemplateCategories.Messaging,
+        ServiceType.Application => TemplateCategories.Other,
+        _ => TemplateCategories.Other,
+    };
+
+    private static bool DeriveBindingSupported(ServiceType type) => type switch
+    {
+        ServiceType.Postgres or ServiceType.MySQL or ServiceType.MariaDB
+            or ServiceType.MongoDB or ServiceType.Redis or ServiceType.RabbitMQ => true,
+        _ => false,
+    };
 
     // DTOs internos para YamlDotNet: classes con set-accessors públicos (records no se deserializan
     // limpiamente con el naming convention underscore en todas las versiones).
@@ -228,6 +272,14 @@ internal sealed class EmbeddedServiceTemplateCatalog : IServiceTemplateCatalog
         public List<VolumeYamlDto>? Volumes { get; set; }
         public HealthcheckYamlDto? Healthcheck { get; set; }
         public string? Notes { get; set; }
+        // F12.2 metadata de catálogo (todo opcional para no romper plantillas legacy).
+        public string? Category { get; set; }
+        public string? Description { get; set; }
+        public List<string>? Tags { get; set; }
+        public string? IconUrl { get; set; }
+        public bool? BindingSupported { get; set; }
+        public List<string>? Dependencies { get; set; }
+        public bool? MultiContainer { get; set; }
     }
 
     private sealed class VolumeYamlDto

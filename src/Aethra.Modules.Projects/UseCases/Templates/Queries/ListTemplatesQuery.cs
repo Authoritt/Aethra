@@ -42,7 +42,7 @@ internal sealed class ListTemplatesHandler(ProjectsDbContext db)
             name: t.Name,
             description: t.Description,
             gitRepoUrl: t.Source.GitRepoUrl.Value,
-            branch: t.Source.Branch,
+            branch: t.Source.DefaultBranch,
             buildType: t.Build.BuildType.ToString(),
             createdAt: t.CreatedAt,
             updatedAt: t.UpdatedAt))];

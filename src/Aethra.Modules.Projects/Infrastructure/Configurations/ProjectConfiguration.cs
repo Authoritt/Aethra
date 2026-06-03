@@ -45,6 +45,15 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(p => p.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(p => p.UpdatedAt).HasColumnName("updated_at").IsRequired();
 
+        // F12.3 — Preview lifecycle controls.
+        builder.Property(p => p.PreviewMaxConcurrent)
+            .HasColumnName("preview_max_concurrent")
+            .IsRequired()
+            .HasDefaultValue(10);
+        builder.Property(p => p.PreviewClientId)
+            .HasColumnName("preview_client_id")
+            .HasMaxLength(64);
+
         builder.Ignore(p => p.DomainEvents);
     }
 

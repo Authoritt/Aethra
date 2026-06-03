@@ -23,12 +23,27 @@ public sealed class Project : AggregateRoot<ProjectId>
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>
+    /// F12.3 — Tope de previews concurrentes (Instances <c>IsEphemeral=true</c>) activas en este
+    /// Project. Default <c>10</c>. Cuando se alcanza, los webhooks de PR responden con un comment
+    /// "quota exceeded" en lugar de crear más Instances.
+    /// </summary>
+    public int PreviewMaxConcurrent { get; private set; }
+
+    /// <summary>
+    /// F12.3 — FK lazy al <c>Client</c> interno <c>__preview__</c> usado como tenant de todas las
+    /// Instances ephemerals del Project. Se crea on-demand en el webhook handler al primer PR.
+    /// <c>null</c> hasta entonces.
+    /// </summary>
+    public string? PreviewClientId { get; private set; }
+
     private Project(ProjectId id, Slug slug, string name, DateTimeOffset now) : base(id)
     {
         Slug = slug;
         Name = name;
         CreatedAt = now;
         UpdatedAt = now;
+        PreviewMaxConcurrent = 10;
     }
 
     public static Project Create(
@@ -89,6 +104,46 @@ public sealed class Project : AggregateRoot<ProjectId>
         Raise(new ProjectAppearanceUpdatedEvent(Id, Description, Color, Icon));
     }
 
+    /// <summary>
+    /// F12.3 — Setea el tope de previews concurrentes. Valor mínimo 0 (deshabilita previews).
+    /// </summary>
+    public void SetPreviewMaxConcurrent(int newMax, DateTimeOffset now)
+    {
+        if (newMax < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(newMax), "PreviewMaxConcurrent no puede ser negativo.");
+        }
+        if (PreviewMaxConcurrent == newMax)
+        {
+            return;
+        }
+        PreviewMaxConcurrent = newMax;
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// F12.3 — Setea el FK al Client interno <c>__preview__</c>. Sólo se llama una vez (lazy create
+    /// desde el webhook handler). Idempotente: si ya estaba seteado, no toca <see cref="UpdatedAt"/>.
+    /// </summary>
+    public void AttachPreviewClient(string clientId, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            throw new ArgumentException("clientId requerido.", nameof(clientId));
+        }
+        var normalized = clientId.Trim();
+        if (PreviewClientId == normalized)
+        {
+            return;
+        }
+        PreviewClientId = normalized;
+        UpdatedAt = now;
+    }
+
     // EF Core
-    private Project() : base() { Name = string.Empty; }
+    private Project() : base()
+    {
+        Name = string.Empty;
+        PreviewMaxConcurrent = 10;
+    }
 }

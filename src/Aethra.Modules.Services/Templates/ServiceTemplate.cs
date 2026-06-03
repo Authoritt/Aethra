@@ -8,6 +8,11 @@ namespace Aethra.Modules.Services.Templates;
 /// y describe imagen, puertos, env, comando, volúmenes y healthcheck que el orchestrator
 /// usará al provisionar el contenedor.
 /// </summary>
+/// <remarks>
+/// F12.2 añade metadata de catálogo (categoría, tags, iconUrl, dependencies) que la UI
+/// usa para renderizar el marketplace. Estos campos son opcionales para no romper las
+/// plantillas legacy (postgres-16/redis-7/rabbitmq-3-mgmt).
+/// </remarks>
 public sealed record ServiceTemplate(
     string Id,
     string DisplayName,
@@ -22,7 +27,14 @@ public sealed record ServiceTemplate(
     IReadOnlyList<string>? Command,
     IReadOnlyList<TemplateVolume> Volumes,
     TemplateHealthcheck? Healthcheck,
-    string? Notes);
+    string? Notes,
+    string Category,
+    string? Description,
+    IReadOnlyList<string> Tags,
+    string? IconUrl,
+    bool BindingSupported,
+    IReadOnlyList<string> Dependencies,
+    bool MultiContainer);
 
 /// <summary>
 /// Volumen lógico montado por la plantilla. El orchestrator mapea <paramref name="Name"/>
@@ -38,3 +50,18 @@ public sealed record TemplateHealthcheck(
     IReadOnlyList<string> Test,
     int IntervalSeconds,
     int Retries);
+
+/// <summary>
+/// Categorías canónicas usadas por la UI del marketplace para los chips de filtro.
+/// </summary>
+public static class TemplateCategories
+{
+    public const string Database = "Database";
+    public const string Messaging = "Messaging";
+    public const string Storage = "Storage";
+    public const string Cms = "CMS";
+    public const string Analytics = "Analytics";
+    public const string Automation = "Automation";
+    public const string Search = "Search";
+    public const string Other = "Other";
+}

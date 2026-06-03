@@ -18,6 +18,9 @@ public static class ProvisioningRegistrationExtensions
         services.AddScoped<IServiceProvisioner, PostgresProvisioner>();
         services.AddScoped<IServiceProvisioner, RedisProvisioner>();
         services.AddScoped<IServiceProvisioner, RabbitProvisioner>();
+        services.AddScoped<IServiceProvisioner, MySqlProvisioner>();
+        services.AddScoped<IServiceProvisioner, MariaDbProvisioner>();
+        services.AddScoped<IServiceProvisioner, MongoDbProvisioner>();
 
         return services;
     }

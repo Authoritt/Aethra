@@ -38,7 +38,14 @@ public sealed record ServiceTemplateDto(
     string Version,
     string Image,
     int InternalPort,
-    string? Notes);
+    string? Notes,
+    string Category,
+    string? Description,
+    IReadOnlyList<string> Tags,
+    string? IconUrl,
+    bool BindingSupported,
+    IReadOnlyList<string> Dependencies,
+    bool MultiContainer);
 
 public sealed record ServiceBindingDto(
     string Id,

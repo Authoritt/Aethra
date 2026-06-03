@@ -29,6 +29,20 @@ public sealed class Template : AggregateRoot<TemplateId>
     /// </summary>
     public byte[] WebhookSecretCipher { get; private set; }
 
+    private readonly List<TemplateEnvironmentMapping> _environmentMapping = [];
+    /// <summary>
+    /// F12.3 — mapping <c>Environment → Branch</c> heredado por las <c>Instance</c>s que no
+    /// definen <c>TrackedRef</c> explícito. Ver <see cref="TemplateEnvironmentMapping"/>.
+    /// </summary>
+    public IReadOnlyList<TemplateEnvironmentMapping> EnvironmentMapping => _environmentMapping.AsReadOnly();
+
+    /// <summary>
+    /// F12.3 — Cuando <c>true</c>, el webhook handler crea automáticamente Instances ephemerals
+    /// para cada <c>pull_request.opened</c> con redeploys en <c>synchronize</c> y limpieza en
+    /// <c>closed</c>. Default <c>false</c> — el operador habilita explícitamente.
+    /// </summary>
+    public bool AutoPreviewPullRequests { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -87,7 +101,7 @@ public sealed class Template : AggregateRoot<TemplateId>
             projectId,
             slug.Value,
             source.GitRepoUrl.Value,
-            source.Branch));
+            source.DefaultBranch));
         return template;
     }
 
@@ -98,7 +112,38 @@ public sealed class Template : AggregateRoot<TemplateId>
     {
         Source = source ?? throw new ArgumentNullException(nameof(source));
         UpdatedAt = now;
-        Raise(new TemplateSourceUpdatedEvent(Id, source.GitRepoUrl.Value, source.Branch));
+        Raise(new TemplateSourceUpdatedEvent(Id, source.GitRepoUrl.Value, source.DefaultBranch));
+    }
+
+    /// <summary>
+    /// F12.3 — Reemplaza el set completo de <see cref="EnvironmentMapping"/>. Idempotente: si los
+    /// items son iguales, no marca el aggregate como modificado.
+    /// </summary>
+    public void ReplaceEnvironmentMapping(IEnumerable<TemplateEnvironmentMapping> mappings, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(mappings);
+        // Normalizar y deduplicar por Environment (último gana).
+        var dedup = new Dictionary<string, TemplateEnvironmentMapping>(StringComparer.Ordinal);
+        foreach (var m in mappings)
+        {
+            dedup[m.Environment] = m;
+        }
+        _environmentMapping.Clear();
+        _environmentMapping.AddRange(dedup.Values);
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// F12.3 — Habilita o deshabilita el auto-preview de PRs. Idempotente.
+    /// </summary>
+    public void SetAutoPreviewPullRequests(bool enabled, DateTimeOffset now)
+    {
+        if (AutoPreviewPullRequests == enabled)
+        {
+            return;
+        }
+        AutoPreviewPullRequests = enabled;
+        UpdatedAt = now;
     }
 
     /// <summary>
