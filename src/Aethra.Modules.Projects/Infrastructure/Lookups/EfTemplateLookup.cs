@@ -25,7 +25,7 @@ internal sealed class EfTemplateLookup(ProjectsDbContext db, IWebhookSecretCodec
         // <c>GitRepoUrl</c> permite comparar la columna como string sin instanciar el VO.
         var matches = await db.Templates
             .AsNoTracking()
-            .Where(t => t.Source.GitRepoUrl.Value == repoUrl && t.Source.Branch == branch)
+            .Where(t => t.Source.GitRepoUrl.Value == repoUrl && t.Source.DefaultBranch == branch)
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
@@ -35,6 +35,18 @@ internal sealed class EfTemplateLookup(ProjectsDbContext db, IWebhookSecretCodec
             result.Add(Project(t));
         }
         return result;
+    }
+
+    public async Task<IReadOnlyList<TemplateForBuildView>> FindAllByRepoAsync(
+        string repoUrl, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(repoUrl);
+        var matches = await db.Templates
+            .AsNoTracking()
+            .Where(t => t.Source.GitRepoUrl.Value == repoUrl)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return matches.Select(Project).ToList();
     }
 
     public async Task<TemplateForBuildView?> GetByIdAsync(string templateId, CancellationToken ct)
@@ -55,7 +67,7 @@ internal sealed class EfTemplateLookup(ProjectsDbContext db, IWebhookSecretCodec
             Slug: t.Slug.Value,
             Name: t.Name,
             GitRepoUrl: t.Source.GitRepoUrl.Value,
-            Branch: t.Source.Branch,
+            Branch: t.Source.DefaultBranch,
             // El cipher se descifra en el read-model para que los consumidores (webhook
             // validator) puedan validar HMAC. Sólo vive en memoria del proceso API; nunca
             // se serializa fuera del proceso.
@@ -64,5 +76,6 @@ internal sealed class EfTemplateLookup(ProjectsDbContext db, IWebhookSecretCodec
             WatchPaths: t.Source.WatchPaths,
             BuildType: t.Build.BuildType.ToString(),
             DockerfilePath: t.Build.DockerfilePath,
-            ComposeFilePath: t.Build.ComposeFilePath);
+            ComposeFilePath: t.Build.ComposeFilePath,
+            AutoPreviewPullRequests: t.AutoPreviewPullRequests);
 }

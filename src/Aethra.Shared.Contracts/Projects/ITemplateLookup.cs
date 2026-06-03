@@ -17,6 +17,13 @@ public interface ITemplateLookup
         string repoUrl, string branch, CancellationToken ct);
 
     /// <summary>
+    /// F12.3 — devuelve todos los Templates configurados al mismo repo Git, sin filtrar por branch.
+    /// El handler de <c>pull_request</c> lo usa porque el PR puede tener <c>base.ref</c> diferente
+    /// al <c>DefaultBranch</c> del Template.
+    /// </summary>
+    Task<IReadOnlyList<TemplateForBuildView>> FindAllByRepoAsync(string repoUrl, CancellationToken ct);
+
+    /// <summary>
     /// Devuelve un Template por su ID o null si no existe.
     /// </summary>
     Task<TemplateForBuildView?> GetByIdAsync(string templateId, CancellationToken ct);
@@ -27,6 +34,7 @@ public interface ITemplateLookup
 /// (clone Git + decisión Dockerfile/Compose/Nixpacks).
 /// </summary>
 /// <param name="ComposeFilePath">Ruta al <c>docker-compose.yml</c> si <c>BuildType=DockerCompose</c>; null en otros modos.</param>
+/// <param name="AutoPreviewPullRequests">F12.3 — flag para que el webhook handler decida si auto-genera previews al recibir un PR.</param>
 public sealed record TemplateForBuildView(
     string TemplateId,
     string ProjectId,
@@ -39,4 +47,5 @@ public sealed record TemplateForBuildView(
     IReadOnlyList<string> WatchPaths,
     string BuildType,
     string DockerfilePath,
-    string? ComposeFilePath = null);
+    string? ComposeFilePath = null,
+    bool AutoPreviewPullRequests = false);

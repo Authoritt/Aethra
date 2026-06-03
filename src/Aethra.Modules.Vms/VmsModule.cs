@@ -1,7 +1,9 @@
 using Aethra.Modules.Vms.Infrastructure;
+using Aethra.Modules.Vms.Infrastructure.Lookups;
 using Aethra.Modules.Vms.Infrastructure.Provisioning;
 using Aethra.Modules.Vms.Infrastructure.Security;
 using Aethra.Modules.Vms.Presentation;
+using Aethra.Shared.Contracts.Vms;
 using Aethra.Shared.Infrastructure.Modules;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -30,6 +32,9 @@ public static class VmsModule
         services.AddSingleton<IInstallationJobQueue, InMemoryInstallationJobQueue>();
         services.AddScoped<ISshProvisioner, RenciSshProvisioner>();
         services.AddHostedService<InstallationDispatcher>();
+
+        // F12.3 — Read-model cross-module para el pool de previews.
+        services.AddScoped<IPreviewVmPool, EfPreviewVmPool>();
 
         return services;
     }

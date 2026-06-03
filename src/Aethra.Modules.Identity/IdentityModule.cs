@@ -3,6 +3,7 @@ using Aethra.Modules.Identity.Infrastructure;
 using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Modules.Identity.Presentation;
+using IdAuth = Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Shared.Infrastructure.Modules;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -40,6 +41,17 @@ public static class IdentityModule
         services.AddScoped<EfUserStore>();
         services.AddScoped<IdentitySeeder>();
 
+        // F12.3: cross-module resolver para mapear PR.user.login → UserId.
+        services.AddScoped<Aethra.Shared.Contracts.Identity.IGitHubUserResolver, EfGitHubUserResolver>();
+
+        // F12.1B: codec dedicado para secretos TOTP + recovery codes + verifier.
+        services.AddSingleton<ITotpSecretCodec, DataProtectionTotpSecretCodec>();
+        services.AddSingleton<IdAuth.ITotpChallengeTokens, IdAuth.TotpChallengeTokens>();
+        services.AddScoped<IdAuth.ITotpLoginVerifier, IdAuth.TotpLoginVerifier>();
+
+        // MediatR escanea el assembly del modulo Identity (registrado en Program.cs central),
+        // pero los handlers TOTP viven en este mismo assembly, asi que ya quedan registrados.
+
         return services;
     }
 
@@ -54,6 +66,7 @@ public static class IdentityModule
     {
         app.MapApiKeysEndpoints();
         app.MapUsersEndpoints();
+        app.MapTotpEndpoints();
         return app;
     }
 }

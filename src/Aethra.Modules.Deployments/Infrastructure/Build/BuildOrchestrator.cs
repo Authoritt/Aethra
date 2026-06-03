@@ -238,7 +238,8 @@ public sealed class BuildOrchestrator(
                 TemplateId: build.TemplateId,
                 ImageRef: imageRef,
                 GitSha: build.GitSha,
-                CompletedAt: clock.UtcNow), ct).ConfigureAwait(false);
+                CompletedAt: clock.UtcNow,
+                GitRef: build.GitRef), ct).ConfigureAwait(false);
 
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
 

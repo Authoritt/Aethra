@@ -50,15 +50,28 @@ internal sealed class BuildCompletedHandler(
     {
         ArgumentNullException.ThrowIfNull(notification);
 
-        var instances = await instanceLookup
-            .FindByTemplateAsync(notification.TemplateId, autoDeployOnly: true, cancellationToken)
-            .ConfigureAwait(false);
+        // F12.3 — Filtramos por TrackedRef además del Template para soportar branch-per-instance:
+        // un build de refs/heads/develop solo redeploya las Instances que trackean develop, no las
+        // que trackean main. Si el build no tiene GitRef (legacy), caemos al comportamiento previo.
+        IReadOnlyList<InstanceForDeployView> instances;
+        if (!string.IsNullOrWhiteSpace(notification.GitRef))
+        {
+            instances = await instanceLookup
+                .FindByTrackedRefAsync(notification.TemplateId, notification.GitRef, autoDeployOnly: true, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            instances = await instanceLookup
+                .FindByTemplateAsync(notification.TemplateId, autoDeployOnly: true, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         if (instances.Count == 0)
         {
             logger.LogInformation(
-                "BuildCompleted {BuildId} (template={Template}): 0 Instances con auto-deploy — no hay fan-out",
-                notification.BuildId, notification.TemplateId);
+                "BuildCompleted {BuildId} (template={Template} ref={Ref}): 0 Instances con auto-deploy — no hay fan-out",
+                notification.BuildId, notification.TemplateId, notification.GitRef ?? "(any)");
             return;
         }
 

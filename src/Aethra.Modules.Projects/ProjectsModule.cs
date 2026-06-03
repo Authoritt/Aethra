@@ -41,6 +41,8 @@ public static class ProjectsModule
         services.AddScoped<IInstanceLookup, EfInstanceLookup>();
         services.AddScoped<ITenantContext, EfTenantContext>();
         services.AddScoped<IEnvVarWriter, EfEnvVarWriter>();
+        // F12.3 — Coordinator de preview deployments (PR webhook → Instance ephemeral).
+        services.AddScoped<IPreviewInstanceCoordinator, EfPreviewInstanceCoordinator>();
         // F10.1c: resolver de entorno runtime (cascade env vars + secretos descifrados) que el
         // orquestador de deployment consume para alimentar el RunSpec del satélite.
         services.AddScoped<IEnvironmentResolver, EfEnvironmentResolver>();
