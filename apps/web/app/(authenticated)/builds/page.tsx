@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Plus, Rocket } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,8 @@ async function aggregateRecentBuilds(): Promise<
 }
 
 export default async function BuildsPage() {
+  const t = await getTranslations("pages.builds_list");
+  const tCommon = await getTranslations("common");
   const data = await aggregateRecentBuilds();
   if (data === "unauthorized") redirect("/login");
 
@@ -80,13 +83,13 @@ export default async function BuildsPage() {
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Builds"
-        description="Últimos 50 builds agregados de todos los templates del workspace."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button asChild>
             <Link href="/builds/new">
               <Plus className="mr-2 h-4 w-4" />
-              Build manual
+              {t("manual_build")}
             </Link>
           </Button>
         }
@@ -95,19 +98,19 @@ export default async function BuildsPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado. Verificá que la API esté corriendo.
+            {tCommon("load_error")}
           </CardContent>
         </Card>
       ) : builds.length === 0 ? (
         <EmptyState
           icon={<Rocket className="h-6 w-6" />}
-          title="Sin builds aún"
-          description="Cuando dispares un webhook o un build manual desde un template, los últimos aparecerán aquí."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
               <Link href="/builds/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Disparar build manual
+                {t("trigger_manual_build")}
               </Link>
             </Button>
           }
@@ -117,12 +120,12 @@ export default async function BuildsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Status</TableHead>
-                <TableHead>Template</TableHead>
-                <TableHead>Ref</TableHead>
-                <TableHead>SHA</TableHead>
-                <TableHead>Trigger</TableHead>
-                <TableHead>Creado</TableHead>
+                <TableHead>{t("col_status")}</TableHead>
+                <TableHead>{t("col_template")}</TableHead>
+                <TableHead>{t("col_ref")}</TableHead>
+                <TableHead>{t("col_sha")}</TableHead>
+                <TableHead>{t("col_trigger")}</TableHead>
+                <TableHead>{t("col_created")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

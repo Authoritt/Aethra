@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Activity, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,8 @@ async function fetchOverview(): Promise<MonitorOverviewDto | null> {
 }
 
 export default async function MonitorsPage({ searchParams }: ListPageProps) {
+  const t = await getTranslations("pages.monitors_list");
+  const tCommon = await getTranslations("common");
   const params = await searchParams;
   const data = await fetchMonitors({
     status: params.status,
@@ -92,15 +95,15 @@ export default async function MonitorsPage({ searchParams }: ListPageProps) {
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Monitores"
-        description="Probes HTTP de uptime con check periódico y SignalR live."
+        title={t("title")}
+        description={t("description")}
         actions={
           <>
             <MonitorsLive />
             <Button asChild>
               <Link href="/monitors/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Nuevo monitor
+                {t("new_monitor")}
               </Link>
             </Button>
           </>
@@ -110,16 +113,16 @@ export default async function MonitorsPage({ searchParams }: ListPageProps) {
       {overview ? (
         <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
           <Link href={params.status === "Up" ? "/monitors" : "/monitors?status=Up"}>
-            <KpiCard label="Up" value={overview.up} tone="success" />
+            <KpiCard label={t("kpi_up")} value={overview.up} tone="success" />
           </Link>
           <Link href={params.status === "Degraded" ? "/monitors" : "/monitors?status=Degraded"}>
-            <KpiCard label="Degraded" value={overview.degraded} tone="warning" />
+            <KpiCard label={t("kpi_degraded")} value={overview.degraded} tone="warning" />
           </Link>
           <Link href={params.status === "Down" ? "/monitors" : "/monitors?status=Down"}>
-            <KpiCard label="Down" value={overview.down} tone="destructive" />
+            <KpiCard label={t("kpi_down")} value={overview.down} tone="destructive" />
           </Link>
           <Link href={params.status === "Unknown" ? "/monitors" : "/monitors?status=Unknown"}>
-            <KpiCard label="Unknown" value={overview.unknown} />
+            <KpiCard label={t("kpi_unknown")} value={overview.unknown} />
           </Link>
         </section>
       ) : null}
@@ -127,24 +130,28 @@ export default async function MonitorsPage({ searchParams }: ListPageProps) {
       <FiltersBar
         selectedStatus={params.status}
         selectedEnabled={params.enabled}
+        filtersLabel={t("filters_label")}
+        allLabel={t("filter_all")}
+        enabledLabel={t("filter_enabled")}
+        disabledLabel={t("filter_disabled")}
       />
 
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado.
+            {tCommon("load_error_short")}
           </CardContent>
         </Card>
       ) : list.length === 0 ? (
         <EmptyState
           icon={<Activity className="h-6 w-6" />}
-          title="Aún sin monitores"
-          description="Creá tu primer monitor uptime para empezar a observar una URL."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
               <Link href="/monitors/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Crear monitor
+                {t("create_monitor")}
               </Link>
             </Button>
           }
@@ -154,13 +161,13 @@ export default async function MonitorsPage({ searchParams }: ListPageProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>URL</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Método</TableHead>
-                <TableHead>Intervalo</TableHead>
-                <TableHead>Último check</TableHead>
-                <TableHead>Fallos seguidos</TableHead>
+                <TableHead>{t("col_name")}</TableHead>
+                <TableHead>{t("col_url")}</TableHead>
+                <TableHead>{t("col_status")}</TableHead>
+                <TableHead>{t("col_method")}</TableHead>
+                <TableHead>{t("col_interval")}</TableHead>
+                <TableHead>{t("col_last_check")}</TableHead>
+                <TableHead>{t("col_failures")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -196,7 +203,7 @@ export default async function MonitorsPage({ searchParams }: ListPageProps) {
                     {m.interval_sec}s
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {formatRelative(m.last_checked_at)}
+                    {formatRelative(m.last_checked_at, t)}
                   </TableCell>
                   <TableCell>
                     <FailuresBadge n={m.consecutive_failures} />
@@ -214,15 +221,23 @@ export default async function MonitorsPage({ searchParams }: ListPageProps) {
 function FiltersBar({
   selectedStatus,
   selectedEnabled,
+  filtersLabel,
+  allLabel,
+  enabledLabel,
+  disabledLabel,
 }: {
   selectedStatus: string | undefined;
   selectedEnabled: string | undefined;
+  filtersLabel: string;
+  allLabel: string;
+  enabledLabel: string;
+  disabledLabel: string;
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
-      <span className="text-muted-foreground">Filtros:</span>
+      <span className="text-muted-foreground">{filtersLabel}</span>
       <FilterChip
-        label="Todos"
+        label={allLabel}
         href="/monitors"
         active={!selectedStatus && !selectedEnabled}
       />
@@ -236,12 +251,12 @@ function FiltersBar({
       ))}
       <span className="mx-2 text-muted-foreground/50">|</span>
       <FilterChip
-        label="Habilitados"
+        label={enabledLabel}
         href="/monitors?enabled=true"
         active={selectedEnabled === "true"}
       />
       <FilterChip
-        label="Deshabilitados"
+        label={disabledLabel}
         href="/monitors?enabled=false"
         active={selectedEnabled === "false"}
       />
@@ -282,14 +297,19 @@ function FailuresBadge({ n }: { n: number }) {
   );
 }
 
-function formatRelative(iso: string | null): string {
+type Translator = (
+  key: string,
+  values?: Record<string, string | number | Date>,
+) => string;
+
+function formatRelative(iso: string | null, t: Translator): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
   if (seconds < 0) return d.toLocaleString();
-  if (seconds < 60) return `hace ${seconds}s`;
-  if (seconds < 3600) return `hace ${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `hace ${Math.floor(seconds / 3600)}h`;
+  if (seconds < 60) return t("relative_seconds_ago", { seconds });
+  if (seconds < 3600) return t("relative_minutes_ago", { minutes: Math.floor(seconds / 60) });
+  if (seconds < 86400) return t("relative_hours_ago", { hours: Math.floor(seconds / 3600) });
   return d.toLocaleString();
 }

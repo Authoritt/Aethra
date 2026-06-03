@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Boxes, ChevronRight, ExternalLink } from "lucide-react";
 import { AutoHostnameInfo } from "@/app/_components/AutoHostnameInfo";
 import { Badge } from "@/components/ui/badge";
@@ -102,6 +103,8 @@ async function aggregateInstances(): Promise<
 }
 
 export default async function InstancesPage() {
+  const t = await getTranslations("pages.instances_list");
+  const tCommon = await getTranslations("common");
   const data = await aggregateInstances();
   if (data === "unauthorized") redirect("/login");
 
@@ -115,12 +118,12 @@ export default async function InstancesPage() {
   return (
     <div className="px-6 py-8 md:px-10 md:py-10 space-y-8">
       <PageHeader
-        title="Instancias"
-        description="Despliegues concretos: template x client x environment. Cada instancia corre en una VM con su propio hostname."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button asChild variant="outline">
             <Link href="/projects">
-              Ir a proyectos
+              {tCommon("go_to_projects")}
               <ChevronRight className="ml-1 h-4 w-4" />
             </Link>
           </Button>
@@ -130,18 +133,18 @@ export default async function InstancesPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado. Verificá que la API esté corriendo.
+            {tCommon("load_error")}
           </CardContent>
         </Card>
       ) : totalInstances === 0 ? (
         <EmptyState
           icon={<Boxes className="h-6 w-6" />}
-          title="Sin instancias aún"
-          description="Las instancias se crean desde el detalle de un template (template x client x environment). Entra a un template para crear la primera."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild variant="outline">
               <Link href="/templates">
-                Ver plantillas
+                {t("see_templates")}
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Link>
             </Button>
@@ -173,7 +176,7 @@ export default async function InstancesPage() {
                 </div>
                 <Button asChild variant="outline" size="sm">
                   <Link href={`/projects/${group.project.id}`}>
-                    Ver proyecto
+                    {tCommon("go_to_project")}
                     <ChevronRight className="ml-1 h-4 w-4" />
                   </Link>
                 </Button>
@@ -204,7 +207,7 @@ export default async function InstancesPage() {
                     <CardContent className="space-y-2 pb-3 text-xs">
                       <div className="flex items-baseline gap-2">
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                          template
+                          {t("label_template")}
                         </span>
                         <Link
                           href={`/templates/${inst.templateId}`}
@@ -216,7 +219,7 @@ export default async function InstancesPage() {
                       </div>
                       <div className="flex items-baseline gap-2">
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                          client
+                          {t("label_client")}
                         </span>
                         <Link
                           href={`/clients/${inst.clientId}`}
@@ -242,21 +245,21 @@ export default async function InstancesPage() {
                       </div>
                       <div className="flex items-center gap-2 pt-1">
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                          auto-deploy
+                          {t("label_autodeploy")}
                         </span>
                         {inst.autoDeployOnNewBuild ? (
                           <Badge
                             variant="success"
                             className="font-mono text-[10px] uppercase"
                           >
-                            on
+                            {t("on")}
                           </Badge>
                         ) : (
                           <Badge
                             variant="outline"
                             className="font-mono text-[10px] uppercase"
                           >
-                            off
+                            {t("off")}
                           </Badge>
                         )}
                       </div>
@@ -264,7 +267,7 @@ export default async function InstancesPage() {
                     <CardFooter className="pt-0">
                       <Button asChild variant="ghost" size="sm">
                         <Link href={`/instances/${inst.id}`}>
-                          Detalles
+                          {t("details")}
                           <ChevronRight className="ml-1 h-4 w-4" />
                         </Link>
                       </Button>

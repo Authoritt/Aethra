@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Boxes, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,8 @@ async function fetchServices(): Promise<
 }
 
 export default async function ServicesPage() {
+  const t = await getTranslations("pages.services_list");
+  const tCommon = await getTranslations("common");
   const data = await fetchServices();
   if (data === "unauthorized") {
     redirect("/login");
@@ -50,13 +53,13 @@ export default async function ServicesPage() {
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Servicios compartidos"
-        description="Postgres, Redis, RabbitMQ y otros backends provisionados desde plantillas. Consumidos vía bindings desde applications."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button asChild>
             <Link href="/services/new">
               <Plus className="mr-2 h-4 w-4" />
-              Crear servicio
+              {t("create_service")}
             </Link>
           </Button>
         }
@@ -65,19 +68,19 @@ export default async function ServicesPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado. Verificá que la API esté corriendo.
+            {tCommon("load_error")}
           </CardContent>
         </Card>
       ) : services.length === 0 ? (
         <EmptyState
           icon={<Boxes className="h-6 w-6" />}
-          title="Aún sin servicios"
-          description="Crea un Postgres, Redis o RabbitMQ desde plantilla para que tus applications puedan consumirlo vía bindings."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
               <Link href="/services/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Crear servicio
+                {t("create_service")}
               </Link>
             </Button>
           }
@@ -87,12 +90,12 @@ export default async function ServicesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Slug</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Versión</TableHead>
-                <TableHead>VM target</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Bindings</TableHead>
+                <TableHead>{t("col_slug")}</TableHead>
+                <TableHead>{t("col_type")}</TableHead>
+                <TableHead>{t("col_version")}</TableHead>
+                <TableHead>{t("col_vm")}</TableHead>
+                <TableHead>{t("col_status")}</TableHead>
+                <TableHead className="text-right">{t("col_bindings")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

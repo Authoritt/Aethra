@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { ChevronRight, FileCode, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,8 @@ async function aggregateTemplates(): Promise<
 }
 
 export default async function TemplatesPage() {
+  const t = await getTranslations("pages.templates_list");
+  const tCommon = await getTranslations("common");
   const data = await aggregateTemplates();
   if (data === "unauthorized") redirect("/login");
 
@@ -62,12 +65,12 @@ export default async function TemplatesPage() {
   return (
     <div className="px-6 py-8 md:px-10 md:py-10 space-y-8">
       <PageHeader
-        title="Plantillas"
-        description="Plantillas reutilizables de build (Dockerfile, Compose o Nixpacks) agrupadas por proyecto. Cada una genera builds e instancias."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button asChild variant="outline">
             <Link href="/projects">
-              Ir a proyectos
+              {tCommon("go_to_projects")}
               <ChevronRight className="ml-1 h-4 w-4" />
             </Link>
           </Button>
@@ -77,19 +80,19 @@ export default async function TemplatesPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado. Verificá que la API esté corriendo.
+            {tCommon("load_error")}
           </CardContent>
         </Card>
       ) : groups.length === 0 ? (
         <EmptyState
           icon={<FileCode className="h-6 w-6" />}
-          title="Aún sin proyectos"
-          description="Los templates viven dentro de un proyecto. Creá un proyecto primero y luego definí su primer template."
+          title={t("empty_no_projects_title")}
+          description={t("empty_no_projects_description")}
           action={
             <Button asChild>
               <Link href="/projects/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Crear proyecto
+                {t("create_project")}
               </Link>
             </Button>
           }
@@ -97,12 +100,12 @@ export default async function TemplatesPage() {
       ) : totalTemplates === 0 ? (
         <EmptyState
           icon={<FileCode className="h-6 w-6" />}
-          title="Aún sin plantillas"
-          description="Aún no hay plantillas registradas. Entra a un proyecto para crear la primera."
+          title={t("empty_no_templates_title")}
+          description={t("empty_no_templates_description")}
           action={
             <Button asChild variant="outline">
               <Link href="/projects">
-                Ver proyectos
+                {tCommon("see_projects")}
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Link>
             </Button>
@@ -136,12 +139,12 @@ export default async function TemplatesPage() {
                   <Button asChild variant="ghost" size="sm">
                     <Link href={`/projects/${group.project.id}/templates/new`}>
                       <Plus className="mr-1 h-4 w-4" />
-                      Crear template
+                      {t("create_template")}
                     </Link>
                   </Button>
                   <Button asChild variant="outline" size="sm">
                     <Link href={`/projects/${group.project.id}`}>
-                      Ver proyecto
+                      {tCommon("go_to_project")}
                       <ChevronRight className="ml-1 h-4 w-4" />
                     </Link>
                   </Button>
@@ -149,41 +152,41 @@ export default async function TemplatesPage() {
               </header>
 
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {group.templates.map((t) => (
+                {group.templates.map((tpl) => (
                   <Card
-                    key={t.id}
+                    key={tpl.id}
                     className="transition-colors hover:border-primary/40"
                   >
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="truncate text-base">
-                          {t.name}
+                          {tpl.name}
                         </CardTitle>
                         <Badge
                           variant="outline"
                           className="shrink-0 font-mono text-[10px] uppercase"
                         >
-                          {t.buildType}
+                          {tpl.buildType}
                         </Badge>
                       </div>
                       <CardDescription className="font-mono text-xs">
-                        {t.slug}
+                        {tpl.slug}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="pb-3">
                       <p
                         className="truncate font-mono text-[11px] text-muted-foreground"
-                        title={`${t.gitRepoUrl} @ ${t.branch}`}
+                        title={`${tpl.gitRepoUrl} @ ${tpl.branch}`}
                       >
-                        {t.gitRepoUrl}
+                        {tpl.gitRepoUrl}
                         <span className="opacity-60"> @ </span>
-                        {t.branch}
+                        {tpl.branch}
                       </p>
                     </CardContent>
                     <CardFooter className="pt-0">
                       <Button asChild variant="ghost" size="sm">
-                        <Link href={`/templates/${t.id}`}>
-                          Detalles
+                        <Link href={`/templates/${tpl.id}`}>
+                          {t("details")}
                           <ChevronRight className="ml-1 h-4 w-4" />
                         </Link>
                       </Button>

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Plus, Server } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -29,6 +29,8 @@ async function fetchVms(): Promise<VmDto[] | "unauthorized" | "error"> {
 }
 
 export default async function VmsPage() {
+  const t = await getTranslations("pages.vms_list");
+  const tCommon = await getTranslations("common");
   const data = await fetchVms();
   if (data === "unauthorized") {
     redirect("/login");
@@ -40,13 +42,13 @@ export default async function VmsPage() {
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="VMs"
-        description="Hosts gestionados por Aethra. Las métricas se reciben en vivo vía satélite."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button asChild>
             <Link href="/vms/new">
               <Plus className="mr-2 h-4 w-4" />
-              Registrar VM
+              {t("register_vm")}
             </Link>
           </Button>
         }
@@ -55,19 +57,19 @@ export default async function VmsPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado. Verificá que la API esté corriendo.
+            {tCommon("load_error")}
           </CardContent>
         </Card>
       ) : vms.length === 0 ? (
         <EmptyState
           icon={<Server className="h-6 w-6" />}
-          title="Aún sin VMs"
-          description="Registrá tu primera VM para conectar un satélite y ver métricas en tiempo real."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
               <Link href="/vms/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Registrar VM
+                {t("register_vm")}
               </Link>
             </Button>
           }
@@ -95,17 +97,21 @@ export default async function VmsPage() {
                     ) : null}
 
                     <dl className="grid grid-cols-2 gap-2 pt-2 text-xs">
-                      <Stat label="IP pública" value={vm.public_ip ?? "—"} mono />
                       <Stat
-                        label="CPU"
+                        label={t("label_public_ip")}
+                        value={vm.public_ip ?? "—"}
+                        mono
+                      />
+                      <Stat
+                        label={t("label_cpu")}
                         value={vm.cpu_cores ? `${vm.cpu_cores} cores` : "—"}
                       />
                       <Stat
-                        label="RAM"
+                        label={t("label_ram")}
                         value={formatGb(vm.total_memory_bytes)}
                       />
                       <Stat
-                        label="Agente"
+                        label={t("label_agent")}
                         value={vm.agent_version ?? "—"}
                         mono
                       />

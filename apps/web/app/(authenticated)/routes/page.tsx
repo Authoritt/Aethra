@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Network, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,6 +38,8 @@ async function fetchRoutes(): Promise<RouteDto[] | "unauthorized" | "error"> {
 }
 
 export default async function RoutesPage() {
+  const t = await getTranslations("pages.routes_list");
+  const tCommon = await getTranslations("common");
   const data = await fetchRoutes();
   if (data === "unauthorized") {
     redirect("/login");
@@ -48,13 +51,13 @@ export default async function RoutesPage() {
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Rutas"
-        description="Reverse proxy YARP con terminación TLS por hostname."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button asChild>
             <Link href="/routes/new">
               <Plus className="mr-2 h-4 w-4" />
-              Nueva ruta
+              {t("new_route")}
             </Link>
           </Button>
         }
@@ -63,19 +66,19 @@ export default async function RoutesPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado. Verificá que la API esté corriendo.
+            {tCommon("load_error")}
           </CardContent>
         </Card>
       ) : routes.length === 0 ? (
         <EmptyState
           icon={<Network className="h-6 w-6" />}
-          title="Aún sin rutas"
-          description="Creá tu primera ruta para exponer un backend con TLS automático."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
               <Link href="/routes/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Crear ruta
+                {t("create_route")}
               </Link>
             </Button>
           }
@@ -85,11 +88,11 @@ export default async function RoutesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Hostname</TableHead>
-                <TableHead>Backend</TableHead>
-                <TableHead>TLS</TableHead>
-                <TableHead>Expira</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                <TableHead>{t("col_hostname")}</TableHead>
+                <TableHead>{t("col_backend")}</TableHead>
+                <TableHead>{t("col_tls")}</TableHead>
+                <TableHead>{t("col_expires")}</TableHead>
+                <TableHead className="text-right">{t("col_actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

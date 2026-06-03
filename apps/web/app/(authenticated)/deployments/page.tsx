@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Activity, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -132,6 +133,8 @@ export default async function DeploymentsPage({
 }: {
   searchParams: Promise<{ instanceId?: string; status?: string }>;
 }) {
+  const t = await getTranslations("pages.deployments_list");
+  const tCommon = await getTranslations("common");
   const sp = await searchParams;
   const data = await aggregate(sp);
   if (data === "unauthorized") redirect("/login");
@@ -144,8 +147,8 @@ export default async function DeploymentsPage({
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Deployments"
-        description="Últimos 50 deployments agregados de todas las instancias."
+        title={t("title")}
+        description={t("description")}
       />
 
       <Card className="mb-4">
@@ -155,7 +158,7 @@ export default async function DeploymentsPage({
             className="flex flex-wrap items-end gap-3"
           >
             <div className="space-y-1">
-              <Label htmlFor="instanceId">Instance ID</Label>
+              <Label htmlFor="instanceId">{t("label_instance_id")}</Label>
               <Input
                 id="instanceId"
                 name="instanceId"
@@ -165,14 +168,14 @@ export default async function DeploymentsPage({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="status">Status</Label>
+              <Label htmlFor="status">{t("label_status")}</Label>
               <select
                 id="status"
                 name="status"
                 defaultValue={filterStatus}
                 className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <option value="">(todos)</option>
+                <option value="">{t("all")}</option>
                 <option value="Pending">Pending</option>
                 <option value="Running">Running</option>
                 <option value="Completed">Completed</option>
@@ -180,12 +183,12 @@ export default async function DeploymentsPage({
                 <option value="Cancelled">Cancelled</option>
               </select>
             </div>
-            <Button type="submit">Filtrar</Button>
+            <Button type="submit">{t("filter")}</Button>
             {filterStatus || filterInstance ? (
               <Button asChild variant="ghost" size="sm">
                 <Link href="/deployments">
                   <X className="mr-2 h-4 w-4" />
-                  Limpiar
+                  {t("clear")}
                 </Link>
               </Button>
             ) : null}
@@ -196,17 +199,17 @@ export default async function DeploymentsPage({
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado.
+            {tCommon("load_error_short")}
           </CardContent>
         </Card>
       ) : deployments.length === 0 ? (
         <EmptyState
           icon={<Activity className="h-6 w-6" />}
-          title="Sin deployments"
+          title={t("empty_title")}
           description={
             filterInstance || filterStatus
-              ? "No hay deployments que cumplan el filtro."
-              : "Aún no se ha desplegado ninguna instancia."
+              ? t("empty_description_filtered")
+              : t("empty_description_none")
           }
         />
       ) : (
@@ -214,13 +217,13 @@ export default async function DeploymentsPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Status</TableHead>
-                <TableHead>Instance</TableHead>
-                <TableHead>Template</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Env</TableHead>
-                <TableHead>Trigger</TableHead>
-                <TableHead>Creado</TableHead>
+                <TableHead>{t("col_status")}</TableHead>
+                <TableHead>{t("col_instance")}</TableHead>
+                <TableHead>{t("col_template")}</TableHead>
+                <TableHead>{t("col_client")}</TableHead>
+                <TableHead>{t("col_env")}</TableHead>
+                <TableHead>{t("col_trigger")}</TableHead>
+                <TableHead>{t("col_created")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

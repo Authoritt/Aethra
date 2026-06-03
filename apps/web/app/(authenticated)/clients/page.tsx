@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { ChevronRight, Plus, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,8 @@ async function aggregateClients(): Promise<
 }
 
 export default async function ClientsPage() {
+  const t = await getTranslations("pages.clients_list");
+  const tCommon = await getTranslations("common");
   const data = await aggregateClients();
   if (data === "unauthorized") redirect("/login");
 
@@ -62,12 +65,12 @@ export default async function ClientsPage() {
   return (
     <div className="px-6 py-8 md:px-10 md:py-10 space-y-8">
       <PageHeader
-        title="Clients"
-        description="Tenants concretos de cada proyecto. Cada client recibe sus propias instancias de los templates del proyecto."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button asChild variant="outline">
             <Link href="/projects">
-              Ir a proyectos
+              {tCommon("go_to_projects")}
               <ChevronRight className="ml-1 h-4 w-4" />
             </Link>
           </Button>
@@ -77,19 +80,19 @@ export default async function ClientsPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado. Verificá que la API esté corriendo.
+            {tCommon("load_error")}
           </CardContent>
         </Card>
       ) : groups.length === 0 ? (
         <EmptyState
           icon={<Users className="h-6 w-6" />}
-          title="Aún sin proyectos"
-          description="Los clients viven dentro de un proyecto. Creá un proyecto primero y luego agregá su primer client."
+          title={t("empty_no_projects_title")}
+          description={t("empty_no_projects_description")}
           action={
             <Button asChild>
               <Link href="/projects/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Crear proyecto
+                {t("create_project")}
               </Link>
             </Button>
           }
@@ -97,12 +100,12 @@ export default async function ClientsPage() {
       ) : totalClients === 0 ? (
         <EmptyState
           icon={<Users className="h-6 w-6" />}
-          title="Aún sin clients"
-          description="Aún no hay clientes registrados. Entra a un proyecto para crear el primero."
+          title={t("empty_no_clients_title")}
+          description={t("empty_no_clients_description")}
           action={
             <Button asChild variant="outline">
               <Link href="/projects">
-                Ver proyectos
+                {tCommon("see_projects")}
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Link>
             </Button>
@@ -136,12 +139,12 @@ export default async function ClientsPage() {
                   <Button asChild variant="ghost" size="sm">
                     <Link href={`/projects/${group.project.id}/clients/new`}>
                       <Plus className="mr-1 h-4 w-4" />
-                      Crear client
+                      {t("create_client")}
                     </Link>
                   </Button>
                   <Button asChild variant="outline" size="sm">
                     <Link href={`/projects/${group.project.id}`}>
-                      Ver proyecto
+                      {tCommon("go_to_project")}
                       <ChevronRight className="ml-1 h-4 w-4" />
                     </Link>
                   </Button>
@@ -165,7 +168,7 @@ export default async function ClientsPage() {
                     <CardContent className="space-y-1.5 pb-3 text-xs">
                       <div className="flex items-baseline gap-2">
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                          email
+                          {t("label_email")}
                         </span>
                         <span className="truncate font-mono text-foreground">
                           {c.contactEmail ?? "—"}
@@ -174,7 +177,7 @@ export default async function ClientsPage() {
                       {c.billingTag ? (
                         <div className="flex items-baseline gap-2">
                           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            billing
+                            {t("label_billing")}
                           </span>
                           <span className="truncate font-mono text-foreground">
                             {c.billingTag}
@@ -185,7 +188,7 @@ export default async function ClientsPage() {
                     <CardFooter className="pt-0">
                       <Button asChild variant="ghost" size="sm">
                         <Link href={`/clients/${c.id}`}>
-                          Detalles
+                          {t("details")}
                           <ChevronRight className="ml-1 h-4 w-4" />
                         </Link>
                       </Button>
