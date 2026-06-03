@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import { z } from "zod";
 import { Loader2, Rocket } from "lucide-react";
 import { toast } from "sonner";
@@ -39,21 +40,27 @@ export interface TemplateOption {
 
 const SHA_RE = /^[0-9a-f]{7,64}$/i;
 
-const schema = z.object({
-  templateId: z.string().min(1, "Requerido"),
-  gitSha: z.string().regex(SHA_RE, "SHA inválido (7-64 hex chars)"),
-  gitRef: z.string().optional(),
-});
-
-type FormValues = z.infer<typeof schema>;
+type FormValues = {
+  templateId: string;
+  gitSha: string;
+  gitRef?: string;
+};
 
 export function TriggerBuildForm({
   templates,
 }: {
   templates: TemplateOption[];
 }) {
+  const t = useTranslations("pages.builds_new");
+  const tValidation = useTranslations("forms.validation");
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+
+  const schema = z.object({
+    templateId: z.string().min(1, tValidation("required")),
+    gitSha: z.string().regex(SHA_RE, tValidation("required")),
+    gitRef: z.string().optional(),
+  });
 
   const defaultTemplate = templates[0];
   const form = useForm<FormValues>({
@@ -66,7 +73,7 @@ export function TriggerBuildForm({
   });
 
   const selectedTemplate = templates.find(
-    (t) => t.id === form.watch("templateId"),
+    (tpl) => tpl.id === form.watch("templateId"),
   );
 
   async function onSubmit(values: FormValues) {
@@ -82,7 +89,7 @@ export function TriggerBuildForm({
           body: JSON.stringify({ gitSha: values.gitSha, gitRef: ref }),
         },
       );
-      toast.success("Build disparado");
+      toast.success(t("toast_triggered"));
       router.push(`/builds/${response.id}`);
       router.refresh();
     } catch (e) {
@@ -92,7 +99,7 @@ export function TriggerBuildForm({
               ?.message ?? `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -112,28 +119,28 @@ export function TriggerBuildForm({
               name="templateId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Template *</FormLabel>
+                  <FormLabel>{t("label_template")}</FormLabel>
                   <Select
                     value={field.value}
                     onValueChange={(v) => {
                       field.onChange(v);
-                      const t = templates.find((x) => x.id === v);
-                      if (t) {
-                        form.setValue("gitRef", `refs/heads/${t.branch}`);
+                      const tpl = templates.find((x) => x.id === v);
+                      if (tpl) {
+                        form.setValue("gitRef", `refs/heads/${tpl.branch}`);
                       }
                     }}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccioná un template" />
+                        <SelectValue placeholder={t("placeholder_template")} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {templates.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.projectName} · {t.name}{" "}
+                      {templates.map((tpl) => (
+                        <SelectItem key={tpl.id} value={tpl.id}>
+                          {tpl.projectName} · {tpl.name}{" "}
                           <span className="ml-1 font-mono text-[10px] text-muted-foreground">
-                            {t.slug}
+                            {tpl.slug}
                           </span>
                         </SelectItem>
                       ))}
@@ -149,7 +156,7 @@ export function TriggerBuildForm({
               name="gitSha"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Git SHA *</FormLabel>
+                  <FormLabel>{t("label_commit")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -157,10 +164,7 @@ export function TriggerBuildForm({
                       className="font-mono text-xs"
                     />
                   </FormControl>
-                  <FormDescription>
-                    Commit exacto a buildear. La UI no lo resuelve automáticamente
-                    contra el remote — copialo desde GitHub/Gitlab.
-                  </FormDescription>
+                  <FormDescription>{t("help_commit")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -171,17 +175,14 @@ export function TriggerBuildForm({
               name="gitRef"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Git ref</FormLabel>
+                  <FormLabel>{t("label_git_ref")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="refs/heads/main"
+                      placeholder={t("placeholder_git_ref")}
                       className="font-mono text-xs"
                     />
                   </FormControl>
-                  <FormDescription>
-                    Por defecto se usa el branch declarado en el template.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -193,7 +194,7 @@ export function TriggerBuildForm({
                 variant="ghost"
                 onClick={() => router.push("/builds")}
               >
-                Cancelar
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? (
@@ -201,7 +202,7 @@ export function TriggerBuildForm({
                 ) : (
                   <Rocket className="mr-2 h-4 w-4" />
                 )}
-                Disparar build
+                {t("submit")}
               </Button>
             </div>
           </form>

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,6 +19,8 @@ import type {
 const ZONE_ID_RE = /^[0-9a-f]{32}$/i;
 
 export default function NewCloudflareZonePage() {
+  const t = useTranslations("pages.cloudflare_new");
+  const tBreadcrumbs = useTranslations("breadcrumbs");
   const router = useRouter();
   const [zoneId, setZoneId] = useState("");
   const [apiToken, setApiToken] = useState("");
@@ -25,10 +28,10 @@ export default function NewCloudflareZonePage() {
 
   function validate(): string | null {
     if (!ZONE_ID_RE.test(zoneId.trim())) {
-      return "El zone_id debe ser una cadena hex de 32 caracteres.";
+      return t("help_zone_id");
     }
     if (apiToken.trim().length < 8) {
-      return "El API token parece demasiado corto.";
+      return t("help_token");
     }
     return null;
   }
@@ -50,7 +53,7 @@ export default function NewCloudflareZonePage() {
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success(`Zona "${created.name}" registrada`);
+      toast.success(t("toast_created", { name: created.name }));
       router.push(`/cloudflare/${created.id}`);
       router.refresh();
     } catch (e) {
@@ -62,7 +65,7 @@ export default function NewCloudflareZonePage() {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -73,17 +76,17 @@ export default function NewCloudflareZonePage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Cloudflare", href: "/cloudflare" },
-          { label: "Nueva zona" },
+          { label: tBreadcrumbs("cloudflare"), href: "/cloudflare" },
+          { label: t("breadcrumb") },
         ]}
-        title="Registrar zona"
-        description="Aethra verificará el token contra la API de Cloudflare y guardará la zona con su token cifrado."
+        title={t("title")}
+        description={t("description")}
       />
       <Card className="max-w-2xl">
         <CardContent className="p-6">
           <form onSubmit={onSubmit} className="flex flex-col gap-5">
             <div className="space-y-2">
-              <Label htmlFor="zone">Zone ID *</Label>
+              <Label htmlFor="zone">{t("label_zone_id")}</Label>
               <Input
                 id="zone"
                 value={zoneId}
@@ -95,12 +98,11 @@ export default function NewCloudflareZonePage() {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                32 caracteres hex. Aparece en el panel de Cloudflare en la
-                sidebar derecha (Overview &gt; API).
+                {t("help_zone_id")}
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="token">API Token *</Label>
+              <Label htmlFor="token">{t("label_token")}</Label>
               <Input
                 id="token"
                 type="password"
@@ -112,8 +114,7 @@ export default function NewCloudflareZonePage() {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Token con scope &apos;Zone.DNS.Edit&apos; sobre esta zona. Aethra
-                lo cifra con DataProtection antes de guardar.
+                {t("help_token")}
               </p>
             </div>
 
@@ -121,11 +122,7 @@ export default function NewCloudflareZonePage() {
               <CardContent className="flex items-start gap-3 p-3">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                 <p className="text-xs text-muted-foreground">
-                  Creá el token en Cloudflare desde{" "}
-                  <em>My Profile &gt; API Tokens</em> con permisos mínimos{" "}
-                  <code className="font-mono">Zone:Read</code> y{" "}
-                  <code className="font-mono">DNS:Edit</code> limitados a esta
-                  zona.
+                  {t("help_token")}
                 </p>
               </CardContent>
             </Card>
@@ -136,13 +133,13 @@ export default function NewCloudflareZonePage() {
                 variant="ghost"
                 onClick={() => router.push("/cloudflare")}
               >
-                Cancelar
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={loading}>
                 {loading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Registrar
+                {t("submit")}
               </Button>
             </div>
           </form>
