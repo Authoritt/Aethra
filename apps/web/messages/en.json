@@ -984,7 +984,22 @@
       "placeholder_target_vm": "Select a VM",
       "no_vms": "No VMs",
       "target_vm_hint": "VM where the service container will run.",
-      "exposed_hint": "By default the service is only accessible via the internal Docker network. Enable to open the port on the VM (e.g. connect DBeaver)."
+      "exposed_hint": "By default the service is only accessible via the internal Docker network. Enable to open the port on the VM (e.g. connect DBeaver).",
+      "search_placeholder": "Search templates by name, tag or category…",
+      "category_all": "All",
+      "category_Database": "Databases",
+      "category_Messaging": "Messaging",
+      "category_Storage": "Storage",
+      "category_CMS": "CMS",
+      "category_Analytics": "Analytics",
+      "category_Automation": "Automation",
+      "category_Search": "Search",
+      "category_Other": "Other",
+      "no_results": "No templates match your search.",
+      "clear_filters": "Clear filters",
+      "requires_label": "Requires",
+      "multi_container_badge": "Multi-container (preview)",
+      "binding_supported_badge": "Dynamic bindings"
     },
     "bindings_new": {
       "breadcrumb": "New binding",

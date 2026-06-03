@@ -984,7 +984,22 @@
       "placeholder_target_vm": "Seleccioná una VM",
       "no_vms": "No hay VMs",
       "target_vm_hint": "VM donde se ejecutará el contenedor del servicio.",
-      "exposed_hint": "Por defecto el servicio solo es accesible vía red Docker interna. Activalo para abrir el puerto en la VM (ej. conectar DBeaver)."
+      "exposed_hint": "Por defecto el servicio solo es accesible vía red Docker interna. Activalo para abrir el puerto en la VM (ej. conectar DBeaver).",
+      "search_placeholder": "Buscar plantilla por nombre, tag o categoría…",
+      "category_all": "Todas",
+      "category_Database": "Bases de datos",
+      "category_Messaging": "Mensajería",
+      "category_Storage": "Almacenamiento",
+      "category_CMS": "CMS",
+      "category_Analytics": "Analítica",
+      "category_Automation": "Automatización",
+      "category_Search": "Búsqueda",
+      "category_Other": "Otros",
+      "no_results": "No hay plantillas que coincidan con tu búsqueda.",
+      "clear_filters": "Limpiar filtros",
+      "requires_label": "Requiere",
+      "multi_container_badge": "Multi-container (preview)",
+      "binding_supported_badge": "Bindings dinámicos"
     },
     "bindings_new": {
       "breadcrumb": "Nuevo binding",

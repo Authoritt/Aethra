@@ -224,6 +224,13 @@ export interface ServiceTemplateDto {
   image: string;
   internal_port: number;
   notes: string;
+  category: string;
+  description?: string | null;
+  tags: string[];
+  icon_url?: string | null;
+  binding_supported: boolean;
+  dependencies: string[];
+  multi_container: boolean;
 }
 
 export type BindingPermissions = "Owner" | "ReadWrite" | "ReadOnly";
