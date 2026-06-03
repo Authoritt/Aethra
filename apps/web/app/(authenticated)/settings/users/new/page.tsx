@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import type { RoleDto } from "@/lib/types";
@@ -22,6 +23,8 @@ async function fetchRoles(): Promise<RoleDto[] | null> {
 }
 
 export default async function NewUserPage() {
+  const t = await getTranslations("pages.settings_users");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const roles = await fetchRoles();
   if (roles === null) redirect("/login");
 
@@ -29,12 +32,12 @@ export default async function NewUserPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "Users", href: "/settings/users" },
-          { label: "Nuevo" },
+          { label: tBreadcrumbs("settings"), href: "/settings" },
+          { label: tBreadcrumbs("users"), href: "/settings/users" },
+          { label: t("breadcrumb") },
         ]}
-        title="Crear usuario"
-        description="Definí email, contraseña inicial y los roles que determinan sus permisos."
+        title={t("title")}
+        description={t("description")}
       />
       <div className="max-w-3xl">
         <CreateUserForm roles={roles} />

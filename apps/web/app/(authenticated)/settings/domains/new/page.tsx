@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import { CreateBaseDomainForm } from "./CreateBaseDomainForm";
@@ -53,6 +54,8 @@ async function loadContext(): Promise<
 }
 
 export default async function NewBaseDomainPage() {
+  const t = await getTranslations("pages.settings_domains");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const ctx = await loadContext();
   if (!ctx.authed) redirect("/login");
 
@@ -60,12 +63,12 @@ export default async function NewBaseDomainPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "Base domains", href: "/settings/domains" },
-          { label: "Nuevo" },
+          { label: tBreadcrumbs("settings"), href: "/settings" },
+          { label: tBreadcrumbs("domains"), href: "/settings/domains" },
+          { label: t("breadcrumb") },
         ]}
-        title="Nuevo base domain"
-        description="Registrá el FQDN. Opcionalmente enlazalo con una zona ya conocida por el módulo Cloudflare para que la UI vincule ambos recursos."
+        title={t("title")}
+        description={t("description")}
       />
       <div className="max-w-2xl">
         <CreateBaseDomainForm zones={ctx.zones} />

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
@@ -33,6 +34,9 @@ async function fetchCredential(
 }
 
 export default async function RotateIntegrationPage({ params }: PageProps) {
+  const t = await getTranslations("pages.settings_integrations");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
+  const tCommon = await getTranslations("common");
   const { id } = await params;
   const data = await fetchCredential(id);
 
@@ -44,33 +48,31 @@ export default async function RotateIntegrationPage({ params }: PageProps) {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "Integraciones", href: "/settings/integrations" },
-          { label: "Rotar" },
+          { label: tBreadcrumbs("settings"), href: "/settings" },
+          { label: tBreadcrumbs("integrations"), href: "/settings/integrations" },
+          { label: t("breadcrumb_rotate") },
         ]}
-        title="Rotar credencial"
-        description="Sustituye el valor cifrado por uno nuevo. La metadata (nombre, tipo, descripción) se mantiene. El valor anterior se descarta tras el SaveChanges."
+        title={t("title_rotate")}
+        description={t("description_rotate")}
       />
 
       <div className="max-w-2xl">
         {data === "error" ? (
           <Card className="border-destructive/30 bg-destructive/5">
             <CardContent className="p-4 text-sm text-destructive">
-              No se pudo cargar la credencial.
+              {tCommon("load_error_short")}
             </CardContent>
           </Card>
         ) : data === "not_found" ? (
           <Card className="border-warning/30 bg-warning/5">
             <CardContent className="p-4 text-sm">
-              No existe una credencial con id{" "}
-              <span className="font-mono">{id}</span>. Es posible que la hayan
-              borrado.
+              <span className="font-mono">{id}</span>
               <div className="mt-2">
                 <Link
                   href="/settings/integrations"
                   className="text-primary underline-offset-4 hover:underline"
                 >
-                  Volver al listado
+                  {tCommon("back")}
                 </Link>
               </div>
             </CardContent>

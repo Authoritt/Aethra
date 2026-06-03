@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import { CreateRoleForm } from "../CreateRoleForm";
@@ -20,6 +21,8 @@ async function checkAuth(): Promise<boolean> {
 }
 
 export default async function NewRolePage() {
+  const t = await getTranslations("pages.settings_roles");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const ok = await checkAuth();
   if (!ok) redirect("/login");
 
@@ -27,13 +30,13 @@ export default async function NewRolePage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "Users", href: "/settings/users" },
-          { label: "Roles", href: "/settings/roles" },
-          { label: "Nuevo" },
+          { label: tBreadcrumbs("settings"), href: "/settings" },
+          { label: tBreadcrumbs("users"), href: "/settings/users" },
+          { label: tBreadcrumbs("roles"), href: "/settings/roles" },
+          { label: t("breadcrumb") },
         ]}
-        title="Crear rol custom"
-        description="Definí un slug, un nombre y los scopes que el rol concede."
+        title={t("title")}
+        description={t("description")}
       />
       <div className="max-w-3xl">
         <CreateRoleForm />

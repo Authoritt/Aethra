@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import { CreateIntegrationForm } from "./CreateIntegrationForm";
@@ -20,6 +21,8 @@ async function checkAuth(): Promise<boolean> {
 }
 
 export default async function NewIntegrationPage() {
+  const t = await getTranslations("pages.settings_integrations");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const ok = await checkAuth();
   if (!ok) redirect("/login");
 
@@ -27,12 +30,12 @@ export default async function NewIntegrationPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "Integraciones", href: "/settings/integrations" },
-          { label: "Nueva" },
+          { label: tBreadcrumbs("settings"), href: "/settings" },
+          { label: tBreadcrumbs("integrations"), href: "/settings/integrations" },
+          { label: t("breadcrumb_new") },
         ]}
-        title="Nueva credencial"
-        description="El valor en texto plano se cifra con DataProtection y solo se muestra esta vez. Si lo olvidás tendrás que rotar la credencial."
+        title={t("title_new")}
+        description={t("description_new")}
       />
       <div className="max-w-2xl">
         <CreateIntegrationForm />
