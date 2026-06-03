@@ -43,46 +43,45 @@ public sealed class ContextTools(IMediator mediator, IMcpCallerContext caller)
             return McpResponses.InsufficientScope(McpScopes.ContextRead);
         }
 
-        // Lanzamos todas las queries base en paralelo — son AsNoTracking, sin side-effects.
-        // Las queries que dependen de los scopes adicionales se ejecutan condicionalmente
-        // para que un caller sin esos scopes igualmente reciba el subset que SÍ puede leer.
-        var vmsTask = mediator.Send(new ListVmsQuery(), ct);
-        var servicesTask = mediator.Send(new ListServicesQuery(), ct);
-        var zonesTask = mediator.Send(new ListZonesQuery(), ct);
-        var monitorSummaryTask = mediator.Send(new GetMonitorSummaryQuery(), ct);
+        // IMPORTANTE: las queries van EN SERIE, no en paralelo. Cada MediatR handler resuelve
+        // su DbContext del scope HTTP actual y los DbContext de EF Core NO son thread-safe.
+        // Task.WhenAll(...) sobre el mismo scope causaba race conditions intermitentes (queries
+        // corruptas, exceptions de connection pool, "A second operation was started on this
+        // context before a previous operation completed"). La latencia agregada de serializar
+        // es despreciable (<1s total) comparada con el riesgo de datos inconsistentes.
+        var vmsResult = await mediator.Send(new ListVmsQuery(), ct).ConfigureAwait(false);
+        var servicesResult = await mediator.Send(new ListServicesQuery(), ct).ConfigureAwait(false);
+        var zonesResult = await mediator.Send(new ListZonesQuery(), ct).ConfigureAwait(false);
+        var monitorSummaryResult = await mediator.Send(new GetMonitorSummaryQuery(), ct).ConfigureAwait(false);
 
-        var usersTask = caller.HasScope(McpScopes.UsersRead)
-            ? mediator.Send(new ListUsersQuery(), ct)
-            : Task.FromResult<Aethra.Shared.Kernel.Results.Result<IReadOnlyList<Aethra.Modules.Identity.UseCases.Dtos.UserSummaryDto>>>(
+        var usersResult = caller.HasScope(McpScopes.UsersRead)
+            ? await mediator.Send(new ListUsersQuery(), ct).ConfigureAwait(false)
+            : Aethra.Shared.Kernel.Results.Result<IReadOnlyList<Aethra.Modules.Identity.UseCases.Dtos.UserSummaryDto>>.Success(
                 Array.Empty<Aethra.Modules.Identity.UseCases.Dtos.UserSummaryDto>());
 
-        var rolesTask = caller.HasScope(McpScopes.UsersRead)
-            ? mediator.Send(new ListRolesQuery(), ct)
-            : Task.FromResult<Aethra.Shared.Kernel.Results.Result<IReadOnlyList<Aethra.Modules.Identity.UseCases.Dtos.RoleDto>>>(
+        var rolesResult = caller.HasScope(McpScopes.UsersRead)
+            ? await mediator.Send(new ListRolesQuery(), ct).ConfigureAwait(false)
+            : Aethra.Shared.Kernel.Results.Result<IReadOnlyList<Aethra.Modules.Identity.UseCases.Dtos.RoleDto>>.Success(
                 Array.Empty<Aethra.Modules.Identity.UseCases.Dtos.RoleDto>());
 
-        var channelsTask = caller.HasScope(McpScopes.NotificationsRead)
-            ? mediator.Send(new ListChannelsQuery(), ct)
-            : Task.FromResult<Aethra.Shared.Kernel.Results.Result<IReadOnlyList<Aethra.Modules.Notifications.UseCases.Dtos.NotificationChannelDto>>>(
+        var channelsResult = caller.HasScope(McpScopes.NotificationsRead)
+            ? await mediator.Send(new ListChannelsQuery(), ct).ConfigureAwait(false)
+            : Aethra.Shared.Kernel.Results.Result<IReadOnlyList<Aethra.Modules.Notifications.UseCases.Dtos.NotificationChannelDto>>.Success(
                 Array.Empty<Aethra.Modules.Notifications.UseCases.Dtos.NotificationChannelDto>());
 
-        var failedDeliveriesTask = caller.HasScope(McpScopes.NotificationsRead)
-            ? mediator.Send(new ListDeliveriesQuery(null, "Failed", 50), ct)
-            : Task.FromResult<Aethra.Shared.Kernel.Results.Result<IReadOnlyList<Aethra.Modules.Notifications.UseCases.Dtos.NotificationDeliveryDto>>>(
+        var failedDeliveriesResult = caller.HasScope(McpScopes.NotificationsRead)
+            ? await mediator.Send(new ListDeliveriesQuery(null, "Failed", 50), ct).ConfigureAwait(false)
+            : Aethra.Shared.Kernel.Results.Result<IReadOnlyList<Aethra.Modules.Notifications.UseCases.Dtos.NotificationDeliveryDto>>.Success(
                 Array.Empty<Aethra.Modules.Notifications.UseCases.Dtos.NotificationDeliveryDto>());
 
-        await Task.WhenAll(
-            vmsTask, servicesTask, zonesTask, monitorSummaryTask,
-            usersTask, rolesTask, channelsTask, failedDeliveriesTask).ConfigureAwait(false);
-
-        var vms = vmsTask.Result.IsSuccess ? vmsTask.Result.Value : [];
-        var services = servicesTask.Result.IsSuccess ? servicesTask.Result.Value : [];
-        var zones = zonesTask.Result.IsSuccess ? zonesTask.Result.Value : [];
-        var monitors = monitorSummaryTask.Result.IsSuccess ? monitorSummaryTask.Result.Value : null;
-        var users = usersTask.Result.IsSuccess ? usersTask.Result.Value : [];
-        var roles = rolesTask.Result.IsSuccess ? rolesTask.Result.Value : [];
-        var channels = channelsTask.Result.IsSuccess ? channelsTask.Result.Value : [];
-        var failedDeliveries = failedDeliveriesTask.Result.IsSuccess ? failedDeliveriesTask.Result.Value : [];
+        var vms = vmsResult.IsSuccess ? vmsResult.Value : [];
+        var services = servicesResult.IsSuccess ? servicesResult.Value : [];
+        var zones = zonesResult.IsSuccess ? zonesResult.Value : [];
+        var monitors = monitorSummaryResult.IsSuccess ? monitorSummaryResult.Value : null;
+        var users = usersResult.IsSuccess ? usersResult.Value : [];
+        var roles = rolesResult.IsSuccess ? rolesResult.Value : [];
+        var channels = channelsResult.IsSuccess ? channelsResult.Value : [];
+        var failedDeliveries = failedDeliveriesResult.IsSuccess ? failedDeliveriesResult.Value : [];
 
         // Backups: la ListBackupsQuery requiere service_id, así que iteramos servicios
         // (solo si el caller tiene services:read — los demás no podrían ver bindings tampoco).
