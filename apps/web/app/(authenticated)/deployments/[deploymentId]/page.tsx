@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -24,6 +25,8 @@ export default async function DeploymentDetailPage({
 }: {
   params: Promise<{ deploymentId: string }>;
 }) {
+  const t = await getTranslations("pages.deployments_detail");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const { deploymentId } = await params;
   const deployment = await serverFetch<DeploymentDetail>(
     `/api/deployments/${deploymentId}`,
@@ -35,7 +38,7 @@ export default async function DeploymentDetailPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando el deployment.
+            {t("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -48,9 +51,9 @@ export default async function DeploymentDetailPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Deployments", href: "/deployments" },
+          { label: tBreadcrumbs("deployments"), href: "/deployments" },
           {
-            label: "Instance",
+            label: tBreadcrumbs("instances"),
             href: `/instances/${deployment.instanceId}`,
           },
           { label: deployment.id.slice(0, 8) },
@@ -72,21 +75,21 @@ export default async function DeploymentDetailPage({
       />
 
       <div className="mb-6 flex flex-wrap gap-2">
-        <Badge variant="outline">trigger {deployment.trigger}</Badge>
+        <Badge variant="outline">{t("trigger_badge", { trigger: deployment.trigger })}</Badge>
       </div>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Timing
+              {t("timing_title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="flex flex-col gap-3 text-sm">
-              <Kv label="Creado" value={formatDate(deployment.createdAt)} />
+              <Kv label={t("label_created")} value={formatDate(deployment.createdAt)} />
               <Kv
-                label="Fin"
+                label={t("label_finished")}
                 value={
                   deployment.finishedAt
                     ? formatDate(deployment.finishedAt)
@@ -99,14 +102,14 @@ export default async function DeploymentDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Imagen
+              {t("image_title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="flex flex-col gap-3 text-sm">
-              <Kv label="Nueva" value={deployment.newImageRef} mono />
+              <Kv label={t("label_new")} value={deployment.newImageRef} mono />
               <Kv
-                label="Anterior"
+                label={t("label_old")}
                 value={deployment.oldImageRef ?? "—"}
                 mono={Boolean(deployment.oldImageRef)}
               />
@@ -116,18 +119,18 @@ export default async function DeploymentDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Container
+              {t("container_title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="flex flex-col gap-3 text-sm">
               <Kv
-                label="Nuevo"
+                label={t("label_new")}
                 value={deployment.newContainerId ?? "—"}
                 mono={Boolean(deployment.newContainerId)}
               />
               <Kv
-                label="Anterior"
+                label={t("label_old")}
                 value={deployment.oldContainerId ?? "—"}
                 mono={Boolean(deployment.oldContainerId)}
               />
@@ -137,14 +140,14 @@ export default async function DeploymentDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Resultado
+              {t("result_title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="flex flex-col gap-3 text-sm">
-              <Kv label="Error code" value={deployment.errorCode ?? "—"} mono />
+              <Kv label={t("label_error_code")} value={deployment.errorCode ?? "—"} mono />
               <Kv
-                label="Error message"
+                label={t("label_error_message")}
                 value={deployment.errorMessage ?? "—"}
                 mono={Boolean(deployment.errorMessage)}
               />
@@ -156,19 +159,17 @@ export default async function DeploymentDetailPage({
       <Card className="mt-6">
         <CardHeader>
           <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Logs del deploy
+            {t("logs_title")}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            El detalle del deploy no expone logs propios en el contrato actual.
-            Para ver los logs del build asociado y entender el origen de la
-            imagen,{" "}
+            {t("logs_description_prefix")}
             <Link
               href={`/builds/${deployment.buildId}`}
               className="text-primary underline-offset-4 hover:underline"
             >
-              abrí el build {deployment.buildId.slice(0, 8)}
+              {t("open_build", { id: deployment.buildId.slice(0, 8) })}
             </Link>
             .
           </p>

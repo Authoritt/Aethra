@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { VmStatusPill } from "@/components/aethra/vm-status-pill";
@@ -49,6 +50,8 @@ export default async function VmDetailPage({
 }: {
   params: Promise<{ vmId: string }>;
 }) {
+  const t = await getTranslations("pages.vms_detail");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const { vmId } = await params;
   const data = await fetchVm(vmId);
   if (data === "unauthorized") redirect("/login");
@@ -59,7 +62,7 @@ export default async function VmDetailPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando la VM.
+            {t("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -76,7 +79,7 @@ export default async function VmDetailPage({
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        breadcrumbs={[{ label: "VMs", href: "/vms" }, { label: vm.name }]}
+        breadcrumbs={[{ label: tBreadcrumbs("vms"), href: "/vms" }, { label: vm.name }]}
         title={vm.name}
         description={
           <>
@@ -93,14 +96,14 @@ export default async function VmDetailPage({
       />
 
       <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Info label="IP pública" value={vm.public_ip ?? "—"} mono />
-        <Info label="IP privada" value={vm.private_ip ?? "—"} mono />
-        <Info label="Hostname" value={vm.hostname ?? "—"} mono />
-        <Info label="Kernel" value={vm.kernel_version ?? "—"} mono truncate />
-        <Info label="CPU" value={vm.cpu_model ?? "—"} truncate />
-        <Info label="Cores" value={vm.cpu_cores ? `${vm.cpu_cores}` : "—"} />
-        <Info label="RAM total" value={totalGb ? `${totalGb} GB` : "—"} />
-        <Info label="Agente" value={vm.agent_version ?? "—"} mono />
+        <Info label={t("label_public_ip")} value={vm.public_ip ?? "—"} mono />
+        <Info label={t("label_private_ip")} value={vm.private_ip ?? "—"} mono />
+        <Info label={t("label_hostname")} value={vm.hostname ?? "—"} mono />
+        <Info label={t("label_kernel")} value={vm.kernel_version ?? "—"} mono truncate />
+        <Info label={t("label_cpu")} value={vm.cpu_model ?? "—"} truncate />
+        <Info label={t("label_cores")} value={vm.cpu_cores ? `${vm.cpu_cores}` : "—"} />
+        <Info label={t("label_ram_total")} value={totalGb ? `${totalGb} GB` : "—"} />
+        <Info label={t("label_agent")} value={vm.agent_version ?? "—"} mono />
       </section>
 
       <VmLiveDashboard

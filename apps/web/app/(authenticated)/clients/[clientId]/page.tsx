@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Boxes } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +23,9 @@ export default async function ClientDetailPage({
 }: {
   params: Promise<{ clientId: string }>;
 }) {
+  const t = await getTranslations("pages.clients_detail");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
+  const tCommon = await getTranslations("common");
   const { clientId } = await params;
 
   const [clientResult, instancesResult] = await Promise.all([
@@ -36,7 +40,7 @@ export default async function ClientDetailPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando el client.
+            {t("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -50,8 +54,8 @@ export default async function ClientDetailPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Proyectos", href: "/projects" },
-          { label: "Proyecto", href: `/projects/${client.projectId}` },
+          { label: tBreadcrumbs("projects"), href: "/projects" },
+          { label: tCommon("go_to_project"), href: `/projects/${client.projectId}` },
           { label: client.displayName },
         ]}
         title={client.displayName}
@@ -77,27 +81,27 @@ export default async function ClientDetailPage({
             {client.billingTag}
           </Badge>
         ) : null}
-        <Badge variant="outline">{client.instanceCount} instances</Badge>
+        <Badge variant="outline">{t("instances_count", { count: client.instanceCount ?? 0 })}</Badge>
       </div>
 
       <Tabs defaultValue="overview">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="overview">{t("tab_overview")}</TabsTrigger>
           <TabsTrigger value="instances">
-            Instances ({instances.length})
+            {t("tab_instances", { count: instances.length })}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
           <Card>
             <CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-3">
-              <Kv label="Contact email" value={client.contactEmail ?? "—"} />
+              <Kv label={t("contact_email")} value={client.contactEmail ?? "—"} />
               <Kv
-                label="Billing tag"
+                label={t("billing_tag")}
                 value={client.billingTag ?? "—"}
                 mono={Boolean(client.billingTag)}
               />
-              <Kv label="Instances" value={String(client.instanceCount)} />
+              <Kv label={t("instances")} value={String(client.instanceCount ?? 0)} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -106,8 +110,8 @@ export default async function ClientDetailPage({
           {instances.length === 0 ? (
             <EmptyState
               icon={<Boxes className="h-6 w-6" />}
-              title="Sin instances"
-              description="Este client aún no tiene instancias. Crea una desde el detalle de un template."
+              title={t("empty_title")}
+              description={t("empty_description")}
             />
           ) : (
             <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -124,7 +128,7 @@ export default async function ClientDetailPage({
                       <Badge variant="outline">{inst.environment}</Badge>
                     </div>
                     <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-                      template {inst.templateId.slice(0, 8)}
+                      {t("template_label", { id: inst.templateId.slice(0, 8) })}
                     </p>
                     <div className="mt-2">
                       <AutoHostnameInfo

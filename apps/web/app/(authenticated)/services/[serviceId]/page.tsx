@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Plug2, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,8 @@ export default async function ServiceDetailPage({
 }: {
   params: Promise<{ serviceId: string }>;
 }) {
+  const t = await getTranslations("pages.services_detail");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const { serviceId } = await params;
   const data = await fetchService(serviceId);
   if (data === "unauthorized") redirect("/login");
@@ -67,7 +70,7 @@ export default async function ServiceDetailPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando el servicio.
+            {t("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -82,7 +85,7 @@ export default async function ServiceDetailPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Servicios", href: "/services" },
+          { label: tBreadcrumbs("services"), href: "/services" },
           { label: service.slug },
         ]}
         title={service.name}
@@ -111,7 +114,8 @@ export default async function ServiceDetailPage({
         <Card className="mb-6 border-destructive/30 bg-destructive/5">
           <CardContent className="p-4">
             <div className="text-sm font-medium text-destructive">
-              Error: <span className="font-mono">{service.error_code}</span>
+              {t("error_prefix")}
+              <span className="font-mono">{service.error_code}</span>
             </div>
             {service.error_message ? (
               <p className="mt-1 text-sm text-destructive/90">
@@ -125,27 +129,27 @@ export default async function ServiceDetailPage({
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Configuración
+            {t("config_title")}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <KV label="Imagen" mono value={service.image} />
-            <KV label="Versión" mono value={service.version} />
+            <KV label={t("label_image")} mono value={service.image} />
+            <KV label={t("label_version")} mono value={service.version} />
             <KV
-              label="Puerto interno"
+              label={t("label_internal_port")}
               mono
               value={String(service.internal_port)}
             />
-            <KV label="Network" mono value={service.network_name} />
-            <KV label="Container" mono value={service.container_name} />
-            <KV label="VM target" mono value={service.target_vm_id} />
+            <KV label={t("label_network")} mono value={service.network_name} />
+            <KV label={t("label_container")} mono value={service.container_name} />
+            <KV label={t("label_vm_target")} mono value={service.target_vm_id} />
             <KV
-              label="Expuesto externamente"
-              value={service.exposed_externally ? "Sí" : "No (interno)"}
+              label={t("label_exposed")}
+              value={service.exposed_externally ? t("exposed_yes") : t("exposed_no")}
             />
             <KV
-              label="Provisionado"
+              label={t("label_provisioned")}
               value={formatDateTime(service.provisioned_at)}
             />
           </div>
@@ -154,19 +158,19 @@ export default async function ServiceDetailPage({
 
       <Tabs defaultValue="bindings" className="w-full">
         <TabsList>
-          <TabsTrigger value="bindings">Bindings</TabsTrigger>
-          <TabsTrigger value="backups">Backups</TabsTrigger>
+          <TabsTrigger value="bindings">{t("tab_bindings")}</TabsTrigger>
+          <TabsTrigger value="backups">{t("tab_backups")}</TabsTrigger>
         </TabsList>
         <TabsContent value="bindings">
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                Bindings ({activeBindings.length})
+                {t("bindings_title", { count: activeBindings.length })}
               </h2>
               <Button asChild size="sm">
                 <Link href={`/services/${service.id}/bindings/new`}>
                   <Plus className="mr-2 h-4 w-4" />
-                  Bindear aplicación
+                  {t("bind_application")}
                 </Link>
               </Button>
             </div>
@@ -174,13 +178,23 @@ export default async function ServiceDetailPage({
             {activeBindings.length === 0 ? (
               <EmptyState
                 icon={<Plug2 className="h-6 w-6" />}
-                title="Sin bindings activos"
-                description="Bindea una application para que pueda consumir este servicio."
+                title={t("no_bindings_title")}
+                description={t("no_bindings_description")}
               />
             ) : (
               <ul className="grid grid-cols-1 gap-3">
                 {activeBindings.map((b) => (
-                  <BindingCard key={b.id} binding={b} />
+                  <BindingCard
+                    key={b.id}
+                    binding={b}
+                    labels={{
+                      migrations_hook: t("migrations_hook"),
+                      resource: t("label_resource"),
+                      env_prefix: t("label_env_prefix"),
+                      provisioned: t("label_provisioned"),
+                      app_id: t("label_app_id"),
+                    }}
+                  />
                 ))}
               </ul>
             )}
@@ -194,7 +208,19 @@ export default async function ServiceDetailPage({
   );
 }
 
-function BindingCard({ binding }: { binding: ServiceBindingDto }) {
+function BindingCard({
+  binding,
+  labels,
+}: {
+  binding: ServiceBindingDto;
+  labels: {
+    migrations_hook: string;
+    resource: string;
+    env_prefix: string;
+    provisioned: string;
+    app_id: string;
+  };
+}) {
   const appLabel =
     binding.application_slug ?? binding.application_id.slice(0, 8);
   return (
@@ -209,22 +235,22 @@ function BindingCard({ binding }: { binding: ServiceBindingDto }) {
                 </h3>
                 <PermissionsChip permissions={binding.permissions} />
                 {binding.has_migrations_hook ? (
-                  <Badge variant="info">migrations hook</Badge>
+                  <Badge variant="info">{labels.migrations_hook}</Badge>
                 ) : null}
               </div>
               <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-                <KVInline label="Resource" value={binding.resource_name} mono />
+                <KVInline label={labels.resource} value={binding.resource_name} mono />
                 <KVInline
-                  label="Env prefix"
+                  label={labels.env_prefix}
                   value={binding.env_var_prefix || "—"}
                   mono
                 />
                 <KVInline
-                  label="Provisionado"
+                  label={labels.provisioned}
                   value={formatDateTime(binding.provisioned_at)}
                 />
                 <KVInline
-                  label="Application ID"
+                  label={labels.app_id}
                   value={binding.application_id}
                   mono
                 />

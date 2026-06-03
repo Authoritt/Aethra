@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -23,6 +24,8 @@ export default async function BuildDetailPage({
 }: {
   params: Promise<{ buildId: string }>;
 }) {
+  const t = await getTranslations("pages.builds_detail");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const { buildId } = await params;
   const build = await serverFetch<BuildDetail>(`/api/builds/${buildId}`);
   if (build === "unauthorized") redirect("/login");
@@ -32,7 +35,7 @@ export default async function BuildDetailPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando el build.
+            {t("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -45,8 +48,8 @@ export default async function BuildDetailPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Builds", href: "/builds" },
-          { label: "Template", href: `/templates/${build.templateId}` },
+          { label: tBreadcrumbs("builds"), href: "/builds" },
+          { label: tBreadcrumbs("templates"), href: `/templates/${build.templateId}` },
           { label: build.id.slice(0, 8) },
         ]}
         title={build.gitSha.slice(0, 12)}
@@ -60,11 +63,11 @@ export default async function BuildDetailPage({
 
       <div className="mb-6 flex flex-wrap gap-2">
         <Badge variant="outline" className="font-mono text-xs">
-          ref {build.gitRef}
+          {t("ref_badge", { ref: build.gitRef })}
         </Badge>
-        <Badge variant="outline">trigger {build.trigger}</Badge>
+        <Badge variant="outline">{t("trigger_badge", { trigger: build.trigger })}</Badge>
         {build.triggeredBy ? (
-          <Badge variant="outline">by {build.triggeredBy}</Badge>
+          <Badge variant="outline">{t("by_badge", { by: build.triggeredBy })}</Badge>
         ) : null}
       </div>
 
@@ -72,22 +75,22 @@ export default async function BuildDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Timing
+              {t("timing_title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="flex flex-col gap-3 text-sm">
-              <Kv label="Creado" value={formatDate(build.createdAt)} />
+              <Kv label={t("label_created")} value={formatDate(build.createdAt)} />
               <Kv
-                label="Inicio"
+                label={t("label_started")}
                 value={build.startedAt ? formatDate(build.startedAt) : "—"}
               />
               <Kv
-                label="Fin"
+                label={t("label_finished")}
                 value={build.finishedAt ? formatDate(build.finishedAt) : "—"}
               />
               <Kv
-                label="Duración"
+                label={t("label_duration")}
                 value={
                   build.buildDurationMs != null
                     ? formatDuration(build.buildDurationMs)
@@ -100,15 +103,15 @@ export default async function BuildDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Resultado
+              {t("result_title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="flex flex-col gap-3 text-sm">
-              <Kv label="Image ref" value={build.imageRef ?? "—"} mono />
-              <Kv label="Error code" value={build.errorCode ?? "—"} mono />
+              <Kv label={t("label_image_ref")} value={build.imageRef ?? "—"} mono />
+              <Kv label={t("label_error_code")} value={build.errorCode ?? "—"} mono />
               <Kv
-                label="Error message"
+                label={t("label_error_message")}
                 value={build.errorMessage ?? "—"}
                 mono={Boolean(build.errorMessage)}
               />
@@ -120,14 +123,12 @@ export default async function BuildDetailPage({
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Logs
+            {t("logs_title")}
           </h2>
           {terminal ? (
-            <span className="text-xs text-muted-foreground">build terminado</span>
+            <span className="text-xs text-muted-foreground">{t("build_finished")}</span>
           ) : (
-            <span className="text-xs text-primary">
-              streaming (polling cada 2s)
-            </span>
+            <span className="text-xs text-primary">{t("streaming")}</span>
           )}
         </div>
         <BuildLogsViewer buildId={build.id} terminal={terminal} />

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,6 +54,8 @@ export default async function MonitorDetailPage({
 }: {
   params: Promise<{ monitorId: string }>;
 }) {
+  const t = await getTranslations("pages.monitors_detail");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const { monitorId } = await params;
   const data = await fetchMonitor(monitorId);
   if (data === "unauthorized") redirect("/login");
@@ -63,7 +66,7 @@ export default async function MonitorDetailPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando el monitor.
+            {t("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -77,7 +80,7 @@ export default async function MonitorDetailPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Monitores", href: "/monitors" },
+          { label: tBreadcrumbs("monitors"), href: "/monitors" },
           { label: monitor.name },
         ]}
         title={monitor.name}
@@ -100,7 +103,7 @@ export default async function MonitorDetailPage({
             <Button asChild variant="outline" size="sm">
               <Link href={`/monitors/${monitor.id}/edit`}>
                 <Pencil className="mr-2 h-4 w-4" />
-                Editar
+                {t("edit")}
               </Link>
             </Button>
             <DeleteMonitorButton monitorId={monitor.id} name={monitor.name} />
@@ -118,15 +121,15 @@ export default async function MonitorDetailPage({
       </div>
 
       <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <InfoCard label="Intervalo" value={`${monitor.interval_sec}s`} />
-        <InfoCard label="Timeout" value={`${monitor.timeout_ms}ms`} />
+        <InfoCard label={t("label_interval")} value={`${monitor.interval_sec}s`} />
+        <InfoCard label={t("label_timeout")} value={`${monitor.timeout_ms}ms`} />
         <InfoCard
-          label="OK esperado"
+          label={t("label_expected_ok")}
           value={monitor.expected_status_codes.join(", ")}
           mono
         />
         <InfoCard
-          label="Fallos seguidos"
+          label={t("label_failures")}
           value={String(monitor.consecutive_failures)}
           mono
         />
@@ -134,7 +137,7 @@ export default async function MonitorDetailPage({
 
       <section className="mb-6">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Latencia (últimos {checks.length} checks)
+          {t("latency_title", { count: checks.length })}
         </h2>
         <MonitorLatencyChart checks={checks} />
       </section>
@@ -143,12 +146,12 @@ export default async function MonitorDetailPage({
         <Card className="mb-6">
           <CardContent className="p-5">
             <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Request
+              {t("request_title")}
             </h2>
             {monitor.headers && Object.keys(monitor.headers).length > 0 ? (
               <div className="mb-3">
                 <h3 className="text-xs font-medium uppercase text-muted-foreground">
-                  Headers
+                  {t("headers_title")}
                 </h3>
                 <dl className="mt-1 grid grid-cols-1 gap-1 font-mono text-xs">
                   {Object.entries(monitor.headers).map(([k, v]) => (
@@ -163,7 +166,7 @@ export default async function MonitorDetailPage({
             {monitor.body_template ? (
               <div>
                 <h3 className="text-xs font-medium uppercase text-muted-foreground">
-                  Body
+                  {t("body_title")}
                 </h3>
                 <pre className="mt-1 whitespace-pre-wrap break-all rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs text-foreground">
                   {monitor.body_template}
@@ -176,7 +179,7 @@ export default async function MonitorDetailPage({
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Historial reciente
+          {t("history_title")}
         </h2>
         <CheckHistoryTable checks={checks} />
       </section>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { GitBranch, Plus, Rocket } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,9 @@ export default async function TemplateDetailPage({
 }: {
   params: Promise<{ templateId: string }>;
 }) {
+  const t = await getTranslations("pages.templates_detail");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
+  const tCommon = await getTranslations("common");
   const { templateId } = await params;
 
   const [templateResult, instancesResult, buildsResult] = await Promise.all([
@@ -51,7 +55,7 @@ export default async function TemplateDetailPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando el template.
+            {t("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -66,8 +70,8 @@ export default async function TemplateDetailPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Proyectos", href: "/projects" },
-          { label: "Proyecto", href: `/projects/${template.projectId}` },
+          { label: tBreadcrumbs("projects"), href: "/projects" },
+          { label: tCommon("go_to_project"), href: `/projects/${template.projectId}` },
           { label: template.name },
         ]}
         title={template.name}
@@ -88,7 +92,7 @@ export default async function TemplateDetailPage({
             <Button asChild>
               <Link href={`/templates/${template.id}/instances/new`}>
                 <Plus className="mr-2 h-4 w-4" />
-                Crear instance
+                {t("create_instance")}
               </Link>
             </Button>
           </>
@@ -96,8 +100,12 @@ export default async function TemplateDetailPage({
       />
 
       <div className="mb-6 flex flex-wrap gap-2">
-        <Badge variant="outline">build: {template.build.buildType}</Badge>
-        <Badge variant="outline">{template.instanceCount} instances</Badge>
+        <Badge variant="outline">
+          {t("build_badge", { type: template.build.buildType })}
+        </Badge>
+        <Badge variant="outline">
+          {t("instances_badge", { count: template.instanceCount ?? 0 })}
+        </Badge>
         <Badge variant="outline">
           <GitBranch className="mr-1 h-3 w-3" />
           {template.source.branch}
@@ -106,12 +114,12 @@ export default async function TemplateDetailPage({
 
       <Tabs defaultValue="overview">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="overview">{t("tab_overview")}</TabsTrigger>
           <TabsTrigger value="instances">
-            Instances ({instances.length})
+            {t("tab_instances", { count: instances.length })}
           </TabsTrigger>
           <TabsTrigger value="builds">
-            Builds ({builds.length})
+            {t("tab_builds", { count: builds.length })}
           </TabsTrigger>
         </TabsList>
 
@@ -120,21 +128,21 @@ export default async function TemplateDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                  Source
+                  {t("source_title")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <dl className="flex flex-col gap-3 text-sm">
-                  <Kv label="Git repo" value={template.source.gitRepoUrl} mono />
-                  <Kv label="Branch" value={template.source.branch} mono />
+                  <Kv label={t("git_repo")} value={template.source.gitRepoUrl} mono />
+                  <Kv label={t("branch")} value={template.source.branch} mono />
                   <Kv
-                    label="Base directory"
+                    label={t("base_directory")}
                     value={template.source.baseDirectory}
                     mono
                   />
                   <div>
                     <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Watch paths
+                      {t("watch_paths")}
                     </dt>
                     <dd className="mt-1 flex flex-wrap gap-1">
                       {template.source.watchPaths.map((p) => (
@@ -154,34 +162,34 @@ export default async function TemplateDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                  Build
+                  {t("build_title")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <dl className="flex flex-col gap-3 text-sm">
-                  <Kv label="Tipo" value={template.build.buildType} />
+                  <Kv label={t("type_label")} value={template.build.buildType} />
                   {template.build.dockerfilePath ? (
                     <Kv
-                      label="Dockerfile"
+                      label={t("dockerfile")}
                       value={template.build.dockerfilePath}
                       mono
                     />
                   ) : null}
                   {template.build.composeFilePath ? (
                     <Kv
-                      label="Compose file"
+                      label={t("compose_file")}
                       value={template.build.composeFilePath}
                       mono
                     />
                   ) : null}
                   <div>
                     <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Build args
+                      {t("build_args")}
                     </dt>
                     <dd className="mt-1">
                       {template.build.buildArgs.length === 0 ? (
                         <span className="text-xs text-muted-foreground">
-                          sin args
+                          {t("no_args")}
                         </span>
                       ) : (
                         <ul className="flex flex-col gap-1 font-mono text-[11px]">
@@ -209,13 +217,13 @@ export default async function TemplateDetailPage({
           {instances.length === 0 ? (
             <EmptyState
               icon={<Rocket className="h-6 w-6" />}
-              title="Sin instances"
-              description="Creá la primera para desplegar este template hacia un client + environment."
+              title={t("instances_empty_title")}
+              description={t("instances_empty_description")}
               action={
                 <Button asChild>
                   <Link href={`/templates/${template.id}/instances/new`}>
                     <Plus className="mr-2 h-4 w-4" />
-                    Crear instance
+                    {t("create_instance")}
                   </Link>
                 </Button>
               }
@@ -235,7 +243,7 @@ export default async function TemplateDetailPage({
                       <Badge variant="outline">{inst.environment}</Badge>
                     </div>
                     <p className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
-                      {inst.customDomain ?? inst.autoHostname ?? "sin hostname"}
+                      {inst.customDomain ?? inst.autoHostname ?? tCommon("no_hostname")}
                     </p>
                   </Link>
                 </li>
@@ -247,19 +255,19 @@ export default async function TemplateDetailPage({
         <TabsContent value="builds" className="mt-6">
           {builds.length === 0 ? (
             <EmptyState
-              title="Sin builds aún"
-              description="Cuando dispares un webhook o build manual, los últimos 10 aparecerán aquí."
+              title={t("builds_empty_title")}
+              description={t("builds_empty_description")}
             />
           ) : (
             <Card>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Ref</TableHead>
-                    <TableHead>SHA</TableHead>
-                    <TableHead>Trigger</TableHead>
-                    <TableHead>Creado</TableHead>
+                    <TableHead>{t("col_status")}</TableHead>
+                    <TableHead>{t("col_ref")}</TableHead>
+                    <TableHead>{t("col_sha")}</TableHead>
+                    <TableHead>{t("col_trigger")}</TableHead>
+                    <TableHead>{t("col_created")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

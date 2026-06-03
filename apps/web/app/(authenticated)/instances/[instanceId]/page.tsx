@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,8 @@ export default async function InstanceDetailPage({
 }: {
   params: Promise<{ instanceId: string }>;
 }) {
+  const t = await getTranslations("pages.instances_detail");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const { instanceId } = await params;
 
   const instanceResult = await serverFetch<InstanceDetail>(
@@ -53,7 +56,7 @@ export default async function InstanceDetailPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando la instance.
+            {t("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -93,14 +96,15 @@ export default async function InstanceDetailPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Template", href: `/templates/${instance.templateId}` },
-          { label: "Client", href: `/clients/${instance.clientId}` },
+          { label: tBreadcrumbs("templates"), href: `/templates/${instance.templateId}` },
+          { label: tBreadcrumbs("clients"), href: `/clients/${instance.clientId}` },
           { label: instance.slug },
         ]}
         title={instance.slug}
         description={
           <>
-            container <span className="font-mono">{instance.containerName}</span>
+            {t("container_label", { name: "" })}
+            <span className="font-mono">{instance.containerName}</span>
           </>
         }
         actions={
@@ -108,7 +112,7 @@ export default async function InstanceDetailPage({
             <Button asChild variant="outline">
               <a href={openUrl} target="_blank" rel="noreferrer noopener">
                 <ExternalLink className="mr-2 h-4 w-4" />
-                Abrir
+                {t("open")}
               </a>
             </Button>
           ) : null
@@ -116,32 +120,30 @@ export default async function InstanceDetailPage({
       />
 
       <div className="mb-6 flex flex-wrap gap-2">
-        <Badge variant="outline">env: {instance.environment}</Badge>
+        <Badge variant="outline">{t("env_badge", { env: instance.environment })}</Badge>
         <Badge variant="outline" className="font-mono">
-          vm: {instance.targetVmId.slice(0, 8)}
+          {t("vm_badge", { id: instance.targetVmId.slice(0, 8) })}
         </Badge>
-        <Badge variant="outline">{instance.ports.length} ports</Badge>
-        <Badge variant="outline">{instance.volumes.length} volumes</Badge>
+        <Badge variant="outline">{t("ports_badge", { count: instance.ports.length })}</Badge>
+        <Badge variant="outline">{t("volumes_badge", { count: instance.volumes.length })}</Badge>
       </div>
 
       <Tabs defaultValue="overview">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="config">Configuración</TabsTrigger>
+          <TabsTrigger value="overview">{t("tab_overview")}</TabsTrigger>
+          <TabsTrigger value="config">{t("tab_config")}</TabsTrigger>
           <TabsTrigger value="deployments">
-            Deployments ({deployments.length})
+            {t("tab_deployments", { count: deployments.length })}
           </TabsTrigger>
-          <TabsTrigger value="builds">Builds disponibles</TabsTrigger>
+          <TabsTrigger value="builds">{t("tab_builds")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Hostname & routing</CardTitle>
-                <CardDescription>
-                  Auto-hostname y custom domain efectivos.
-                </CardDescription>
+                <CardTitle className="text-base">{t("hostname_routing_title")}</CardTitle>
+                <CardDescription>{t("hostname_routing_description")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <AutoHostnameInfo
@@ -156,11 +158,8 @@ export default async function InstanceDetailPage({
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Auto-deploy</CardTitle>
-                <CardDescription>
-                  Cuando está activo, cada nuevo build verde del template padre
-                  dispara automáticamente un deploy aquí.
-                </CardDescription>
+                <CardTitle className="text-base">{t("autodeploy_title")}</CardTitle>
+                <CardDescription>{t("autodeploy_description")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <AutoDeployToggle
@@ -177,12 +176,12 @@ export default async function InstanceDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                  Ports
+                  {t("ports_title")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {instance.ports.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Sin puertos.</p>
+                  <p className="text-sm text-muted-foreground">{t("no_ports")}</p>
                 ) : (
                   <ul className="flex flex-col gap-1 font-mono text-[11px]">
                     {instance.ports.map((p, i) => (
@@ -190,7 +189,7 @@ export default async function InstanceDetailPage({
                         key={i}
                         className="rounded border border-border bg-muted px-2 py-1"
                       >
-                        {p.containerPort} → {p.hostPort ?? "auto"}{" "}
+                        {p.containerPort} → {p.hostPort ?? t("auto_port")}{" "}
                         <span className="text-muted-foreground">
                           /{p.protocol.toLowerCase()}
                         </span>
@@ -203,12 +202,12 @@ export default async function InstanceDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                  Volumes
+                  {t("volumes_title")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {instance.volumes.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Sin volumes.</p>
+                  <p className="text-sm text-muted-foreground">{t("no_volumes")}</p>
                 ) : (
                   <ul className="flex flex-col gap-1 font-mono text-[11px]">
                     {instance.volumes.map((v, i) => (
@@ -236,18 +235,18 @@ export default async function InstanceDetailPage({
         <TabsContent value="deployments" className="mt-6">
           {deployments.length === 0 ? (
             <EmptyState
-              title="Sin deployments"
-              description="Esta instance aún no se ha desplegado."
+              title={t("deployments_empty_title")}
+              description={t("deployments_empty_description")}
             />
           ) : (
             <Card>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Trigger</TableHead>
-                    <TableHead>Build</TableHead>
-                    <TableHead>Creado</TableHead>
+                    <TableHead>{t("col_status")}</TableHead>
+                    <TableHead>{t("col_trigger")}</TableHead>
+                    <TableHead>{t("col_build")}</TableHead>
+                    <TableHead>{t("col_created")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -283,19 +282,19 @@ export default async function InstanceDetailPage({
         <TabsContent value="builds" className="mt-6">
           {builds.length === 0 ? (
             <EmptyState
-              title="Sin builds del template"
-              description="Cuando haya uno verde podrás desplegarlo aquí."
+              title={t("builds_empty_title")}
+              description={t("builds_empty_description")}
             />
           ) : (
             <Card>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Ref</TableHead>
-                    <TableHead>SHA</TableHead>
-                    <TableHead>Image</TableHead>
-                    <TableHead className="text-right">Acción</TableHead>
+                    <TableHead>{t("col_status")}</TableHead>
+                    <TableHead>{t("col_ref")}</TableHead>
+                    <TableHead>{t("col_sha")}</TableHead>
+                    <TableHead>{t("col_image")}</TableHead>
+                    <TableHead className="text-right">{t("col_action")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

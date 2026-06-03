@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { ExternalLink, Lock, Unlock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,8 @@ export default async function RouteDetailPage({
 }: {
   params: Promise<{ routeId: string }>;
 }) {
+  const t = await getTranslations("pages.routes_detail");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const { routeId } = await params;
   const data = await fetchRoute(routeId);
   if (data === "unauthorized") redirect("/login");
@@ -45,7 +48,7 @@ export default async function RouteDetailPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando la ruta.
+            {t("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -60,7 +63,7 @@ export default async function RouteDetailPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Rutas", href: "/routes" },
+          { label: tBreadcrumbs("routes"), href: "/routes" },
           { label: route.hostname },
         ]}
         title={route.hostname}
@@ -74,7 +77,7 @@ export default async function RouteDetailPage({
             <Button asChild variant="outline">
               <a href={url} target="_blank" rel="noreferrer noopener">
                 <ExternalLink className="mr-2 h-4 w-4" />
-                Abrir
+                {t("open")}
               </a>
             </Button>
             <DeleteRouteButton id={route.id} hostname={route.hostname} />
@@ -86,12 +89,12 @@ export default async function RouteDetailPage({
         {route.tls_enabled ? (
           <Badge variant="success">
             <Lock className="mr-1 h-3 w-3" />
-            TLS habilitado
+            {t("tls_enabled_badge")}
           </Badge>
         ) : (
           <Badge variant="outline">
             <Unlock className="mr-1 h-3 w-3" />
-            HTTP
+            {t("http_badge")}
           </Badge>
         )}
         <CertStatusPill
@@ -103,17 +106,17 @@ export default async function RouteDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Overview
+              {t("overview_title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="flex flex-col gap-3 text-sm">
-              <Kv label="Hostname público" value={route.hostname} mono />
-              <Kv label="Backend interno" value={route.backend_url} mono />
-              <Kv label="Esquema" value={scheme.toUpperCase()} />
-              <Kv label="Creado" value={formatDate(route.created_at)} />
+              <Kv label={t("label_public_hostname")} value={route.hostname} mono />
+              <Kv label={t("label_backend")} value={route.backend_url} mono />
+              <Kv label={t("label_scheme")} value={scheme.toUpperCase()} />
+              <Kv label={t("label_created")} value={formatDate(route.created_at)} />
               <Kv
-                label="Actualizado"
+                label={t("label_updated")}
                 value={formatDate(route.updated_at)}
               />
             </dl>
@@ -122,15 +125,15 @@ export default async function RouteDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Certificado TLS
+              {t("cert_title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {route.tls_enabled ? (
               <dl className="flex flex-col gap-3 text-sm">
-                <Kv label="Status" value={route.cert_status} />
+                <Kv label={t("label_status")} value={route.cert_status} />
                 <Kv
-                  label="Expira"
+                  label={t("label_expires")}
                   value={
                     route.cert_expires_at
                       ? formatDate(route.cert_expires_at)
@@ -139,15 +142,13 @@ export default async function RouteDetailPage({
                 />
                 {route.cert_status === "failed" ? (
                   <p className="text-xs text-destructive">
-                    El issuer no pudo emitir el certificado. Verificá DNS y
-                    firewall (HTTP-01 challenge).
+                    {t("cert_failed_text")}
                   </p>
                 ) : null}
               </dl>
             ) : (
               <p className="text-sm text-muted-foreground">
-                TLS deshabilitado para esta ruta. El tráfico se sirve en HTTP
-                plano.
+                {t("tls_disabled_text")}
               </p>
             )}
           </CardContent>

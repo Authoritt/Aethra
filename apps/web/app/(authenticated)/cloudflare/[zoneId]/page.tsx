@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,8 @@ export default async function ZoneDetailPage({
 }: {
   params: Promise<{ zoneId: string }>;
 }) {
+  const t = await getTranslations("pages.cloudflare_detail");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
   const { zoneId } = await params;
   const data = await fetchZone(zoneId);
   if (data === "unauthorized") redirect("/login");
@@ -61,7 +64,7 @@ export default async function ZoneDetailPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando la zona.
+            {t("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -73,15 +76,15 @@ export default async function ZoneDetailPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Cloudflare", href: "/cloudflare" },
+          { label: tBreadcrumbs("cloudflare"), href: "/cloudflare" },
           { label: zone.name },
         ]}
         title={zone.name}
         description={
           <span className="font-mono text-xs">
-            zone_id: {zone.external_zone_id}
+            {t("zone_label", { id: zone.external_zone_id })}
             <span className="mx-2 text-muted-foreground/50">·</span>
-            account: {zone.account_id}
+            {t("account_label", { id: zone.account_id })}
           </span>
         }
         actions={
@@ -101,37 +104,45 @@ export default async function ZoneDetailPage({
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            DNS Records ({zone.records.length})
+            {t("records_title", { count: zone.records.length })}
           </h2>
           <Button asChild size="sm">
             <Link href={`/cloudflare/${zone.id}/records/new`}>
               <Plus className="mr-2 h-4 w-4" />
-              Crear record
+              {t("create_record")}
             </Link>
           </Button>
         </div>
 
         {zone.records.length === 0 ? (
           <EmptyState
-            title="Aún sin records gestionados"
-            description="Creá uno o sincronizá desde Cloudflare para importar los existentes."
+            title={t("empty_title")}
+            description={t("empty_description")}
           />
         ) : (
           <Card>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Contenido</TableHead>
-                  <TableHead>TTL</TableHead>
-                  <TableHead>Proxied</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                  <TableHead>{t("col_type")}</TableHead>
+                  <TableHead>{t("col_name")}</TableHead>
+                  <TableHead>{t("col_content")}</TableHead>
+                  <TableHead>{t("col_ttl")}</TableHead>
+                  <TableHead>{t("col_proxied")}</TableHead>
+                  <TableHead className="text-right">{t("col_actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {zone.records.map((r) => (
-                  <RecordRow key={r.id} record={r} />
+                  <RecordRow
+                    key={r.id}
+                    record={r}
+                    labels={{
+                      ttl_auto: t("ttl_auto"),
+                      proxied: t("proxied_badge"),
+                      dns_only: t("dns_only_badge"),
+                    }}
+                  />
                 ))}
               </TableBody>
             </Table>
@@ -142,7 +153,13 @@ export default async function ZoneDetailPage({
   );
 }
 
-function RecordRow({ record }: { record: DnsRecordDto }) {
+function RecordRow({
+  record,
+  labels,
+}: {
+  record: DnsRecordDto;
+  labels: { ttl_auto: string; proxied: string; dns_only: string };
+}) {
   return (
     <TableRow>
       <TableCell>
@@ -158,13 +175,13 @@ function RecordRow({ record }: { record: DnsRecordDto }) {
         {record.content}
       </TableCell>
       <TableCell className="font-mono text-xs text-muted-foreground">
-        {record.ttl === 1 ? "auto" : record.ttl}
+        {record.ttl === 1 ? labels.ttl_auto : record.ttl}
       </TableCell>
       <TableCell>
         {record.proxied ? (
-          <Badge variant="warning">proxied</Badge>
+          <Badge variant="warning">{labels.proxied}</Badge>
         ) : (
-          <Badge variant="outline">dns only</Badge>
+          <Badge variant="outline">{labels.dns_only}</Badge>
         )}
       </TableCell>
       <TableCell className="text-right">
