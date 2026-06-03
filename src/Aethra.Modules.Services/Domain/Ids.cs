@@ -19,3 +19,15 @@ public readonly record struct ServiceBackupId(AethraId Value)
     public static ServiceBackupId New() => new(AethraId.NewId("bkp"));
     public override string ToString() => Value.ToString();
 }
+
+public readonly record struct ScheduledJobId(AethraId Value)
+{
+    public static ScheduledJobId New() => new(AethraId.NewId("sch"));
+    public override string ToString() => Value.ToString();
+}
+
+public readonly record struct ScheduledJobRunId(AethraId Value)
+{
+    public static ScheduledJobRunId New() => new(AethraId.NewId("schr"));
+    public override string ToString() => Value.ToString();
+}

@@ -13,6 +13,8 @@ public sealed class ServicesDbContext(DbContextOptions<ServicesDbContext> option
     public DbSet<ManagedService> ManagedServices => Set<ManagedService>();
     public DbSet<ServiceBinding> ServiceBindings => Set<ServiceBinding>();
     public DbSet<ServiceBackup> ServiceBackups => Set<ServiceBackup>();
+    public DbSet<ScheduledJob> ScheduledJobs => Set<ScheduledJob>();
+    public DbSet<ScheduledJobRun> ScheduledJobRuns => Set<ScheduledJobRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,5 +22,7 @@ public sealed class ServicesDbContext(DbContextOptions<ServicesDbContext> option
         modelBuilder.ApplyConfiguration(new ManagedServiceConfiguration());
         modelBuilder.ApplyConfiguration(new ServiceBindingConfiguration());
         modelBuilder.ApplyConfiguration(new ServiceBackupConfiguration());
+        modelBuilder.ApplyConfiguration(new ScheduledJobConfiguration());
+        modelBuilder.ApplyConfiguration(new ScheduledJobRunConfiguration());
     }
 }
