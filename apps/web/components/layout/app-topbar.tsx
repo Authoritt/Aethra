@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
+import { useTranslations } from "next-intl";
 import {
   LogOut,
   Menu,
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { API_URL } from "@/lib/api";
 import { Breadcrumbs } from "./breadcrumbs";
+import { LanguageToggle } from "./language-toggle";
 
 interface AppTopbarProps {
   /** Callback que el shell pasa para abrir el sidebar móvil. */
@@ -47,6 +49,8 @@ const FALLBACK_EMAIL = "admin@aethra.local";
 export function AppTopbar({ onOpenSidebar }: AppTopbarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const t = useTranslations("topbar");
+  const tNav = useTranslations("nav");
   const [me, setMe] = useState<MeResponse | null>(null);
   const [loadingMe, setLoadingMe] = useState(true);
 
@@ -93,7 +97,7 @@ export function AppTopbar({ onOpenSidebar }: AppTopbarProps) {
         size="icon"
         className="md:hidden"
         onClick={onOpenSidebar}
-        aria-label="Abrir menú"
+        aria-label={tNav("open_menu")}
       >
         <Menu className="size-5" />
       </Button>
@@ -103,9 +107,10 @@ export function AppTopbar({ onOpenSidebar }: AppTopbarProps) {
       </div>
 
       <div className="flex items-center gap-1">
+        <LanguageToggle />
         <ThemeToggle />
         <UserMenu
-          email={loadingMe ? "Cargando..." : email}
+          email={loadingMe ? t("loading_session") : email}
           displayName={displayName}
           roles={roles}
           initial={initial}
@@ -118,6 +123,7 @@ export function AppTopbar({ onOpenSidebar }: AppTopbarProps) {
 
 function ThemeToggle() {
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const t = useTranslations("topbar");
   const [mounted, setMounted] = useState(false);
 
   // next-themes recomienda gate-ar el render hasta mounted para evitar mismatch.
@@ -140,31 +146,31 @@ function ThemeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Cambiar tema">
+        <Button variant="ghost" size="icon" aria-label={t("theme_toggle_aria")}>
           <TriggerIcon className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Tema
+          {t("theme_label")}
         </DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => setTheme("light")}>
           <Sun className="size-4" />
-          Claro
+          {t("theme_light")}
           {current === "light" && (
             <span className="ml-auto text-xs text-muted-foreground">●</span>
           )}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setTheme("dark")}>
           <Moon className="size-4" />
-          Oscuro
+          {t("theme_dark")}
           {current === "dark" && (
             <span className="ml-auto text-xs text-muted-foreground">●</span>
           )}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setTheme("branded")}>
           <Palette className="size-4" />
-          Branded
+          {t("theme_branded")}
           {current === "branded" && (
             <span className="ml-auto text-xs text-muted-foreground">●</span>
           )}
@@ -172,7 +178,7 @@ function ThemeToggle() {
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => setTheme("system")}>
           <Monitor className="size-4" />
-          Sistema
+          {t("theme_system")}
           {current === "system" && (
             <span className="ml-auto text-xs text-muted-foreground">●</span>
           )}
@@ -195,13 +201,14 @@ function UserMenu({
   initial: string;
   onLogout: () => void | Promise<void>;
 }) {
+  const t = useTranslations("topbar");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
           className="ml-1 inline-flex size-9 items-center justify-center rounded-full outline-none ring-offset-background transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          aria-label="Menú de usuario"
+          aria-label={t("user_menu_aria")}
         >
           <Avatar className="size-9">
             <AvatarImage src="" alt="" />
@@ -215,7 +222,7 @@ function UserMenu({
         <DropdownMenuLabel>
           <div className="flex flex-col gap-1">
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Sesión
+              {t("session_label")}
             </span>
             <span className="truncate text-sm font-medium text-foreground">
               {displayName ?? email}
@@ -248,13 +255,13 @@ function UserMenu({
         <DropdownMenuItem asChild>
           <Link href="/settings" className="cursor-pointer">
             <User className="size-4" />
-            Mi cuenta
+            {t("my_account")}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/settings/users" className="cursor-pointer">
             <User className="size-4" />
-            Gestión de usuarios
+            {t("user_management")}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -263,7 +270,7 @@ function UserMenu({
           className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
         >
           <LogOut className="size-4" />
-          Cerrar sesión
+          {t("logout")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
