@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ArrowRight, Copy } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +27,9 @@ import { ManualScriptTab } from "./ManualScriptTab";
  * La tab "Metadata" está siempre visible. Las otras dos se habilitan tras crear la VM.
  */
 export default function NewVmPage() {
+  const t = useTranslations("pages.vms_new");
+  const tBreadcrumbs = useTranslations("breadcrumbs");
+  const tCommon = useTranslations("common");
   const router = useRouter();
   const [tab, setTab] = useState<string>("metadata");
   const [registered, setRegistered] = useState<RegisterVmResponse | null>(null);
@@ -33,34 +37,34 @@ export default function NewVmPage() {
   function onRegistered(r: RegisterVmResponse) {
     setRegistered(r);
     setTab("auto");
-    toast.success("VM registrada. Continua con la instalación.");
+    toast.success(t("toast_created", { name: r.name }));
   }
 
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "VMs", href: "/vms" },
-          { label: registered ? registered.name : "Registrar" },
+          { label: tBreadcrumbs("vms"), href: "/vms" },
+          { label: registered ? registered.name : t("breadcrumb") },
         ]}
-        title={registered ? registered.name : "Registrar VM"}
+        title={registered ? registered.name : t("title")}
         description={
           registered ? (
             <span className="font-mono text-xs">{registered.slug}</span>
           ) : (
-            "Registra y aprovisiona el satélite para enviar métricas a Aethra."
+            t("description")
           )
         }
         actions={
           registered ? (
             <Button asChild variant="outline" size="sm">
               <Link href={`/vms/${registered.vm_id}`}>
-                Ir al detalle <ArrowRight className="ml-2 h-4 w-4" />
+                {tCommon("details")} <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
           ) : (
             <Button variant="ghost" size="sm" onClick={() => router.push("/vms")}>
-              Cancelar
+              {t("cancel")}
             </Button>
           )
         }
@@ -73,21 +77,21 @@ export default function NewVmPage() {
       <Tabs value={tab} onValueChange={setTab} className="mt-2 max-w-4xl">
         <TabsList className="h-auto w-full justify-start gap-1 p-1">
           <TabsTrigger value="metadata" className="px-4 py-2">
-            1. Metadata
+            1. {t("tab_metadata")}
           </TabsTrigger>
           <TabsTrigger
             value="auto"
             disabled={!registered}
             className="px-4 py-2"
           >
-            2. Auto-instalar via SSH
+            2. {t("tab_auto")}
           </TabsTrigger>
           <TabsTrigger
             value="manual"
             disabled={!registered}
             className="px-4 py-2"
           >
-            3. Comando manual
+            3. {t("tab_manual")}
           </TabsTrigger>
         </TabsList>
 

@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { serverFetch } from "@/lib/server-fetch";
@@ -17,6 +18,9 @@ export default async function NewInstancePage({
 }: {
   params: Promise<{ templateId: string }>;
 }) {
+  const t = await getTranslations("pages.instances_new");
+  const tTemplates = await getTranslations("pages.templates_detail");
+  const tCommon = await getTranslations("common");
   const { templateId } = await params;
 
   const templateResult = await serverFetch<TemplateDetail>(
@@ -29,7 +33,7 @@ export default async function NewInstancePage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando el template.
+            {tTemplates("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -59,16 +63,16 @@ export default async function NewInstancePage({
       <PageHeader
         breadcrumbs={[
           { label: template.name, href: `/templates/${template.id}` },
-          { label: "Nueva instance" },
+          { label: t("breadcrumb") },
         ]}
-        title="Nueva instance"
-        description="Desplegá este template en un client + environment + VM concretos."
+        title={t("title")}
+        description={t("description")}
       />
 
       {hasCatalogError ? (
         <Card className="mb-4 border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudieron cargar todos los catálogos. La creación podría fallar.
+            {tCommon("load_error_short")}
           </CardContent>
         </Card>
       ) : null}
