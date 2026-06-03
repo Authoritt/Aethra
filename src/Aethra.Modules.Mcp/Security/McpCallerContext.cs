@@ -1,12 +1,11 @@
 using System.Security.Claims;
 using Aethra.Shared.Contracts.Authentication;
-using Microsoft.AspNetCore.Http;
 
 namespace Aethra.Modules.Mcp.Security;
 
 /// <summary>
-/// Lee del <see cref="HttpContext"/> el ApiKey id + scopes del caller (cookie session
-/// admin también funciona si se le inyecta el claim <c>scope=*</c>).
+/// Lee del <see cref="ClaimsPrincipal"/> capturado al inicio de la sesión MCP el ApiKey id +
+/// scopes del caller (la cookie session admin también funciona — sus claims se capturan igual).
 /// </summary>
 public interface IMcpCallerContext
 {
@@ -23,14 +22,32 @@ public interface IMcpCallerContext
     bool HasScope(string scope);
 }
 
-internal sealed class HttpMcpCallerContext(IHttpContextAccessor accessor) : IMcpCallerContext
+/// <summary>
+/// Implementación que lee del <see cref="IMcpSessionPrincipalAccessor"/>. Capturamos el
+/// <see cref="ClaimsPrincipal"/> al iniciar la sesión MCP (en <c>ConfigureSessionOptions</c>) y
+/// lo propagamos via <see cref="System.Threading.AsyncLocal{T}"/>: cuando el SDK ejecuta los
+/// handlers de tools en un Task de background (consumer del channel del transport), la
+/// <c>ExecutionContext</c> capturada en la creación de la task arrastra el principal capturado.
+///
+/// <para>
+/// Por qué NO <see cref="Microsoft.AspNetCore.Http.IHttpContextAccessor"/>: el SDK
+/// <c>ModelContextProtocol</c> Streamable HTTP corre <c>session.RunAsync</c> como una task de
+/// background que consume mensajes del transport channel. Cuando llega un <c>tools/call</c>,
+/// el handler corre en la <c>ExecutionContext</c> de esa task, no en la del request HTTP que
+/// trajo el mensaje. El <c>HttpContextAccessor</c> usa <see cref="System.Threading.AsyncLocal{T}"/>
+/// de un <c>HttpContextHolder</c> cuya referencia ASP.NET pone en <c>null</c> al terminar el
+/// request — así que cualquier task que capturó esa AsyncLocal ve <c>null</c>. Resultado:
+/// las claims se pierden y todas las tools devuelven <c>insufficient_scope</c>.
+/// </para>
+/// </summary>
+internal sealed class HttpMcpCallerContext(IMcpSessionPrincipalAccessor accessor) : IMcpCallerContext
 {
     private static readonly IReadOnlySet<string> Empty = new HashSet<string>(StringComparer.Ordinal);
 
     private (string Id, string Source, IReadOnlySet<string> Scopes) Resolve()
     {
-        var user = accessor.HttpContext?.User;
-        if (user is null || !user.Identity?.IsAuthenticated == true)
+        var user = accessor.CurrentPrincipal;
+        if (user is null || user.Identity?.IsAuthenticated != true)
         {
             return (string.Empty, "mcp:anonymous", Empty);
         }
@@ -43,8 +60,7 @@ internal sealed class HttpMcpCallerContext(IHttpContextAccessor accessor) : IMcp
         {
             scopes.Add(claim.Value);
         }
-        // Una sesión cookie (single-user admin) no trae claims de scope pero es admin de facto.
-        // Si el principal está autenticado por cookie y no hay claims de scope, se trata como admin.
+        // Una sesión cookie (single-user admin) sin claims de scope se trata como admin de facto.
         if (scopes.Count == 0 && string.IsNullOrEmpty(id))
         {
             scopes.Add(ApiKeyAuthSchemes.AdminScope);
