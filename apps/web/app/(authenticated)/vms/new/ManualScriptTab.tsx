@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Copy, Loader2, RefreshCw, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,8 @@ interface Props {
  * Útil para VMs detrás de NAT/CGNAT donde Aethra no puede SSH-ear.
  */
 export function ManualScriptTab({ vmId, initialToken }: Props) {
+  const t = useTranslations("pages.vms_new.manual");
+  const tCommon = useTranslations("pages.vms_new");
   const [runtime, setRuntime] = useState<"docker" | "podman">("docker");
   const [installRuntime, setInstallRuntime] = useState(false);
   const [script, setScript] = useState<string | null>(null);
@@ -61,7 +64,7 @@ export function ManualScriptTab({ vmId, initialToken }: Props) {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : tCommon("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -71,9 +74,9 @@ export function ManualScriptTab({ vmId, initialToken }: Props) {
   async function copy(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value);
-      toast.success(`${label} copiado al portapapeles.`);
+      toast.success(t("copied_toast", { label }));
     } catch {
-      toast.error("No se pudo copiar");
+      toast.error(t("copy_failed"));
     }
   }
 
@@ -83,11 +86,9 @@ export function ManualScriptTab({ vmId, initialToken }: Props) {
         <CardContent className="flex items-start gap-3 p-4 text-sm">
           <Terminal className="mt-0.5 h-4 w-4 shrink-0 text-info" />
           <div>
-            <p className="font-medium">Modo manual: NAT / CGNAT / red privada.</p>
+            <p className="font-medium">{t("header_info_title")}</p>
             <p className="mt-1 text-muted-foreground">
-              Cuando Aethra no puede SSH-ear a la VM directamente, ejecuta el
-              comando abajo dentro de la VM. El script descarga el binario,
-              configura un servicio systemd y arranca el satélite.
+              {t("header_info_description")}
             </p>
           </div>
         </CardContent>
@@ -96,7 +97,7 @@ export function ManualScriptTab({ vmId, initialToken }: Props) {
       <Card>
         <CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-3 md:items-end">
           <div className="space-y-2">
-            <Label>Container runtime</Label>
+            <Label>{t("label_runtime")}</Label>
             <Select
               value={runtime}
               onValueChange={(v) => setRuntime(v as "docker" | "podman")}
@@ -118,7 +119,7 @@ export function ManualScriptTab({ vmId, initialToken }: Props) {
               onCheckedChange={(v) => setInstallRuntime(v === true)}
             />
             <Label htmlFor="install-runtime" className="m-0 font-normal">
-              Instalar runtime si falta
+              {t("label_install_runtime")}
             </Label>
           </div>
 
@@ -129,7 +130,7 @@ export function ManualScriptTab({ vmId, initialToken }: Props) {
               ) : (
                 <RefreshCw className="mr-2 h-4 w-4" />
               )}
-              Regenerar (rota token)
+              {t("regenerate")}
             </Button>
           </div>
         </CardContent>
@@ -138,22 +139,22 @@ export function ManualScriptTab({ vmId, initialToken }: Props) {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Comando one-liner
+            {t("command_label")}
           </CardTitle>
           {script ? (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => copy(script, "Script")}
+              onClick={() => copy(script, t("script_label"))}
             >
               <Copy className="mr-2 h-4 w-4" />
-              Copiar
+              {t("command_copy")}
             </Button>
           ) : null}
         </CardHeader>
         <CardContent>
           <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs leading-relaxed text-foreground">
-            {script ?? "Generando script…"}
+            {script ?? t("command_loading")}
           </pre>
         </CardContent>
       </Card>
@@ -161,15 +162,15 @@ export function ManualScriptTab({ vmId, initialToken }: Props) {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Token (solo si querés copiarlo aparte)
+            {t("token_label")}
           </CardTitle>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => copy(token, "Token")}
+            onClick={() => copy(token, t("token_copy_label"))}
           >
             <Copy className="mr-2 h-4 w-4" />
-            Copiar
+            {t("token_copy")}
           </Button>
         </CardHeader>
         <CardContent>
@@ -180,8 +181,7 @@ export function ManualScriptTab({ vmId, initialToken }: Props) {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Tip: cada vez que regenerás, el token anterior queda inválido. Si ya
-        instalaste con otra versión, vas a tener que correr de nuevo el script.
+        {t("tip")}
       </p>
     </div>
   );

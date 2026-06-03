@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -52,28 +53,6 @@ import type {
 
 const SSH_VALUE_MAX = 16 * 1024;
 
-const schema = z.object({
-  host: z
-    .string()
-    .min(1, "Requerido")
-    .max(255, "Máximo 255 caracteres."),
-  port: z
-    .number({ message: "Debe ser un número" })
-    .int()
-    .min(1)
-    .max(65535),
-  user: z.string().min(1, "Requerido").max(64),
-  authMethod: z.enum(["key", "password"]),
-  value: z
-    .string()
-    .min(1, "Requerido")
-    .max(SSH_VALUE_MAX, `Máximo ${SSH_VALUE_MAX} caracteres.`),
-  containerRuntime: z.enum(["docker", "podman"]),
-  installContainerRuntime: z.boolean(),
-});
-
-type FormValues = z.infer<typeof schema>;
-
 interface Props {
   vmId: string;
   onFallbackManual: () => void;
@@ -84,6 +63,8 @@ interface Props {
  * y muestra los logs en vivo via SignalR. Si falla, ofrece pasar al modo manual.
  */
 export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
+  const t = useTranslations("pages.vms_new.auto_install");
+  const tCommon = useTranslations("pages.vms_new");
   const [running, setRunning] = useState(false);
   const [installStatus, setInstallStatus] =
     useState<VmInstallStatus | "Planned" | null>(null);
@@ -91,6 +72,32 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const seqRef = useRef(0);
   const connectionRef = useRef<HubConnection | null>(null);
+
+  const schema = useMemo(
+    () =>
+      z.object({
+        host: z
+          .string()
+          .min(1, t("validation_required"))
+          .max(255, t("validation_max", { max: 255 })),
+        port: z
+          .number({ message: t("validation_number") })
+          .int()
+          .min(1)
+          .max(65535),
+        user: z.string().min(1, t("validation_required")).max(64),
+        authMethod: z.enum(["key", "password"]),
+        value: z
+          .string()
+          .min(1, t("validation_required"))
+          .max(SSH_VALUE_MAX, t("validation_max", { max: SSH_VALUE_MAX })),
+        containerRuntime: z.enum(["docker", "podman"]),
+        installContainerRuntime: z.boolean(),
+      }),
+    [t],
+  );
+
+  type FormValues = z.infer<typeof schema>;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -139,10 +146,14 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
         if (payload.errorCode) setErrorCode(payload.errorCode);
         if (payload.status === "Installed") {
           setRunning(false);
-          toast.success("Satélite conectado");
+          toast.success(t("satellite_connected"));
         } else if (payload.status === "Failed") {
           setRunning(false);
-          toast.error(`Instalación falló (${payload.errorCode ?? "desconocido"})`);
+          toast.error(
+            t("install_failed", {
+              code: payload.errorCode ?? t("install_failed_unknown"),
+            }),
+          );
         }
       },
     );
@@ -169,7 +180,7 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
         c.stop().catch(() => {});
       }
     };
-  }, [vmId]);
+  }, [vmId, t]);
 
   function appendLocalLog(line: string, level: LogEntry["level"] = "info") {
     seqRef.current += 1;
@@ -188,7 +199,9 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
     setRunning(true);
     setErrorCode(null);
     setInstallStatus("Installing");
-    appendLocalLog(`Disparando install en ${values.host}:${values.port}…`);
+    appendLocalLog(
+      t("triggering_install", { host: values.host, port: values.port }),
+    );
 
     const body: AutoInstallRequest = {
       ssh: {
@@ -208,7 +221,7 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
         { method: "POST", body: JSON.stringify(body) },
       );
       setInstallStatus(response.status as VmInstallStatus);
-      appendLocalLog(`Install encolado. Status: ${response.status}`);
+      appendLocalLog(t("install_enqueued", { status: response.status }));
     } catch (e) {
       const msg =
         e instanceof ApiError
@@ -216,7 +229,7 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : tCommon("error_unknown");
       appendLocalLog(msg, "error");
       toast.error(msg);
       setErrorCode("request_failed");
@@ -243,11 +256,11 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                   name="host"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Host *</FormLabel>
+                      <FormLabel>{t("label_host")}</FormLabel>
                       <FormControl>
                         <Input
                           {...field}
-                          placeholder="203.0.113.10 o vm.example.com"
+                          placeholder={t("placeholder_host")}
                           className="font-mono text-xs"
                           autoFocus
                         />
@@ -261,7 +274,7 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                   name="port"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Puerto</FormLabel>
+                      <FormLabel>{t("label_port")}</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -287,18 +300,15 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                 name="user"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Usuario *</FormLabel>
+                    <FormLabel>{t("label_user")}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
-                        placeholder="ubuntu / ec2-user / root"
+                        placeholder={t("placeholder_user")}
                         className="font-mono text-xs"
                       />
                     </FormControl>
-                    <FormDescription>
-                      Debe tener acceso a <code>sudo</code> sin password (NOPASSWD) o
-                      ser root.
-                    </FormDescription>
+                    <FormDescription>{t("help_user")}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -309,7 +319,7 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                 name="authMethod"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Método de autenticación *</FormLabel>
+                    <FormLabel>{t("label_auth_method")}</FormLabel>
                     <Select
                       value={field.value}
                       onValueChange={(v) =>
@@ -323,9 +333,11 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="key">
-                          Clave privada (PEM)
+                          {t("auth_method_key")}
                         </SelectItem>
-                        <SelectItem value="password">Contraseña</SelectItem>
+                        <SelectItem value="password">
+                          {t("auth_method_password")}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </FormItem>
@@ -338,7 +350,9 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {authMethod === "key" ? "Clave privada PEM *" : "Contraseña *"}
+                      {authMethod === "key"
+                        ? t("label_key")
+                        : t("label_password")}
                     </FormLabel>
                     <FormControl>
                       {authMethod === "key" ? (
@@ -351,21 +365,14 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                           type="password"
                           value={field.value}
                           onChange={field.onChange}
-                          placeholder="••••••••"
+                          placeholder={t("placeholder_password")}
                         />
                       )}
                     </FormControl>
                     <FormDescription>
-                      {authMethod === "key" ? (
-                        <>
-                          PEM completo (RSA / Ed25519 / ECDSA). Si tiene
-                          passphrase, descifrala primero — Aethra no la solicita.
-                        </>
-                      ) : (
-                        <>
-                          La contraseña queda cifrada con DataProtection en BD.
-                        </>
-                      )}
+                      {authMethod === "key"
+                        ? t("help_key")
+                        : t("help_password")}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -378,7 +385,7 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                   name="containerRuntime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Container runtime</FormLabel>
+                      <FormLabel>{t("label_runtime")}</FormLabel>
                       <Select
                         value={field.value}
                         onValueChange={(v) =>
@@ -410,7 +417,7 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                         />
                       </FormControl>
                       <Label className="m-0 font-normal">
-                        Instalar runtime si falta (apt/dnf)
+                        {t("label_install_runtime")}
                       </Label>
                     </FormItem>
                   )}
@@ -421,20 +428,21 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                 <div className="text-xs text-muted-foreground">
                   {running ? (
                     <span className="inline-flex items-center gap-2">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Instalación
-                      en curso…
+                      <Loader2 className="h-3 w-3 animate-spin" />{" "}
+                      {t("status_running")}
                     </span>
                   ) : isInstalled ? (
                     <span className="inline-flex items-center gap-2 text-success">
-                      <CheckCircle2 className="h-4 w-4" /> Satélite conectado.
+                      <CheckCircle2 className="h-4 w-4" />{" "}
+                      {t("status_installed")}
                     </span>
                   ) : isFailed ? (
                     <span className="inline-flex items-center gap-2 text-destructive">
-                      <AlertCircle className="h-4 w-4" /> Falló
+                      <AlertCircle className="h-4 w-4" /> {t("status_failed")}
                       {errorCode ? ` (${errorCode})` : ""}
                     </span>
                   ) : (
-                    "Llena credenciales y dale Conectar."
+                    t("status_idle")
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -444,7 +452,7 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                       variant="outline"
                       onClick={onFallbackManual}
                     >
-                      Probar comando manual
+                      {t("fallback_manual")}
                     </Button>
                   ) : null}
                   <Button
@@ -457,7 +465,7 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                     ) : (
                       <PlayCircle className="h-4 w-4" />
                     )}
-                    {running ? "Instalando…" : "Conectar e instalar"}
+                    {running ? t("submit_running") : t("submit_idle")}
                   </Button>
                 </div>
               </div>
@@ -482,11 +490,12 @@ function KeyTextarea({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const t = useTranslations("pages.vms_new.auto_install");
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > SSH_VALUE_MAX) {
-      toast.error(`Clave demasiado grande (máximo ${SSH_VALUE_MAX} bytes).`);
+      toast.error(t("key_too_large", { max: SSH_VALUE_MAX }));
       return;
     }
     const text = await file.text();
@@ -503,7 +512,7 @@ function KeyTextarea({
       />
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <KeyRound className="h-3 w-3" />
-        <span>O pega el contenido arriba. También podés cargarlo:</span>
+        <span>{t("key_paste_hint")}</span>
         <input
           type="file"
           accept=".pem,.key,.txt,*"
