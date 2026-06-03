@@ -60,6 +60,14 @@ internal sealed class GetInstanceByIdHandler(ProjectsDbContext db)
                 i.Healthcheck.TimeoutSeconds,
                 i.Healthcheck.StartPeriodSeconds);
 
+        // F12.3 — resolver EffectiveTrackedRef cargando el Template (con EnvironmentMapping).
+        var template = await db.Templates
+            .AsNoTracking()
+            .Include(t => t.EnvironmentMapping)
+            .FirstOrDefaultAsync(t => t.Id == i.TemplateId, cancellationToken)
+            .ConfigureAwait(false);
+        var effectiveRef = template is not null ? i.ResolveTrackedRef(template) : null;
+
         return new InstanceDetail(
             id: i.Id.ToString(),
             templateId: i.TemplateId.ToString(),
@@ -76,6 +84,11 @@ internal sealed class GetInstanceByIdHandler(ProjectsDbContext db)
             volumes: volumes,
             healthcheck: hc,
             createdAt: i.CreatedAt,
-            updatedAt: i.UpdatedAt);
+            updatedAt: i.UpdatedAt,
+            trackedRef: i.TrackedRef,
+            effectiveTrackedRef: effectiveRef,
+            isEphemeral: i.IsEphemeral,
+            expiresAt: i.ExpiresAt,
+            createdByUserId: i.CreatedByUserId);
     }
 }

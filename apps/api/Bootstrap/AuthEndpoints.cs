@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure;
+using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Shared.Contracts.Authentication;
 using Microsoft.AspNetCore.Authentication;
@@ -11,6 +12,7 @@ namespace Aethra.Api.Bootstrap;
 public static class AuthEndpoints
 {
     public sealed record LoginRequest(string Email, string Password);
+    public sealed record TotpLoginRequest(string TotpToken, string Code);
 
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
@@ -21,6 +23,7 @@ public static class AuthEndpoints
             EfUserStore userStore,
             IRoleRepository roleRepo,
             SingleUserStore singleUserStore,
+            ITotpChallengeTokens totpTokens,
             HttpContext http,
             IdentityDbContext db,
             CancellationToken ct) =>
@@ -39,32 +42,25 @@ public static class AuthEndpoints
                     return Results.Json(new { error = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
                 }
 
+                // F12.1B: si el usuario tiene 2FA activo, NO firmamos cookie todavia. Devolvemos
+                // un challenge token corto que el cliente debe completar con un TOTP code via
+                // POST /auth/login/totp. El password ya valido pero el segundo factor pendiente.
+                if (user.TotpEnabled)
+                {
+                    var challenge = totpTokens.Issue(user.Id.ToString());
+                    return Results.Ok(new
+                    {
+                        requires_totp = true,
+                        totp_token = challenge,
+                        email = user.Email,
+                    });
+                }
+
                 // Persistir LastLoginAt — MarkLogin ya se invocó dentro del store.
                 await db.SaveChangesAsync(ct);
 
-                // Cargar roles y scopes para construir los claims.
-                var roleList = await roleRepo.ListByIdsAsync([.. user.Roles.Select(r => r.RoleId)], ct);
-                var aggregatedScopes = roleList
-                    .SelectMany(r => r.Scopes)
-                    .Distinct(StringComparer.Ordinal)
-                    .ToList();
-
-                var claims = new List<Claim>
-                {
-                    new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                    new(ClaimTypes.Email, user.Email),
-                    new(ClaimTypes.Name, user.DisplayName ?? user.Email),
-                };
-                foreach (var role in roleList)
-                {
-                    claims.Add(new Claim(ClaimTypes.Role, role.Slug));
-                }
-                foreach (var scope in aggregatedScopes)
-                {
-                    claims.Add(new Claim(ApiKeyAuthSchemes.ScopeClaim, scope));
-                }
-
-                identity = new ClaimsIdentity(claims, AuthSchemes.Cookie);
+                identity = BuildIdentityForUser(user, await roleRepo.ListByIdsAsync(
+                    [.. user.Roles.Select(r => r.RoleId)], ct));
             }
             else
             {
@@ -88,9 +84,72 @@ public static class AuthEndpoints
                 IsPersistent = true,
             });
 
-            return Results.Ok(new { email = identity.FindFirst(ClaimTypes.Email)?.Value });
+            return Results.Ok(new
+            {
+                email = identity.FindFirst(ClaimTypes.Email)?.Value,
+                requires_totp = false,
+            });
         })
         .WithName("Login")
+        .AllowAnonymous();
+
+        // F12.1B: segundo paso del login para users con 2FA activo. Valida el JWT challenge
+        // + el codigo TOTP (o recovery). Si OK, emite la cookie completa.
+        group.MapPost("/login/totp", async (
+            [FromBody] TotpLoginRequest req,
+            EfUserStore userStore,
+            IUserRepository userRepo,
+            IRoleRepository roleRepo,
+            ITotpChallengeTokens totpTokens,
+            ITotpLoginVerifier verifier,
+            HttpContext http,
+            IdentityDbContext db,
+            CancellationToken ct) =>
+        {
+            var userIdRaw = totpTokens.ValidateAndGetUserId(req.TotpToken);
+            if (string.IsNullOrWhiteSpace(userIdRaw))
+            {
+                return Results.Json(new { error = "totp_token_invalid_or_expired" },
+                    statusCode: StatusCodes.Status401Unauthorized);
+            }
+            if (!Aethra.Shared.Kernel.Ids.AethraId.TryParse(userIdRaw, out var parsed) || parsed.Value.Prefix != "usr")
+            {
+                return Results.Json(new { error = "totp_token_invalid_or_expired" },
+                    statusCode: StatusCodes.Status401Unauthorized);
+            }
+            var uid = new UserId(parsed.Value);
+            var user = await userRepo.GetByIdAsync(uid, ct);
+            if (user is null || !user.IsActive)
+            {
+                return Results.Json(new { error = "user_not_found" }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+            if (!user.TotpEnabled)
+            {
+                return Results.Json(new { error = "totp_not_enabled" }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var ok = await verifier.VerifyAsync(user, req.Code, ct);
+            if (!ok)
+            {
+                return Results.Json(new { error = "totp_invalid_code" },
+                    statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            user.MarkLogin(DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync(ct);
+
+            var roleList = await roleRepo.ListByIdsAsync([.. user.Roles.Select(r => r.RoleId)], ct);
+            var identity = BuildIdentityForUser(user, roleList);
+
+            await http.SignInAsync(AuthSchemes.Cookie, new ClaimsPrincipal(identity),
+                new AuthenticationProperties { IsPersistent = true });
+            return Results.Ok(new
+            {
+                email = identity.FindFirst(ClaimTypes.Email)?.Value,
+                requires_totp = false,
+            });
+        })
+        .WithName("LoginTotp")
         .AllowAnonymous();
 
         // Restringido a cookie: una API key NO debe poder invalidar la sesión humana
@@ -108,23 +167,109 @@ public static class AuthEndpoints
         // endpoint, los claims emitidos por el handler de API key no coinciden con la
         // shape esperada (Email + scope=admin) y filtraría metadata interna — por eso
         // restringimos a cookie únicamente vía la policy "CookieOnly".
-        group.MapGet("/me", (HttpContext http) =>
+        group.MapGet("/me", async (HttpContext http, IUserRepository userRepo, CancellationToken ct) =>
         {
             if (http.User.Identity?.IsAuthenticated != true)
             {
                 return Results.Json(new { error = "not_authenticated" }, statusCode: StatusCodes.Status401Unauthorized);
             }
+            // F12.1B: reportar totp_enabled para que la UI muestre el estado en settings/security.
+            bool? totpEnabled = null;
+            int? recoveryRemaining = null;
+            var uidRaw = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.IsNullOrWhiteSpace(uidRaw)
+                && Aethra.Shared.Kernel.Ids.AethraId.TryParse(uidRaw, out var parsed)
+                && parsed.Value.Prefix == "usr")
+            {
+                var user = await userRepo.GetByIdAsync(new UserId(parsed.Value), ct);
+                if (user is not null)
+                {
+                    totpEnabled = user.TotpEnabled;
+                    recoveryRemaining = user.TotpEnabled
+                        ? Aethra.Modules.Identity.Domain.Totp.RecoveryCodes.RemainingCount(user.TotpRecoveryCodesUsedMask)
+                        : null;
+                }
+            }
+            // F12.3 — exponer gitHubUsername + userId para el editor de profile del frontend.
+            string? gitHubUsername = null;
+            if (!string.IsNullOrWhiteSpace(uidRaw)
+                && Aethra.Shared.Kernel.Ids.AethraId.TryParse(uidRaw, out var uidParsed)
+                && uidParsed.Value.Prefix == "usr")
+            {
+                var user = await userRepo.GetByIdAsync(new UserId(uidParsed.Value), ct);
+                gitHubUsername = user?.GitHubUsername;
+            }
+
             return Results.Ok(new
             {
+                userId = uidRaw,
                 email = http.User.FindFirstValue(ClaimTypes.Email),
                 displayName = http.User.FindFirstValue(ClaimTypes.Name),
+                gitHubUsername,
                 roles = http.User.FindAll(ClaimTypes.Role).Select(c => c.Value).Distinct(),
                 scopes = http.User.FindAll(ApiKeyAuthSchemes.ScopeClaim).Select(c => c.Value).Distinct(),
+                totp_enabled = totpEnabled,
+                totp_recovery_codes_remaining = recoveryRemaining,
             });
         })
         .WithName("Me")
         .RequireAuthorization("CookieOnly");
 
+        // F12.3 — PATCH /auth/me/profile: el usuario actualiza SU propio profile (GitHubUsername).
+        // No usa /api/identity/users/{id} para evitar escalada de privilegios.
+        group.MapPatch("/me/profile", async (
+            [FromBody] UpdateMyProfileRequest body,
+            HttpContext http,
+            MediatR.IMediator mediator,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId)
+                || !Aethra.Shared.Kernel.Ids.AethraId.TryParse(userId, out var parsedUid)
+                || parsedUid.Value.Prefix != "usr")
+            {
+                return Results.Json(new { error = "not_a_real_user" }, statusCode: StatusCodes.Status400BadRequest);
+            }
+            var cmd = new Aethra.Modules.Identity.UseCases.Commands.UpdateUserCommand(
+                UserId: userId,
+                DisplayName: null,
+                RoleSlugs: null,
+                GitHubUsername: body.GitHubUsername,
+                ClearGitHubUsername: body.ClearGitHubUsername ?? false);
+            var r = await mediator.Send(cmd, ct);
+            return r.IsSuccess
+                ? Results.NoContent()
+                : Results.UnprocessableEntity(new { r.Error.Code, r.Error.Message });
+        })
+        .WithName("UpdateMyProfile")
+        .RequireAuthorization("CookieOnly");
+
         return app;
+    }
+
+    /// <summary>F12.3 — body para <c>PATCH /auth/me/profile</c>.</summary>
+    public sealed record UpdateMyProfileRequest(string? GitHubUsername, bool? ClearGitHubUsername);
+
+    private static ClaimsIdentity BuildIdentityForUser(User user, IReadOnlyList<Role> roleList)
+    {
+        var aggregatedScopes = roleList
+            .SelectMany(r => r.Scopes)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Email, user.Email),
+            new(ClaimTypes.Name, user.DisplayName ?? user.Email),
+        };
+        foreach (var role in roleList)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, role.Slug));
+        }
+        foreach (var scope in aggregatedScopes)
+        {
+            claims.Add(new Claim(ApiKeyAuthSchemes.ScopeClaim, scope));
+        }
+        return new ClaimsIdentity(claims, AuthSchemes.Cookie);
     }
 }

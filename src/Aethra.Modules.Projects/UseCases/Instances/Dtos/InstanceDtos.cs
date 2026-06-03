@@ -18,7 +18,11 @@ public sealed record InstanceSummary(
     string? autoHostname,
     int? primaryPort,
     DateTimeOffset createdAt,
-    DateTimeOffset updatedAt);
+    DateTimeOffset updatedAt,
+    string? trackedRef = null,
+    string? effectiveTrackedRef = null,
+    bool isEphemeral = false,
+    string? createdByUserId = null);
 
 /// <summary>
 /// Detalle de una <c>Instance</c>. Igual que summary; reservado para campos derivados (estado
@@ -40,7 +44,12 @@ public sealed record InstanceDetail(
     IReadOnlyList<InstanceVolumeDto> volumes,
     InstanceHealthcheckDto? healthcheck,
     DateTimeOffset createdAt,
-    DateTimeOffset updatedAt);
+    DateTimeOffset updatedAt,
+    string? trackedRef = null,
+    string? effectiveTrackedRef = null,
+    bool isEphemeral = false,
+    DateTimeOffset? expiresAt = null,
+    string? createdByUserId = null);
 
 public sealed record InstancePortDto(int containerPort, int? hostPort, string protocol);
 

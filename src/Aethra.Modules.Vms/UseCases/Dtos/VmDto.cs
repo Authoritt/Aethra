@@ -17,4 +17,5 @@ public sealed record VmDto(
     string? CpuModel,
     int? CpuCores,
     long? TotalMemoryBytes,
-    string? AgentVersion);
+    string? AgentVersion,
+    bool AcceptsPreviews = true);

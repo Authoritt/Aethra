@@ -35,7 +35,8 @@ public sealed record CreateInstanceCommand(
     IReadOnlyList<CreateInstancePortDto>? Ports,
     IReadOnlyList<CreateInstanceVolumeDto>? Volumes,
     CreateInstanceHealthcheckDto? Healthcheck,
-    bool AutoDeployOnNewBuild) : ICommand<InstanceDetail>;
+    bool AutoDeployOnNewBuild,
+    string? TrackedRef = null) : ICommand<InstanceDetail>;
 
 public sealed record CreateInstancePortDto(int containerPort, int? hostPort, string? protocol);
 
@@ -155,7 +156,8 @@ internal sealed class CreateInstanceHandler(
                 healthcheck,
                 request.AutoDeployOnNewBuild,
                 clock.UtcNow,
-                request.SlugOverride);
+                request.SlugOverride,
+                trackedRef: request.TrackedRef);
         }
         catch (ArgumentException ex)
         {
@@ -268,6 +270,11 @@ internal sealed class CreateInstanceHandler(
             volumes: volumes,
             healthcheck: hc,
             createdAt: i.CreatedAt,
-            updatedAt: i.UpdatedAt);
+            updatedAt: i.UpdatedAt,
+            trackedRef: i.TrackedRef,
+            effectiveTrackedRef: i.TrackedRef,
+            isEphemeral: i.IsEphemeral,
+            expiresAt: i.ExpiresAt,
+            createdByUserId: i.CreatedByUserId);
     }
 }

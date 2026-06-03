@@ -110,6 +110,12 @@ export default async function TemplateDetailPage({
           <GitBranch className="mr-1 h-3 w-3" />
           {template.source.branch}
         </Badge>
+        {template.autoPreviewPullRequests ? (
+          <Badge variant="warning">PR previews on</Badge>
+        ) : null}
+        {template.environmentMapping?.length > 0 ? (
+          <Badge variant="outline">{template.environmentMapping.length} env mappings</Badge>
+        ) : null}
       </div>
 
       <Tabs defaultValue="overview">
@@ -124,6 +130,65 @@ export default async function TemplateDetailPage({
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
+          {/* F12.3 — Branch-per-Instance mapping table + PR preview opt-in. */}
+          {(template.environmentMapping?.length > 0 || template.autoPreviewPullRequests) ? (
+            <Card className="mb-4">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                  Branch-per-Instance & Previews
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Default branch
+                    </dt>
+                    <dd className="mt-0.5 font-mono text-xs text-foreground">
+                      {template.source.branch}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Auto-preview pull requests
+                    </dt>
+                    <dd className="mt-0.5">
+                      {template.autoPreviewPullRequests ? (
+                        <Badge variant="success">enabled</Badge>
+                      ) : (
+                        <Badge variant="outline">disabled</Badge>
+                      )}
+                    </dd>
+                  </div>
+                  {template.environmentMapping?.length > 0 ? (
+                    <div className="md:col-span-2">
+                      <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Environment → Branch
+                      </dt>
+                      <dd className="mt-1">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Environment</TableHead>
+                              <TableHead>Branch</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {template.environmentMapping.map((m) => (
+                              <TableRow key={m.environment}>
+                                <TableCell className="font-mono text-xs">{m.environment}</TableCell>
+                                <TableCell className="font-mono text-xs">{m.branch}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+              </CardContent>
+            </Card>
+          ) : null}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>

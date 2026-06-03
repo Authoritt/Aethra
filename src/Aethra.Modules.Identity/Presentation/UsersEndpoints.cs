@@ -37,7 +37,14 @@ public static class UsersEndpoints
 
         users.MapPatch("/{userId}", async (string userId, [FromBody] UpdateUserRequest body, IMediator m, CancellationToken ct) =>
             {
-                var r = await m.Send(new UpdateUserCommand(userId, body.DisplayName, body.RoleSlugs), ct);
+                var r = await m.Send(
+                    new UpdateUserCommand(
+                        userId,
+                        body.DisplayName,
+                        body.RoleSlugs,
+                        body.GitHubUsername,
+                        body.ClearGitHubUsername ?? false),
+                    ct);
                 return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
             })
             .WithName("UpdateUser")
@@ -98,7 +105,9 @@ public static class UsersEndpoints
 
     public sealed record UpdateUserRequest(
         string? DisplayName,
-        IReadOnlyList<string>? RoleSlugs);
+        IReadOnlyList<string>? RoleSlugs,
+        string? GitHubUsername = null,
+        bool? ClearGitHubUsername = null);
 
     public sealed record ResetPasswordRequest(string NewPassword);
 

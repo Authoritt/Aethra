@@ -12,7 +12,9 @@ namespace Aethra.Modules.Identity.UseCases.Commands;
 public sealed record UpdateUserCommand(
     string UserId,
     string? DisplayName,
-    IReadOnlyList<string>? RoleSlugs) : ICommand;
+    IReadOnlyList<string>? RoleSlugs,
+    string? GitHubUsername = null,
+    bool ClearGitHubUsername = false) : ICommand;
 
 internal sealed class UpdateUserHandler(
     IdentityDbContext db,
@@ -43,6 +45,29 @@ internal sealed class UpdateUserHandler(
             catch (ArgumentException ex)
             {
                 return Error.Validation("user.invalid_display_name", ex.Message);
+            }
+        }
+
+        if (request.ClearGitHubUsername)
+        {
+            try
+            {
+                user.SetGitHubUsername(null, now);
+            }
+            catch (ArgumentException ex)
+            {
+                return Error.Validation("user.invalid_github_username", ex.Message);
+            }
+        }
+        else if (request.GitHubUsername is not null)
+        {
+            try
+            {
+                user.SetGitHubUsername(request.GitHubUsername, now);
+            }
+            catch (ArgumentException ex)
+            {
+                return Error.Validation("user.invalid_github_username", ex.Message);
             }
         }
 

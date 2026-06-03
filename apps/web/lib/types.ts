@@ -62,6 +62,8 @@ export interface VmDto {
   cpu_cores: number | null;
   total_memory_bytes: number | null;
   agent_version: string | null;
+  /** F12.3 — opt-in al pool de previews. Default true. Serializa como camelCase. */
+  acceptsPreviews?: boolean;
 }
 
 export interface RegisterVmRequest {
@@ -571,6 +573,8 @@ export interface UserSummary {
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** F12.3 — handle de GitHub (lo mapea el webhook handler de PR). */
+  gitHubUsername?: string | null;
 }
 
 export interface CreatedUser {
@@ -625,8 +629,11 @@ export interface CreateRoleRequest {
 }
 
 export interface MeResponse {
+  userId?: string | null;
   email: string;
   displayName: string | null;
+  /** F12.3 — handle de GitHub del usuario actual (visible en profile). */
+  gitHubUsername?: string | null;
   roles: string[];
   scopes: string[];
 }
@@ -757,6 +764,14 @@ export interface TemplateSummary {
   instanceCount?: number;
 }
 
+/**
+ * F12.3 — fila del mapping Environment→Branch heredado por Instances que no setean TrackedRef.
+ */
+export interface TemplateEnvironmentMapping {
+  environment: string;
+  branch: string;
+}
+
 export interface TemplateDetail extends TemplateSummary {
   description: string | null;
   source: {
@@ -771,6 +786,10 @@ export interface TemplateDetail extends TemplateSummary {
     composeFilePath: string | null;
     buildArgs: TemplateBuildArg[];
   };
+  /** F12.3 — mapping branch-per-environment. Default vacio. */
+  environmentMapping: TemplateEnvironmentMapping[];
+  /** F12.3 — opt-in al auto-create de Instances ephemerals al recibir pull_request.opened. */
+  autoPreviewPullRequests: boolean;
   webhookSecret?: string;
   createdAt: string;
   updatedAt: string;
@@ -890,6 +909,14 @@ export interface InstanceSummary {
   primaryPort: number | null;
   createdAt: string;
   updatedAt: string;
+  /** F12.3 — git ref que esta Instance trackea explicitamente (null = cascade). */
+  trackedRef?: string | null;
+  /** F12.3 — ref efectivo tras aplicar la cascada Template.EnvironmentMapping → DefaultBranch. */
+  effectiveTrackedRef?: string | null;
+  /** F12.3 — true si la Instance es ephemeral (PR preview). */
+  isEphemeral?: boolean;
+  /** F12.3 — UserId Aethra del creador (autor del PR para previews). */
+  createdByUserId?: string | null;
 }
 
 export interface InstanceDetail extends InstanceSummary {
@@ -898,6 +925,8 @@ export interface InstanceDetail extends InstanceSummary {
   healthcheck: InstanceHealthcheck | null;
   createdAt: string;
   updatedAt: string;
+  /** F12.3 — expira (para safety net del cleanup background). */
+  expiresAt?: string | null;
 }
 
 export interface CreateInstanceRequest {
@@ -910,6 +939,8 @@ export interface CreateInstanceRequest {
   healthcheck?: InstanceHealthcheck | null;
   autoDeployOnNewBuild: boolean;
   customDomain?: string | null;
+  /** F12.3 — opcional. Default heredado de la cascada. */
+  trackedRef?: string | null;
 }
 
 export interface SetCustomDomainRequest {
@@ -1040,4 +1071,44 @@ export interface BackupPolicyDto {
   cronExpression: string;
   retentionCount: number;
   destination: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Scheduled jobs (F12.1A)                                                    */
+/* -------------------------------------------------------------------------- */
+
+export type ScheduledJobRunStatus =
+  | "Running"
+  | "Completed"
+  | "Failed"
+  | "TimedOut"
+  | "Cancelled";
+
+export interface ScheduledJobDto {
+  id: string;
+  serviceId: string;
+  name: string;
+  description: string | null;
+  command: string;
+  cronExpression: string;
+  timeZone: string;
+  enabled: boolean;
+  maxConcurrent: number;
+  timeoutSeconds: number;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScheduledJobRunDto {
+  id: string;
+  jobId: string;
+  startedAt: string;
+  finishedAt: string | null;
+  status: ScheduledJobRunStatus;
+  exitCode: number | null;
+  stdout: string | null;
+  stderr: string | null;
+  durationMs: number | null;
 }

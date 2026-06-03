@@ -1,6 +1,7 @@
 using Aethra.Modules.Projects.UseCases.Clients.Commands;
 using Aethra.Modules.Projects.UseCases.Clients.Queries;
 using Aethra.Modules.Projects.UseCases.Instances.Commands;
+using Aethra.Modules.Projects.UseCases.Instances.Dtos;
 using Aethra.Modules.Projects.UseCases.Instances.Queries;
 using Aethra.Modules.Projects.UseCases.Projects.Commands;
 using Aethra.Modules.Projects.UseCases.Projects.Queries;
@@ -64,6 +65,17 @@ public static class ProjectsEndpoints
                 ToResult(await m.Send(new GetProjectByIdQuery(id), ct)))
             .RequireAuthorization(ScopeProjectsRead)
             .WithName("GetProject");
+
+        // F12.3 — actualizar el cap de previews concurrentes del Project.
+        group.MapPatch("/{id}/preview-config", async (
+            string id,
+            [FromBody] SetPreviewConfigRequest body,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            var r = await m.Send(new SetPreviewConfigCommand(id, body.PreviewMaxConcurrent), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).RequireAuthorization(ScopeProjectsWrite).WithName("SetProjectPreviewConfig");
     }
 
     // -------------------------------------------------------------------------
@@ -106,6 +118,31 @@ public static class ProjectsEndpoints
         app.MapGet("/api/templates/{id}", async (string id, IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new GetTemplateByIdQuery(id), ct)))
             .WithTags("Templates").RequireAuthorization(ScopeProjectsRead).WithName("GetTemplate");
+
+        // F12.3 — Branch-per-Instance: reemplazar mapping Environment→Branch del Template.
+        app.MapPatch("/api/templates/{id}/environment-mapping", async (
+            string id,
+            [FromBody] SetEnvironmentMappingRequest body,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            var items = (body.Mappings ?? [])
+                .Select(x => new EnvironmentMappingItemDto(x.environment, x.branch))
+                .ToList();
+            var r = await m.Send(new SetEnvironmentMappingCommand(id, items), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Templates").RequireAuthorization(ScopeProjectsWrite).WithName("SetEnvironmentMapping");
+
+        // F12.3 — Preview deployments: opt-in / opt-out del auto-create de Instances ephemerals.
+        app.MapPatch("/api/templates/{id}/auto-preview", async (
+            string id,
+            [FromBody] SetAutoPreviewRequest body,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            var r = await m.Send(new SetAutoPreviewCommand(id, body.Enabled), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Templates").RequireAuthorization(ScopeProjectsWrite).WithName("SetAutoPreviewPullRequests");
 
         // F11.2: inspecciona un repo Git (shallow clone) y devuelve qué BuildType usar.
         app.MapPost("/api/templates/discover", async (
@@ -160,8 +197,31 @@ public static class ProjectsEndpoints
     {
         app.MapGet("/api/templates/{templateId}/instances",
                 async (string templateId, IMediator m, CancellationToken ct) =>
-                    ToResult(await m.Send(new ListInstancesQuery(templateId), ct)))
+                    ToResult(await m.Send(new ListInstancesQuery(TemplateId: templateId), ct)))
             .WithTags("Instances").RequireAuthorization(ScopeProjectsRead).WithName("ListInstances");
+
+        // F12.3 — listado plano con filtros para "Mis previews" / "Ephemerals del Project".
+        app.MapGet("/api/instances", async (
+            [FromQuery] string? projectId,
+            [FromQuery] string? templateId,
+            [FromQuery(Name = "owner_id")] string? ownerId,
+            [FromQuery] bool? ephemeral,
+            HttpContext http,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            // owner_id=me → reemplaza por el userId del cookie.
+            if (string.Equals(ownerId, "me", StringComparison.OrdinalIgnoreCase))
+            {
+                ownerId = http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            }
+            return ToResult(await m.Send(new ListInstancesQuery(
+                TemplateId: templateId,
+                ProjectId: projectId,
+                OwnerUserId: ownerId,
+                IsEphemeral: ephemeral), ct));
+        })
+        .WithTags("Instances").RequireAuthorization(ScopeProjectsRead).WithName("ListInstancesFiltered");
 
         app.MapPost("/api/templates/{templateId}/instances", async (
             string templateId,
@@ -178,7 +238,8 @@ public static class ProjectsEndpoints
                 Ports: body.Ports,
                 Volumes: body.Volumes,
                 Healthcheck: body.Healthcheck,
-                AutoDeployOnNewBuild: body.AutoDeployOnNewBuild);
+                AutoDeployOnNewBuild: body.AutoDeployOnNewBuild,
+                TrackedRef: body.TrackedRef);
             var r = await m.Send(cmd, ct);
             return r.IsSuccess
                 ? Results.Created($"/api/instances/{r.Value.id}", r.Value)
@@ -198,6 +259,28 @@ public static class ProjectsEndpoints
             var r = await m.Send(new SetCustomDomainCommand(id, body.CustomDomain), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("SetInstanceCustomDomain");
+
+        // F12.3 — setear/limpiar el TrackedRef de una Instance (override de la cascada del Template).
+        app.MapPatch("/api/instances/{id}/tracked-ref", async (
+            string id,
+            [FromBody] SetTrackedRefRequest body,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            var r = await m.Send(new SetTrackedRefCommand(id, body.TrackedRef), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("SetInstanceTrackedRef");
+
+        // F12.3 — borrar Instance ephemeral (cleanup manual de preview).
+        app.MapDelete("/api/instances/{id}", async (
+            string id,
+            [FromQuery] bool? force,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            var r = await m.Send(new DeleteInstanceCommand(id, force ?? false), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("DeleteInstance");
     }
 
     // -------------------------------------------------------------------------
@@ -242,12 +325,26 @@ public static class ProjectsEndpoints
         IReadOnlyList<CreateInstancePortDto>? Ports,
         IReadOnlyList<CreateInstanceVolumeDto>? Volumes,
         CreateInstanceHealthcheckDto? Healthcheck,
-        bool AutoDeployOnNewBuild);
+        bool AutoDeployOnNewBuild,
+        string? TrackedRef = null);
 
     public sealed record SetCustomDomainRequest(string? CustomDomain);
 
     /// <summary>F11.2 — Body de <c>POST /api/templates/discover</c>.</summary>
     public sealed record DiscoverTemplateRequest(string GitRepoUrl, string? Branch);
+
+    /// <summary>F12.3 — Body para <c>PATCH /api/templates/{id}/environment-mapping</c>.</summary>
+    public sealed record SetEnvironmentMappingRequest(IReadOnlyList<EnvironmentMappingRow>? Mappings);
+    public sealed record EnvironmentMappingRow(string environment, string branch);
+
+    /// <summary>F12.3 — Body para <c>PATCH /api/templates/{id}/auto-preview</c>.</summary>
+    public sealed record SetAutoPreviewRequest(bool Enabled);
+
+    /// <summary>F12.3 — Body para <c>PATCH /api/projects/{id}/preview-config</c>.</summary>
+    public sealed record SetPreviewConfigRequest(int PreviewMaxConcurrent);
+
+    /// <summary>F12.3 — Body para <c>PATCH /api/instances/{id}/tracked-ref</c>.</summary>
+    public sealed record SetTrackedRefRequest(string? TrackedRef);
 
     // -------------------------------------------------------------------------
     // Helpers

@@ -22,5 +22,6 @@ internal static class VmMapper
         CpuModel: v.CpuModel,
         CpuCores: v.CpuCores,
         TotalMemoryBytes: v.TotalMemoryBytes,
-        AgentVersion: v.Satellite.AgentVersion);
+        AgentVersion: v.Satellite.AgentVersion,
+        AcceptsPreviews: v.AcceptsPreviews);
 }

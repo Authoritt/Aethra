@@ -8,7 +8,8 @@ public sealed record UserSummaryDto(
     bool IsActive,
     DateTimeOffset? LastLoginAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? GitHubUsername = null);
 
 public sealed record RoleRefDto(
     string Id,

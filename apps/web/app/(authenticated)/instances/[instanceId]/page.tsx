@@ -126,6 +126,12 @@ export default async function InstanceDetailPage({
         </Badge>
         <Badge variant="outline">{t("ports_badge", { count: instance.ports.length })}</Badge>
         <Badge variant="outline">{t("volumes_badge", { count: instance.volumes.length })}</Badge>
+        {instance.isEphemeral ? <Badge variant="warning">ephemeral</Badge> : null}
+        {instance.effectiveTrackedRef ? (
+          <Badge variant="outline" className="font-mono text-[10px]">
+            {instance.effectiveTrackedRef}
+          </Badge>
+        ) : null}
       </div>
 
       <Tabs defaultValue="overview">

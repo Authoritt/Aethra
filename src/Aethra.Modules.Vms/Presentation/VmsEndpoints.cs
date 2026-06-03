@@ -158,6 +158,19 @@ public static class VmsEndpoints
         .AllowAnonymous()
         .WithName("DownloadInstallScript");
 
+        // F12.3 — opt-in / opt-out al pool de previews.
+        group.MapPatch("/{vmId}/accepts-previews", async (
+            string vmId,
+            [FromBody] SetAcceptsPreviewsRequest body,
+            IMediator mediator,
+            CancellationToken ct) =>
+        {
+            var r = await mediator.Send(new SetAcceptsPreviewsCommand(vmId, body.AcceptsPreviews), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("SetVmAcceptsPreviews");
+
         return app;
     }
 
@@ -186,6 +199,9 @@ public static class VmsEndpoints
     public sealed record SshBlock(string Host, int Port, string User, string AuthMethod, string Value);
 
     public sealed record ReinstallRequest(bool InstallContainerRuntime, string? ContainerRuntime);
+
+    /// <summary>F12.3 — body para <c>PATCH /api/vms/{id}/accepts-previews</c>.</summary>
+    public sealed record SetAcceptsPreviewsRequest(bool AcceptsPreviews);
 
     private static IResult ToResult<T>(Result<T> r)
         => r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);

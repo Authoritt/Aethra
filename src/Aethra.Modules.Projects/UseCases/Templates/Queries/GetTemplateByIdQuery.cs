@@ -30,6 +30,7 @@ internal sealed class GetTemplateByIdHandler(ProjectsDbContext db)
 
         var t = await db.Templates
             .AsNoTracking()
+            .Include(x => x.EnvironmentMapping)
             .FirstOrDefaultAsync(x => x.Id == templateId, cancellationToken)
             .ConfigureAwait(false);
 
@@ -40,6 +41,8 @@ internal sealed class GetTemplateByIdHandler(ProjectsDbContext db)
 
         IReadOnlyList<TemplateBuildArgDto> args =
             [.. t.Build.BuildArgs.Select(a => new TemplateBuildArgDto(a.Key, a.Value))];
+        IReadOnlyList<TemplateEnvironmentMappingDto> mappings =
+            [.. t.EnvironmentMapping.Select(m => new TemplateEnvironmentMappingDto(m.Environment, m.Branch))];
 
         return new TemplateDetail(
             id: t.Id.ToString(),
@@ -57,6 +60,8 @@ internal sealed class GetTemplateByIdHandler(ProjectsDbContext db)
             composeFilePath: t.Build.ComposeFilePath,
             buildArgs: args,
             createdAt: t.CreatedAt,
-            updatedAt: t.UpdatedAt);
+            updatedAt: t.UpdatedAt,
+            environmentMapping: mappings,
+            autoPreviewPullRequests: t.AutoPreviewPullRequests);
     }
 }

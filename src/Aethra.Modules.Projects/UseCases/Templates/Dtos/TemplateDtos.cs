@@ -35,7 +35,12 @@ public sealed record TemplateDetail(
     string? composeFilePath,
     IReadOnlyList<TemplateBuildArgDto> buildArgs,
     DateTimeOffset createdAt,
-    DateTimeOffset updatedAt);
+    DateTimeOffset updatedAt,
+    IReadOnlyList<TemplateEnvironmentMappingDto> environmentMapping,
+    bool autoPreviewPullRequests);
+
+/// <summary>F12.3 — row de mapping Environment→Branch para la vista detalle.</summary>
+public sealed record TemplateEnvironmentMappingDto(string environment, string branch);
 
 /// <summary>
 /// Respuesta del POST create: incluye el <c>webhookSecret</c> en plain — única oportunidad

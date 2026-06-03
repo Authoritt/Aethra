@@ -40,7 +40,8 @@ internal sealed class ListUsersHandler(IdentityDbContext db, IRoleRepository rol
             IsActive: u.IsActive,
             LastLoginAt: u.LastLoginAt,
             CreatedAt: u.CreatedAt,
-            UpdatedAt: u.UpdatedAt))];
+            UpdatedAt: u.UpdatedAt,
+            GitHubUsername: u.GitHubUsername))];
 
         return Result.Success(dtos);
     }
