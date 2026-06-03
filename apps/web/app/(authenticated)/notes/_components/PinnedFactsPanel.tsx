@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -54,6 +55,8 @@ export function PinnedFactsPanel({
   scopeType: NoteScopeType;
   scopeId: string;
 }) {
+  const t = useTranslations("pages.notes.pinned_facts");
+  const tParent = useTranslations("pages.notes");
   const [facts, setFacts] = useState<PinnedFactDto[]>([]);
   const [revealed, setRevealed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -75,7 +78,7 @@ export function PinnedFactsPanel({
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : tParent("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -103,7 +106,7 @@ export function PinnedFactsPanel({
               `Error ${e.status}`
             : e instanceof Error
               ? e.message
-              : "Error desconocido";
+              : tParent("error_unknown");
         toast.error(msg);
       } finally {
         if (!cancelled) setLoading(false);
@@ -113,7 +116,7 @@ export function PinnedFactsPanel({
     return () => {
       cancelled = true;
     };
-  }, [scopeType, scopeId]);
+  }, [scopeType, scopeId, tParent]);
 
   function onUpserted(fact: PinnedFactDto) {
     setFacts((arr) => {
@@ -135,7 +138,7 @@ export function PinnedFactsPanel({
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <h2 className="text-sm uppercase tracking-wider text-muted-foreground">
-          Pinned facts
+          {t("title")}
         </h2>
         <Button
           type="button"
@@ -146,12 +149,12 @@ export function PinnedFactsPanel({
           {revealed ? (
             <>
               <EyeOff className="mr-2 h-3.5 w-3.5" />
-              Ocultar secretos
+              {t("hide_secrets")}
             </>
           ) : (
             <>
               <Eye className="mr-2 h-3.5 w-3.5" />
-              Revelar secretos
+              {t("reveal_secrets")}
             </>
           )}
         </Button>
@@ -166,12 +169,12 @@ export function PinnedFactsPanel({
       {loading && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Cargando...
+          {t("loading")}
         </p>
       )}
       {!loading && facts.length === 0 && (
         <p className="text-xs text-muted-foreground">
-          Aún sin facts fijados.
+          {t("empty")}
         </p>
       )}
       {facts.length > 0 && (
@@ -190,19 +193,6 @@ export function PinnedFactsPanel({
   );
 }
 
-const factSchema = z.object({
-  key: z
-    .string()
-    .min(1, "Requerido")
-    .max(128)
-    .regex(/^[A-Za-z0-9_.\-]+$/, "Solo alfanumérico, _, . o -"),
-  value: z.string().min(1, "Requerido"),
-  description: z.string().max(500).optional().or(z.literal("")),
-  isSecret: z.boolean(),
-});
-
-type FactFormValues = z.infer<typeof factSchema>;
-
 function PinnedFactForm({
   scopeType,
   scopeId,
@@ -212,7 +202,26 @@ function PinnedFactForm({
   scopeId: string;
   onUpserted: (fact: PinnedFactDto) => void;
 }) {
+  const t = useTranslations("pages.notes.pinned_facts");
+  const tParent = useTranslations("pages.notes");
   const [isPending, startTransition] = useTransition();
+
+  const factSchema = useMemo(
+    () =>
+      z.object({
+        key: z
+          .string()
+          .min(1, t("validation_required"))
+          .max(128)
+          .regex(/^[A-Za-z0-9_.\-]+$/, t("validation_key_format")),
+        value: z.string().min(1, t("validation_required")),
+        description: z.string().max(500).optional().or(z.literal("")),
+        isSecret: z.boolean(),
+      }),
+    [t],
+  );
+
+  type FactFormValues = z.infer<typeof factSchema>;
 
   const form = useForm<FactFormValues>({
     resolver: zodResolver(factSchema),
@@ -241,7 +250,7 @@ function PinnedFactForm({
           method: "PUT",
           body: JSON.stringify(payload),
         });
-        toast.success("Fact guardado");
+        toast.success(t("toast_saved"));
         onUpserted(fact);
         form.reset({
           key: "",
@@ -256,7 +265,7 @@ function PinnedFactForm({
               `Error ${e.status}`
             : e instanceof Error
               ? e.message
-              : "Error desconocido";
+              : tParent("error_unknown");
         toast.error(msg);
       }
     });
@@ -275,11 +284,11 @@ function PinnedFactForm({
               name="key"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="sr-only">Key</FormLabel>
+                  <FormLabel className="sr-only">{t("label_key_sr")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="key (ej. admin_password)"
+                      placeholder={t("placeholder_key")}
                       maxLength={128}
                       className="font-mono text-sm"
                     />
@@ -293,12 +302,12 @@ function PinnedFactForm({
               name="value"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="sr-only">Valor</FormLabel>
+                  <FormLabel className="sr-only">{t("label_value_sr")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
                       type={isSecret ? "password" : "text"}
-                      placeholder="valor"
+                      placeholder={t("placeholder_value")}
                       className="font-mono text-sm"
                     />
                   </FormControl>
@@ -310,7 +319,7 @@ function PinnedFactForm({
               {isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Guardar
+              {t("save")}
             </Button>
 
             <FormField
@@ -318,11 +327,11 @@ function PinnedFactForm({
               name="description"
               render={({ field }) => (
                 <FormItem className="md:col-span-2">
-                  <FormLabel className="sr-only">Descripción</FormLabel>
+                  <FormLabel className="sr-only">{t("label_description_sr")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="descripción (opcional)"
+                      placeholder={t("placeholder_description")}
                       maxLength={500}
                     />
                   </FormControl>
@@ -346,7 +355,7 @@ function PinnedFactForm({
                     htmlFor="pf-is-secret"
                     className="cursor-pointer text-xs text-muted-foreground"
                   >
-                    Es secreto
+                    {t("is_secret")}
                   </Label>
                 </FormItem>
               )}
@@ -367,6 +376,8 @@ function PinnedFactRow({
   revealed: boolean;
   onDeleted: (id: string) => void;
 }) {
+  const t = useTranslations("pages.notes.pinned_facts");
+  const tParent = useTranslations("pages.notes");
   const [isPending, startTransition] = useTransition();
   const [copied, setCopied] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -375,10 +386,10 @@ function PinnedFactRow({
     startTransition(async () => {
       try {
         await api<void>(`/api/pinned-facts/${fact.id}`, { method: "DELETE" });
-        toast.success(`Fact "${fact.key}" eliminado`);
+        toast.success(t("toast_deleted", { key: fact.key }));
         onDeleted(fact.id);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Error desconocido");
+        toast.error(e instanceof Error ? e.message : tParent("error_unknown"));
       } finally {
         setDeleteOpen(false);
       }
@@ -389,10 +400,10 @@ function PinnedFactRow({
     try {
       await navigator.clipboard.writeText(fact.value);
       setCopied(true);
-      toast.success("Valor copiado");
+      toast.success(t("toast_copy_success"));
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error("No se pudo copiar; copialo a mano.");
+      toast.error(t("toast_copy_fail"));
     }
   }
 
@@ -412,7 +423,7 @@ function PinnedFactRow({
                   variant="outline"
                   className="border-warning/40 bg-warning/10 text-warning"
                 >
-                  secret
+                  {t("badge_secret")}
                 </Badge>
               )}
               <Button
@@ -421,18 +432,18 @@ function PinnedFactRow({
                 size="sm"
                 onClick={copyValue}
                 disabled={masked}
-                title={masked ? "Revelar primero" : "Copiar"}
+                title={masked ? t("copy_unauthorized_title") : t("copy_title")}
                 className="h-7 px-2 text-xs"
               >
                 {copied ? (
                   <>
                     <Check className="mr-1 h-3 w-3" />
-                    Copiado
+                    {t("copied")}
                   </>
                 ) : (
                   <>
                     <Copy className="mr-1 h-3 w-3" />
-                    Copiar
+                    {t("copy")}
                   </>
                 )}
               </Button>
@@ -448,7 +459,7 @@ function PinnedFactRow({
                 )}
               >
                 <Trash2 className="mr-1 h-3 w-3" />
-                Eliminar
+                {t("delete")}
               </Button>
             </div>
           </div>
@@ -466,15 +477,16 @@ function PinnedFactRow({
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar fact "{fact.key}"</DialogTitle>
+            <DialogTitle>
+              {t("delete_dialog_title", { key: fact.key })}
+            </DialogTitle>
             <DialogDescription>
-              Esta acción no se puede deshacer. Si algún módulo lo está
-              referenciando, dejará de resolverse.
+              {t("delete_dialog_description")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
-              Cancelar
+              {t("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -484,7 +496,7 @@ function PinnedFactRow({
               {isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Eliminar
+              {t("delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

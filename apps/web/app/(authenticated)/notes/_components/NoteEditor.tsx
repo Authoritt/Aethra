@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import ReactMarkdown from "react-markdown";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -48,13 +49,6 @@ import type {
   NoteScopeType,
 } from "@/lib/types";
 
-const schema = z.object({
-  title: z.string().min(1, "Requerido").max(255),
-  markdownBody: z.string().optional().or(z.literal("")),
-});
-
-type FormValues = z.infer<typeof schema>;
-
 /**
  * Editor de creación de notas. Textarea con preview lado-a-lado (renderizado por
  * react-markdown). Tras enviar, recarga la página para reflejar la lista.
@@ -68,7 +62,20 @@ export function NewNoteForm({
   scopeId: string;
   onCreated?: (note: NoteDetail) => void;
 }) {
+  const t = useTranslations("pages.notes.editor");
+  const tParent = useTranslations("pages.notes");
   const [isPending, startTransition] = useTransition();
+
+  const schema = useMemo(
+    () =>
+      z.object({
+        title: z.string().min(1, t("validation_required")).max(255),
+        markdownBody: z.string().optional().or(z.literal("")),
+      }),
+    [t],
+  );
+
+  type FormValues = z.infer<typeof schema>;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -88,7 +95,7 @@ export function NewNoteForm({
           method: "POST",
           body: JSON.stringify(payload),
         });
-        toast.success("Nota creada");
+        toast.success(t("toast_created"));
         form.reset({ title: "", markdownBody: "" });
         onCreated?.(created);
       } catch (e) {
@@ -98,7 +105,7 @@ export function NewNoteForm({
               `Error ${e.status}`
             : e instanceof Error
               ? e.message
-              : "Error desconocido";
+              : tParent("error_unknown");
         toast.error(msg);
       }
     });
@@ -119,11 +126,11 @@ export function NewNoteForm({
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Título</FormLabel>
+                  <FormLabel>{t("label_title")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="Título de la nota"
+                      placeholder={t("placeholder_title")}
                       maxLength={255}
                     />
                   </FormControl>
@@ -137,17 +144,17 @@ export function NewNoteForm({
               name="markdownBody"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Cuerpo</FormLabel>
+                  <FormLabel>{t("label_body")}</FormLabel>
                   <FormControl>
                     <Tabs defaultValue="edit">
                       <TabsList>
-                        <TabsTrigger value="edit">Editar</TabsTrigger>
-                        <TabsTrigger value="preview">Previsualizar</TabsTrigger>
+                        <TabsTrigger value="edit">{t("tab_edit")}</TabsTrigger>
+                        <TabsTrigger value="preview">{t("tab_preview")}</TabsTrigger>
                       </TabsList>
                       <TabsContent value="edit">
                         <Textarea
                           {...field}
-                          placeholder="Markdown..."
+                          placeholder={t("placeholder_markdown")}
                           rows={6}
                           className="font-mono text-sm"
                         />
@@ -158,7 +165,7 @@ export function NewNoteForm({
                             <ReactMarkdown>{body}</ReactMarkdown>
                           ) : (
                             <span className="text-muted-foreground">
-                              Nada que previsualizar.
+                              {t("nothing_to_preview")}
                             </span>
                           )}
                         </div>
@@ -175,7 +182,7 @@ export function NewNoteForm({
                 {isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Crear nota
+                {t("create")}
               </Button>
             </div>
           </form>
@@ -198,6 +205,8 @@ export function NoteCard({
   onChanged: (note: NoteDetail) => void;
   onDeleted: (id: string) => void;
 }) {
+  const t = useTranslations("pages.notes.editor");
+  const tParent = useTranslations("pages.notes");
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(note.title);
   const [body, setBody] = useState(note.markdownBody);
@@ -211,11 +220,11 @@ export function NoteCard({
           method: "PATCH",
           body: JSON.stringify({ title, markdownBody: body }),
         });
-        toast.success("Nota actualizada");
+        toast.success(t("toast_updated"));
         onChanged(updated);
         setEditing(false);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Error desconocido");
+        toast.error(e instanceof Error ? e.message : tParent("error_unknown"));
       }
     });
   }
@@ -227,10 +236,10 @@ export function NoteCard({
           method: "POST",
           body: JSON.stringify({ pinned: !note.isPinned }),
         });
-        toast.success(note.isPinned ? "Nota desfijada" : "Nota fijada");
+        toast.success(note.isPinned ? t("toast_unpinned") : t("toast_pinned"));
         onChanged(updated);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Error desconocido");
+        toast.error(e instanceof Error ? e.message : tParent("error_unknown"));
       }
     });
   }
@@ -239,10 +248,10 @@ export function NoteCard({
     startTransition(async () => {
       try {
         await api<void>(`/api/notes/${note.id}`, { method: "DELETE" });
-        toast.success("Nota eliminada");
+        toast.success(t("toast_deleted"));
         onDeleted(note.id);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Error desconocido");
+        toast.error(e instanceof Error ? e.message : tParent("error_unknown"));
       } finally {
         setDeleteOpen(false);
       }
@@ -271,7 +280,7 @@ export function NoteCard({
               {note.isPinned && (
                 <Star
                   className="h-4 w-4 fill-warning text-warning"
-                  aria-label="Fijada"
+                  aria-label={t("pinned_aria")}
                 />
               )}
               {note.title}
@@ -288,12 +297,12 @@ export function NoteCard({
               {note.isPinned ? (
                 <>
                   <PinOff className="mr-1 h-3.5 w-3.5" />
-                  Desfijar
+                  {t("unpin")}
                 </>
               ) : (
                 <>
                   <Pin className="mr-1 h-3.5 w-3.5" />
-                  Fijar
+                  {t("pin")}
                 </>
               )}
             </Button>
@@ -308,7 +317,7 @@ export function NoteCard({
                   {isPending ? (
                     <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
                   ) : null}
-                  Guardar
+                  {t("save")}
                 </Button>
                 <Button
                   type="button"
@@ -320,7 +329,7 @@ export function NoteCard({
                     setBody(note.markdownBody);
                   }}
                 >
-                  Cancelar
+                  {t("cancel")}
                 </Button>
               </>
             ) : (
@@ -331,7 +340,7 @@ export function NoteCard({
                   size="sm"
                   onClick={() => setEditing(true)}
                 >
-                  Editar
+                  {t("edit")}
                 </Button>
                 <Button
                   type="button"
@@ -342,7 +351,7 @@ export function NoteCard({
                   className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                 >
                   <Trash2 className="mr-1 h-3.5 w-3.5" />
-                  Eliminar
+                  {t("delete")}
                 </Button>
               </>
             )}
@@ -352,8 +361,8 @@ export function NoteCard({
         {editing ? (
           <Tabs defaultValue="edit">
             <TabsList>
-              <TabsTrigger value="edit">Editar</TabsTrigger>
-              <TabsTrigger value="preview">Previsualizar</TabsTrigger>
+              <TabsTrigger value="edit">{t("tab_edit")}</TabsTrigger>
+              <TabsTrigger value="preview">{t("tab_preview")}</TabsTrigger>
             </TabsList>
             <TabsContent value="edit">
               <Textarea
@@ -369,7 +378,7 @@ export function NoteCard({
                   <ReactMarkdown>{body}</ReactMarkdown>
                 ) : (
                   <span className="text-muted-foreground">
-                    Nada que previsualizar.
+                    {t("nothing_to_preview")}
                   </span>
                 )}
               </div>
@@ -380,7 +389,7 @@ export function NoteCard({
             {note.markdownBody.trim() ? (
               <ReactMarkdown>{note.markdownBody}</ReactMarkdown>
             ) : (
-              <p className="text-muted-foreground">(vacía)</p>
+              <p className="text-muted-foreground">{t("empty_body")}</p>
             )}
           </div>
         )}
@@ -413,25 +422,29 @@ export function NoteCard({
         <NoteImageUploader noteId={note.id} onUploaded={onChanged} />
 
         <footer className="flex justify-between text-[10px] text-muted-foreground">
-          <span>Actualizada: {new Date(note.updatedAt).toLocaleString()}</span>
           <span>
-            {note.images.length}{" "}
-            {note.images.length === 1 ? "imagen" : "imágenes"}
+            {t("updated_at", { date: new Date(note.updatedAt).toLocaleString() })}
+          </span>
+          <span>
+            {note.images.length === 1
+              ? t("images_count_one", { count: note.images.length })
+              : t("images_count_other", { count: note.images.length })}
           </span>
         </footer>
 
         <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Eliminar la nota "{note.title}"</DialogTitle>
+              <DialogTitle>
+                {t("delete_dialog_title", { title: note.title })}
+              </DialogTitle>
               <DialogDescription>
-                Esta acción no se puede deshacer. Las imágenes asociadas
-                también se eliminarán.
+                {t("delete_dialog_description")}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
-                Cancelar
+                {t("cancel")}
               </Button>
               <Button
                 variant="destructive"
@@ -441,7 +454,7 @@ export function NoteCard({
                 {isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Eliminar
+                {t("delete")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -458,6 +471,8 @@ function NoteImageUploader({
   noteId: string;
   onUploaded: (note: NoteDetail) => void;
 }) {
+  const t = useTranslations("pages.notes.editor");
+  const tParent = useTranslations("pages.notes");
   const [uploading, setUploading] = useState(false);
 
   async function onChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -484,10 +499,10 @@ function NoteImageUploader({
         throw new Error(text || `Error ${res.status}`);
       }
       const updated = await api<NoteDetail>(`/api/notes/${noteId}`);
-      toast.success("Imagen adjuntada");
+      toast.success(t("image_uploaded"));
       onUploaded(updated);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error desconocido");
+      toast.error(e instanceof Error ? e.message : tParent("error_unknown"));
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -516,11 +531,11 @@ function NoteImageUploader({
           ) : (
             <ImageIcon className="mr-2 h-3.5 w-3.5" />
           )}
-          {uploading ? "Subiendo..." : "Adjuntar imagen"}
+          {uploading ? t("image_uploading") : t("image_attach")}
         </label>
       </Button>
       <span className="text-[10px] text-muted-foreground">
-        JPG/PNG/WEBP/GIF · máx 5 MB
+        {t("image_hint")}
       </span>
     </div>
   );
