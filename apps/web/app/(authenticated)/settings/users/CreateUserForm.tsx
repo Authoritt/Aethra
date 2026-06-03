@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -29,17 +30,6 @@ import type {
   RoleDto,
 } from "@/lib/types";
 
-const schema = z.object({
-  email: z.string().email("Email inválido").max(256),
-  password: z
-    .string()
-    .min(8, "Mínimo 8 caracteres")
-    .max(256, "Máximo 256 caracteres"),
-  displayName: z.string().max(100).optional().or(z.literal("")),
-});
-
-type FormValues = z.infer<typeof schema>;
-
 function generatePassword(length = 16): string {
   const charset =
     "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^*";
@@ -53,9 +43,26 @@ function generatePassword(length = 16): string {
 }
 
 export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
+  const t = useTranslations("pages.settings_users.new");
+  const tParent = useTranslations("pages.settings_users");
   const router = useRouter();
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  const schema = useMemo(
+    () =>
+      z.object({
+        email: z.string().email(t("validation_email")).max(256),
+        password: z
+          .string()
+          .min(8, t("validation_password_min"))
+          .max(256, t("validation_password_max")),
+        displayName: z.string().max(100).optional().or(z.literal("")),
+      }),
+    [t],
+  );
+
+  type FormValues = z.infer<typeof schema>;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -74,7 +81,7 @@ export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
 
   async function onSubmit(values: FormValues) {
     if (selectedRoles.length === 0) {
-      toast.error("Seleccioná al menos un rol.");
+      toast.error(t("validation_roles_required"));
       return;
     }
     setSubmitting(true);
@@ -89,7 +96,7 @@ export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success(`Usuario ${created.email} creado`);
+      toast.success(t("toast_created", { email: created.email }));
       router.push("/settings/users");
       router.refresh();
     } catch (e) {
@@ -99,7 +106,7 @@ export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
               ?.message ?? `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : tParent("error_unknown");
       toast.error(msg);
       setSubmitting(false);
     }
@@ -118,18 +125,18 @@ export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email *</FormLabel>
+                  <FormLabel>{tParent("label_email")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
                       type="email"
-                      placeholder="dev@aethra.local"
+                      placeholder={t("placeholder_email")}
                       autoFocus
                       autoComplete="off"
                     />
                   </FormControl>
                   <FormDescription>
-                    Único en el workspace. Se usa para login y notificaciones.
+                    {t("email_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -141,11 +148,11 @@ export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
               name="displayName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nombre completo</FormLabel>
+                  <FormLabel>{t("label_full_name")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="Juana Pérez"
+                      placeholder={t("placeholder_full_name")}
                       autoComplete="off"
                     />
                   </FormControl>
@@ -159,13 +166,13 @@ export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Contraseña inicial *</FormLabel>
+                  <FormLabel>{tParent("label_password")}</FormLabel>
                   <div className="flex gap-2">
                     <FormControl>
                       <Input
                         {...field}
                         type="text"
-                        placeholder="mínimo 8 caracteres"
+                        placeholder={t("password_placeholder")}
                         autoComplete="new-password"
                         className="font-mono text-sm"
                       />
@@ -176,12 +183,11 @@ export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
                       onClick={() => field.onChange(generatePassword())}
                     >
                       <RefreshCw className="mr-2 h-4 w-4" />
-                      Generar
+                      {t("generate")}
                     </Button>
                   </div>
                   <FormDescription>
-                    Comunicala al usuario por canal seguro; podrá cambiarla
-                    desde su cuenta.
+                    {t("password_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -190,11 +196,10 @@ export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
 
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium leading-none">
-                Roles *
+                {t("roles_label")}
               </label>
               <p className="text-xs text-muted-foreground">
-                Los permisos del usuario son la unión de los scopes de los
-                roles asignados.
+                {t("roles_hint")}
               </p>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {roles.map((role) => {
@@ -224,12 +229,12 @@ export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
                               variant="outline"
                               className="text-[10px]"
                             >
-                              builtin
+                              {t("badge_builtin")}
                             </Badge>
                           ) : null}
                           {role.slug === "admin" ? (
                             <Badge variant="warning" className="text-[10px]">
-                              admin
+                              {t("badge_admin")}
                             </Badge>
                           ) : null}
                         </div>
@@ -237,7 +242,7 @@ export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
                           {role.slug}
                         </span>
                         <span className="text-[10px] text-muted-foreground">
-                          {role.scopes.length} scopes
+                          {t("scopes_count", { count: role.scopes.length })}
                         </span>
                       </div>
                     </label>
@@ -252,13 +257,13 @@ export function CreateUserForm({ roles }: { roles: RoleDto[] }) {
                 variant="ghost"
                 onClick={() => router.push("/settings/users")}
               >
-                Cancelar
+                {tParent("cancel")}
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Crear usuario
+                {tParent("submit")}
               </Button>
             </div>
           </form>

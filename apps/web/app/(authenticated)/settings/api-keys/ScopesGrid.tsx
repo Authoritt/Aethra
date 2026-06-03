@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,78 +14,88 @@ import { cn } from "@/lib/utils";
  */
 export const SCOPE_CATALOG: {
   category: string;
-  description: string;
-  scopes: { value: string; description: string }[];
+  categoryKey: string;
+  descriptionKey: string;
+  scopes: { value: string; descriptionKey: string }[];
 }[] = [
   {
     category: "Projects",
-    description: "Proyectos, environments y applications.",
+    categoryKey: "cat_projects",
+    descriptionKey: "cat_projects_description",
     scopes: [
-      { value: "projects:read", description: "Listar y leer projects/envs/apps." },
-      { value: "projects:write", description: "Crear y modificar projects/envs/apps." },
+      { value: "projects:read", descriptionKey: "scope_projects_read" },
+      { value: "projects:write", descriptionKey: "scope_projects_write" },
     ],
   },
   {
     category: "Deployments",
-    description: "Pipelines git -> docker.",
+    categoryKey: "cat_deployments",
+    descriptionKey: "cat_deployments_description",
     scopes: [
-      { value: "deployments:read", description: "Leer jobs y logs de deploy." },
-      { value: "deployments:write", description: "Cancelar / configurar deploys." },
-      { value: "deployments:trigger", description: "Lanzar deploys manuales o via webhook." },
+      { value: "deployments:read", descriptionKey: "scope_deployments_read" },
+      { value: "deployments:write", descriptionKey: "scope_deployments_write" },
+      { value: "deployments:trigger", descriptionKey: "scope_deployments_trigger" },
     ],
   },
   {
     category: "Services",
-    description: "Managed services y bindings.",
+    categoryKey: "cat_services",
+    descriptionKey: "cat_services_description",
     scopes: [
-      { value: "services:read", description: "Listar plantillas y servicios." },
-      { value: "services:write", description: "Crear servicios y bindings." },
+      { value: "services:read", descriptionKey: "scope_services_read" },
+      { value: "services:write", descriptionKey: "scope_services_write" },
     ],
   },
   {
     category: "Monitoring",
-    description: "Monitores HTTP de uptime.",
+    categoryKey: "cat_monitoring",
+    descriptionKey: "cat_monitoring_description",
     scopes: [
-      { value: "monitoring:read", description: "Leer monitores y checks." },
-      { value: "monitoring:write", description: "Crear y modificar monitores." },
+      { value: "monitoring:read", descriptionKey: "scope_monitoring_read" },
+      { value: "monitoring:write", descriptionKey: "scope_monitoring_write" },
     ],
   },
   {
     category: "Metrics",
-    description: "Telemetria de VMs.",
+    categoryKey: "cat_metrics",
+    descriptionKey: "cat_metrics_description",
     scopes: [
-      { value: "metrics:read", description: "Leer series temporales de CPU/RAM/red." },
+      { value: "metrics:read", descriptionKey: "scope_metrics_read" },
     ],
   },
   {
     category: "Cloudflare",
-    description: "Zonas DNS y records.",
+    categoryKey: "cat_cloudflare",
+    descriptionKey: "cat_cloudflare_description",
     scopes: [
-      { value: "cloudflare:read", description: "Listar zonas y records." },
-      { value: "cloudflare:write", description: "Sincronizar y modificar records." },
+      { value: "cloudflare:read", descriptionKey: "scope_cloudflare_read" },
+      { value: "cloudflare:write", descriptionKey: "scope_cloudflare_write" },
     ],
   },
   {
     category: "VMs",
-    description: "Hosts gestionados con satelite.",
+    categoryKey: "cat_vms",
+    descriptionKey: "cat_vms_description",
     scopes: [
-      { value: "vms:read", description: "Listar VMs y su estado." },
-      { value: "vms:write", description: "Registrar y desregistrar VMs." },
+      { value: "vms:read", descriptionKey: "scope_vms_read" },
+      { value: "vms:write", descriptionKey: "scope_vms_write" },
     ],
   },
   {
     category: "Notes",
-    description: "Notas y pinned facts del workspace.",
+    categoryKey: "cat_notes",
+    descriptionKey: "cat_notes_description",
     scopes: [
-      { value: "notes:read", description: "Leer notas y facts." },
-      { value: "notes:write", description: "Crear y editar notas." },
+      { value: "notes:read", descriptionKey: "scope_notes_read" },
+      { value: "notes:write", descriptionKey: "scope_notes_write" },
     ],
   },
   {
     category: "Context",
-    description: "Snapshot global para agentes IA.",
+    categoryKey: "cat_context",
+    descriptionKey: "cat_context_description",
     scopes: [
-      { value: "context:read", description: "Leer el contexto consolidado /context." },
+      { value: "context:read", descriptionKey: "scope_context_read" },
     ],
   },
 ];
@@ -104,6 +115,7 @@ export interface ScopesGridProps {
 }
 
 export function ScopesGrid({ selected, onChange, disabled }: ScopesGridProps) {
+  const t = useTranslations("pages.settings_api_keys.scopes");
   const set = useMemo(() => new Set(selected), [selected]);
   const isAdmin = set.has(ADMIN_SCOPE);
   const allSelected =
@@ -161,7 +173,7 @@ export function ScopesGrid({ selected, onChange, disabled }: ScopesGridProps) {
           onClick={selectAll}
           disabled={disabled || allSelected}
         >
-          Seleccionar todos
+          {t("select_all")}
         </Button>
         <Button
           type="button"
@@ -170,7 +182,7 @@ export function ScopesGrid({ selected, onChange, disabled }: ScopesGridProps) {
           onClick={selectReadOnly}
           disabled={disabled || readOnlyMatches}
         >
-          Solo lectura
+          {t("read_only")}
         </Button>
         <Button
           type="button"
@@ -179,12 +191,15 @@ export function ScopesGrid({ selected, onChange, disabled }: ScopesGridProps) {
           onClick={clear}
           disabled={disabled || selected.length === 0}
         >
-          Limpiar
+          {t("clear")}
         </Button>
         <span className="ml-auto text-xs text-muted-foreground">
           {isAdmin
-            ? "Admin total (*)"
-            : `${selected.length}/${ALL_NON_ADMIN_SCOPES.length} scopes`}
+            ? t("admin_total_label", { count: "*" })
+            : t("scopes_count", {
+                count: selected.length,
+                total: ALL_NON_ADMIN_SCOPES.length,
+              })}
         </span>
       </div>
 
@@ -202,7 +217,7 @@ export function ScopesGrid({ selected, onChange, disabled }: ScopesGridProps) {
             onCheckedChange={toggleAdmin}
             disabled={disabled}
             className="mt-0.5"
-            aria-label="Admin total"
+            aria-label={t("admin_aria")}
           />
           <div className="flex flex-1 flex-col gap-0.5">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -212,7 +227,7 @@ export function ScopesGrid({ selected, onChange, disabled }: ScopesGridProps) {
                   isAdmin ? "text-warning" : "text-muted-foreground",
                 )}
               />
-              Admin total <span className="font-mono">(*)</span>
+              {t("admin_title")} <span className="font-mono">(*)</span>
             </div>
             <p
               className={cn(
@@ -220,8 +235,7 @@ export function ScopesGrid({ selected, onChange, disabled }: ScopesGridProps) {
                 isAdmin ? "text-warning-foreground/80" : "text-muted-foreground",
               )}
             >
-              Concede acceso a todos los endpoints actuales y futuros. Usá con
-              moderación y solo para integraciones de infraestructura.
+              {t("admin_hint")}
             </p>
           </div>
         </CardContent>
@@ -239,10 +253,10 @@ export function ScopesGrid({ selected, onChange, disabled }: ScopesGridProps) {
             <CardContent className="flex flex-col gap-2 p-4">
               <header>
                 <h4 className="text-sm font-semibold text-foreground">
-                  {cat.category}
+                  {t(cat.categoryKey)}
                 </h4>
                 <p className="text-[11px] text-muted-foreground">
-                  {cat.description}
+                  {t(cat.descriptionKey)}
                 </p>
               </header>
               <div className="flex flex-col gap-1.5">
@@ -269,7 +283,7 @@ export function ScopesGrid({ selected, onChange, disabled }: ScopesGridProps) {
                           {s.value}
                         </span>
                         <span className="text-[10px] text-muted-foreground">
-                          {s.description}
+                          {t(s.descriptionKey)}
                         </span>
                       </span>
                     </label>

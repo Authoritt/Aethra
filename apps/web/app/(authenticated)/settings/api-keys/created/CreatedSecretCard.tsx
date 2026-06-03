@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   AlertTriangle,
   Check,
@@ -27,6 +28,7 @@ type LoadState =
   | { kind: "loaded"; secret: string };
 
 export function CreatedSecretCard({ id }: { id: string | null }) {
+  const t = useTranslations("pages.settings_api_keys.created");
   const router = useRouter();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [revealed, setRevealed] = useState(false);
@@ -51,10 +53,10 @@ export function CreatedSecretCard({ id }: { id: string | null }) {
     try {
       await navigator.clipboard.writeText(state.secret);
       setCopied(true);
-      toast.success("Secret copiado al portapapeles");
+      toast.success(t("toast_copied"));
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      toast.error("No se pudo copiar; copialo a mano.");
+      toast.error(t("toast_copy_fail"));
     }
   }
 
@@ -69,7 +71,7 @@ export function CreatedSecretCard({ id }: { id: string | null }) {
       <Card>
         <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Cargando secret...
+          {t("loading")}
         </CardContent>
       </Card>
     );
@@ -83,26 +85,22 @@ export function CreatedSecretCard({ id }: { id: string | null }) {
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
             <div className="flex flex-col gap-2">
               <h2 className="text-base font-semibold text-foreground">
-                No encontramos el secret en esta sesión
+                {t("missing_title")}
               </h2>
               <p className="text-muted-foreground">
-                El secret solo existe en memoria del navegador durante el
-                momento inmediatamente posterior a su creación. Si recargaste
-                la página, cerraste la pestaña o abriste el enlace desde otro
-                lugar, ya no es recuperable.
+                {t("missing_description")}
               </p>
               <p className="text-muted-foreground">
-                Si creés que perdiste un secret recién creado, revocá la key y
-                creá una nueva.
+                {t("missing_recovery")}
               </p>
             </div>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" asChild>
-              <Link href="/settings/api-keys">Volver al listado</Link>
+              <Link href="/settings/api-keys">{t("back_to_list")}</Link>
             </Button>
             <Button asChild>
-              <Link href="/settings/api-keys/new">Crear otra key</Link>
+              <Link href="/settings/api-keys/new">{t("create_another")}</Link>
             </Button>
           </div>
         </CardContent>
@@ -117,11 +115,10 @@ export function CreatedSecretCard({ id }: { id: string | null }) {
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
           <div className="flex flex-col gap-1">
             <p className="font-medium text-foreground">
-              Este es el único momento en que podés ver el secret.
+              {t("warning_title")}
             </p>
             <p className="text-muted-foreground">
-              Guardalo en tu password manager o variable de entorno antes de
-              cerrar esta página. Aethra solo almacena el hash.
+              {t("warning_description")}
             </p>
           </div>
         </CardContent>
@@ -131,7 +128,7 @@ export function CreatedSecretCard({ id }: { id: string | null }) {
         <CardContent className="flex flex-col gap-3 p-5">
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs uppercase tracking-wider text-muted-foreground">
-              Secret
+              {t("secret_label")}
             </span>
             <div className="flex items-center gap-2">
               <Button
@@ -143,12 +140,12 @@ export function CreatedSecretCard({ id }: { id: string | null }) {
                 {revealed ? (
                   <>
                     <EyeOff className="mr-2 h-3.5 w-3.5" />
-                    Ocultar
+                    {t("hide")}
                   </>
                 ) : (
                   <>
                     <Eye className="mr-2 h-3.5 w-3.5" />
-                    Mostrar
+                    {t("show")}
                   </>
                 )}
               </Button>
@@ -156,12 +153,12 @@ export function CreatedSecretCard({ id }: { id: string | null }) {
                 {copied ? (
                   <>
                     <Check className="mr-2 h-3.5 w-3.5" />
-                    Copiado
+                    {t("copied")}
                   </>
                 ) : (
                   <>
                     <Copy className="mr-2 h-3.5 w-3.5" />
-                    Copiar
+                    {t("copy")}
                   </>
                 )}
               </Button>
@@ -169,12 +166,12 @@ export function CreatedSecretCard({ id }: { id: string | null }) {
           </div>
           <pre
             className="overflow-x-auto rounded-md border border-border bg-muted px-4 py-3 font-mono text-sm text-foreground"
-            aria-label={revealed ? "API key secret" : "API key secret oculto"}
+            aria-label={revealed ? t("secret_visible_aria") : t("secret_hidden_aria")}
           >
             {revealed ? state.secret : maskSecret(state.secret)}
           </pre>
           <p className="text-[11px] text-muted-foreground">
-            Usalo como{" "}
+            {t("usage_prefix")}{" "}
             <code className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">
               Authorization: Bearer{" "}
               {revealed ? state.secret.slice(0, 18) : "aethra_********"}
@@ -196,15 +193,14 @@ export function CreatedSecretCard({ id }: { id: string | null }) {
             htmlFor="ack-secret"
             className="cursor-pointer text-muted-foreground"
           >
-            Confirmo que copié y guardé el secret en un lugar seguro. Entiendo
-            que después de salir no podré verlo de nuevo.
+            {t("ack_label")}
           </Label>
         </CardContent>
       </Card>
 
       <div className="flex justify-end">
         <Button type="button" onClick={done} disabled={!acknowledged}>
-          Listo
+          {t("done")}
         </Button>
       </div>
     </div>

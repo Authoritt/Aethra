@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,22 +24,31 @@ import { ApiError, api } from "@/lib/api";
 import type { CreatedRole, CreateRoleRequest } from "@/lib/types";
 import { ScopesGrid } from "../api-keys/ScopesGrid";
 
-const schema = z.object({
-  slug: z
-    .string()
-    .min(1, "Requerido")
-    .max(64, "Máximo 64 caracteres")
-    .regex(/^[a-z0-9_-]+$/, "Solo a-z, 0-9, guion (-) y guion bajo (_)."),
-  displayName: z.string().min(1, "Requerido").max(100, "Máximo 100 caracteres"),
-});
-
-type FormValues = z.infer<typeof schema>;
-
 export function CreateRoleForm() {
+  const t = useTranslations("pages.settings_roles.new");
+  const tParent = useTranslations("pages.settings_roles");
   const router = useRouter();
   const [scopes, setScopes] = useState<string[]>([]);
   const [scopesTouched, setScopesTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const schema = useMemo(
+    () =>
+      z.object({
+        slug: z
+          .string()
+          .min(1, t("validation_required"))
+          .max(64, t("validation_slug_max"))
+          .regex(/^[a-z0-9_-]+$/, t("validation_slug_format")),
+        displayName: z
+          .string()
+          .min(1, t("validation_required"))
+          .max(100, t("validation_display_max")),
+      }),
+    [t],
+  );
+
+  type FormValues = z.infer<typeof schema>;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -48,7 +58,7 @@ export function CreateRoleForm() {
   async function onSubmit(values: FormValues) {
     if (scopes.length === 0) {
       setScopesTouched(true);
-      toast.error("Seleccioná al menos un scope.");
+      toast.error(t("validation_scopes_required"));
       return;
     }
     setSubmitting(true);
@@ -62,7 +72,7 @@ export function CreateRoleForm() {
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success(`Rol ${created.displayName} creado`);
+      toast.success(t("toast_created", { name: created.displayName }));
       router.push("/settings/roles");
       router.refresh();
     } catch (e) {
@@ -72,7 +82,7 @@ export function CreateRoleForm() {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : tParent("error_unknown");
       toast.error(msg);
       setSubmitting(false);
     }
@@ -91,17 +101,17 @@ export function CreateRoleForm() {
               name="slug"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Slug *</FormLabel>
+                  <FormLabel>{t("label_slug")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="ops-readonly"
+                      placeholder={t("placeholder_slug")}
                       className="font-mono"
                       autoFocus
                     />
                   </FormControl>
                   <FormDescription>
-                    Identificador único en URLs y APIs. Inmutable después de crear.
+                    {t("slug_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -113,11 +123,11 @@ export function CreateRoleForm() {
               name="displayName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nombre visible *</FormLabel>
+                  <FormLabel>{t("label_display")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="Operaciones (read-only)"
+                      placeholder={t("placeholder_display")}
                     />
                   </FormControl>
                   <FormMessage />
@@ -127,10 +137,10 @@ export function CreateRoleForm() {
 
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Scopes *</span>
+                <span className="text-sm font-medium">{t("scopes_label")}</span>
                 {scopes.length === 0 && scopesTouched && (
                   <span className="text-xs text-destructive">
-                    Seleccioná al menos uno
+                    {t("scopes_required_inline")}
                   </span>
                 )}
               </div>
@@ -150,13 +160,13 @@ export function CreateRoleForm() {
                 variant="ghost"
                 onClick={() => router.push("/settings/roles")}
               >
-                Cancelar
+                {tParent("cancel")}
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Crear rol
+                {tParent("submit")}
               </Button>
             </div>
           </form>

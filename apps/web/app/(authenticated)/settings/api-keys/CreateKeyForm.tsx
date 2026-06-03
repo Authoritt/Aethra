@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -27,14 +28,6 @@ import { ScopesGrid } from "./ScopesGrid";
 const NAME_MAX = 80;
 
 type ExpiresPreset = "never" | "30d" | "90d" | "365d" | "custom";
-
-const PRESET_LABELS: Record<ExpiresPreset, string> = {
-  never: "Sin expiracion",
-  "30d": "30 dias",
-  "90d": "90 dias",
-  "365d": "1 ano",
-  custom: "Personalizado",
-};
 
 const SESSION_KEY_PREFIX = "aethra.api-key.secret.";
 
@@ -79,38 +72,52 @@ function presetToIso(preset: ExpiresPreset, custom: string): string | null {
   return d.toISOString();
 }
 
-const schema = z
-  .object({
-    name: z
-      .string()
-      .min(1, "Requerido")
-      .max(NAME_MAX, `Maximo ${NAME_MAX} caracteres.`),
-    preset: z.enum(["never", "30d", "90d", "365d", "custom"]),
-    customDate: z.string().optional().or(z.literal("")),
-  })
-  .refine(
-    (values) => {
-      if (values.preset !== "custom") return true;
-      if (!values.customDate) return false;
-      const d = new Date(values.customDate);
-      if (Number.isNaN(d.getTime())) return false;
-      return d.getTime() > Date.now();
-    },
-    {
-      message: "Selecciona una fecha futura.",
-      path: ["customDate"],
-    },
-  );
-
-type FormValues = z.infer<typeof schema>;
-
 export function CreateKeyForm() {
+  const t = useTranslations("pages.settings_api_keys.create");
+  const tParent = useTranslations("pages.settings_api_keys");
   const router = useRouter();
   const [scopes, setScopes] = useState<string[]>([]);
   const [scopesTouched, setScopesTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const PRESET_LABELS: Record<ExpiresPreset, string> = {
+    never: t("preset_never"),
+    "30d": t("preset_30d"),
+    "90d": t("preset_90d"),
+    "365d": t("preset_365d"),
+    custom: t("preset_custom"),
+  };
+
+  const schema = useMemo(
+    () =>
+      z
+        .object({
+          name: z
+            .string()
+            .min(1, t("validation_required"))
+            .max(NAME_MAX, t("validation_max", { max: NAME_MAX })),
+          preset: z.enum(["never", "30d", "90d", "365d", "custom"]),
+          customDate: z.string().optional().or(z.literal("")),
+        })
+        .refine(
+          (values) => {
+            if (values.preset !== "custom") return true;
+            if (!values.customDate) return false;
+            const d = new Date(values.customDate);
+            if (Number.isNaN(d.getTime())) return false;
+            return d.getTime() > Date.now();
+          },
+          {
+            message: t("validation_future"),
+            path: ["customDate"],
+          },
+        ),
+    [t],
+  );
+
+  type FormValues = z.infer<typeof schema>;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -126,7 +133,7 @@ export function CreateKeyForm() {
   async function onSubmit(values: FormValues) {
     if (scopes.length === 0) {
       setScopesTouched(true);
-      toast.error("Seleccioná al menos un scope.");
+      toast.error(t("scopes_required"));
       return;
     }
     setSubmitting(true);
@@ -144,7 +151,7 @@ export function CreateKeyForm() {
         },
       );
       persistSecretInSession(created.id, created.secret);
-      toast.success("API key creada");
+      toast.success(t("toast_created"));
       router.push(`/settings/api-keys/created?id=${encodeURIComponent(created.id)}`);
       router.refresh();
     } catch (e) {
@@ -173,18 +180,17 @@ export function CreateKeyForm() {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nombre *</FormLabel>
+                  <FormLabel>{tParent("label_name")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="CI deploy bot"
+                      placeholder={t("placeholder_name")}
                       maxLength={NAME_MAX}
                       autoFocus
                     />
                   </FormControl>
                   <FormDescription>
-                    Identifica para qué se usará esta key (ej: CI/CD GitHub Actions,
-                    claude agent dev).
+                    {t("name_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -193,10 +199,10 @@ export function CreateKeyForm() {
 
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <Label asLabel>Scopes *</Label>
+                <Label asLabel>{t("scopes_label")}</Label>
                 {scopes.length === 0 && scopesTouched && (
                   <span className="text-xs text-destructive">
-                    Seleccioná al menos uno
+                    {t("scopes_required_inline")}
                   </span>
                 )}
               </div>
@@ -215,7 +221,7 @@ export function CreateKeyForm() {
               name="preset"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Expiración</FormLabel>
+                  <FormLabel>{t("expiration_label")}</FormLabel>
                   <FormControl>
                     <div className="flex flex-wrap gap-2">
                       {(Object.keys(PRESET_LABELS) as ExpiresPreset[]).map((p) => {
@@ -239,7 +245,7 @@ export function CreateKeyForm() {
                     </div>
                   </FormControl>
                   <FormDescription>
-                    Una expiración corta limita el blast radius si el secret se filtra.
+                    {t("expiration_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -252,7 +258,7 @@ export function CreateKeyForm() {
                 name="customDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Fecha de expiración *</FormLabel>
+                    <FormLabel>{t("custom_date_label")}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -273,13 +279,13 @@ export function CreateKeyForm() {
                 variant="ghost"
                 onClick={() => router.push("/settings/api-keys")}
               >
-                Cancelar
+                {tParent("cancel")}
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Crear API key
+                {tParent("submit")}
               </Button>
             </div>
           </form>

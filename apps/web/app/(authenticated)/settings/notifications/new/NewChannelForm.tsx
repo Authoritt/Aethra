@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,15 +25,9 @@ import {
 
 type ChannelTypeValue = NotificationChannelType;
 
-const CHANNEL_OPTIONS: { value: ChannelTypeValue; label: string }[] = [
-  { value: "Slack", label: "Slack (webhook)" },
-  { value: "Discord", label: "Discord (webhook)" },
-  { value: "Telegram", label: "Telegram (bot API)" },
-  { value: "Email", label: "Email (SMTP)" },
-  { value: "Webhook", label: "Webhook generico" },
-];
-
 export function NewChannelForm() {
+  const t = useTranslations("pages.settings_notifications.new");
+  const tParent = useTranslations("pages.settings_notifications");
   const router = useRouter();
   const [name, setName] = useState("");
   const [type, setType] = useState<ChannelTypeValue>("Slack");
@@ -48,6 +43,14 @@ export function NewChannelForm() {
   const [emailTo, setEmailTo] = useState("");
   const [whUrl, setWhUrl] = useState("");
   const [whMethod, setWhMethod] = useState("POST");
+
+  const CHANNEL_OPTIONS: { value: ChannelTypeValue; label: string }[] = [
+    { value: "Slack", label: t("channel_slack") },
+    { value: "Discord", label: t("channel_discord") },
+    { value: "Telegram", label: t("channel_telegram") },
+    { value: "Email", label: t("channel_email") },
+    { value: "Webhook", label: t("channel_webhook") },
+  ];
 
   function toggleFilter(ev: string) {
     setFilters((prev) =>
@@ -88,7 +91,7 @@ export function NewChannelForm() {
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success(`Canal "${name}" creado`);
+      toast.success(t("toast_created", { name }));
       router.push("/settings/notifications");
       router.refresh();
     } catch (err) {
@@ -98,7 +101,7 @@ export function NewChannelForm() {
             `Error ${err.status}`
           : err instanceof Error
             ? err.message
-            : "Error desconocido";
+            : tParent("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -110,19 +113,19 @@ export function NewChannelForm() {
       <Card>
         <CardContent className="space-y-4 p-5">
           <div className="space-y-2">
-            <Label htmlFor="name">Nombre</Label>
+            <Label htmlFor="name">{t("label_name")}</Label>
             <Input
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="alerts-team-ops"
+              placeholder={t("placeholder_name")}
               required
               maxLength={100}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Tipo</Label>
+            <Label>{t("label_type")}</Label>
             <Select
               value={type}
               onValueChange={(v) => setType(v as ChannelTypeValue)}
@@ -142,12 +145,12 @@ export function NewChannelForm() {
 
           {(type === "Slack" || type === "Discord") && (
             <div className="space-y-2">
-              <Label htmlFor="webhook_url">Webhook URL</Label>
+              <Label htmlFor="webhook_url">{t("label_webhook_url")}</Label>
               <Input
                 id="webhook_url"
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
-                placeholder="https://hooks.slack.com/services/..."
+                placeholder={t("placeholder_webhook_url")}
                 required
               />
             </div>
@@ -156,7 +159,7 @@ export function NewChannelForm() {
           {type === "Telegram" && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="bot_token">Bot token</Label>
+                <Label htmlFor="bot_token">{t("label_bot_token")}</Label>
                 <Input
                   id="bot_token"
                   value={botToken}
@@ -165,7 +168,7 @@ export function NewChannelForm() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="chat_id">Chat ID</Label>
+                <Label htmlFor="chat_id">{t("label_chat_id")}</Label>
                 <Input
                   id="chat_id"
                   value={chatId}
@@ -179,16 +182,16 @@ export function NewChannelForm() {
           {type === "Email" && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="smtp_cred">Credencial SMTP (nombre)</Label>
+                <Label htmlFor="smtp_cred">{t("label_smtp_cred")}</Label>
                 <Input
                   id="smtp_cred"
                   value={smtpCred}
                   onChange={(e) => setSmtpCred(e.target.value)}
-                  placeholder="smtp:default"
+                  placeholder={t("placeholder_smtp_cred")}
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  Referencia a una IntegrationCredential con shape JSON{" "}
+                  {t("smtp_cred_hint_prefix")}{" "}
                   <span className="font-mono">
                     {`{ host, port, username, password, useTls }`}
                   </span>
@@ -196,7 +199,7 @@ export function NewChannelForm() {
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="from">From</Label>
+                <Label htmlFor="from">{t("label_from")}</Label>
                 <Input
                   id="from"
                   value={emailFrom}
@@ -206,7 +209,7 @@ export function NewChannelForm() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="to">To</Label>
+                <Label htmlFor="to">{t("label_to")}</Label>
                 <Input
                   id="to"
                   value={emailTo}
@@ -221,7 +224,7 @@ export function NewChannelForm() {
           {type === "Webhook" && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="wh_url">URL</Label>
+                <Label htmlFor="wh_url">{t("label_url")}</Label>
                 <Input
                   id="wh_url"
                   value={whUrl}
@@ -230,7 +233,7 @@ export function NewChannelForm() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="wh_method">HTTP method</Label>
+                <Label htmlFor="wh_method">{t("label_http_method")}</Label>
                 <Select value={whMethod} onValueChange={setWhMethod}>
                   <SelectTrigger id="wh_method">
                     <SelectValue />
@@ -252,10 +255,9 @@ export function NewChannelForm() {
       <Card>
         <CardContent className="space-y-3 p-5">
           <div>
-            <Label>Filtros de eventos (vacio = todos)</Label>
+            <Label>{t("label_filters")}</Label>
             <p className="mt-1 text-xs text-muted-foreground">
-              Selecciona los eventos que activan este canal. Si dejas todos
-              desmarcados, el canal recibe todos los eventos disponibles.
+              {t("filters_hint")}
             </p>
           </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -281,11 +283,11 @@ export function NewChannelForm() {
           variant="ghost"
           onClick={() => router.push("/settings/notifications")}
         >
-          Cancelar
+          {tParent("cancel")}
         </Button>
         <Button type="submit" disabled={loading}>
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Crear canal
+          {tParent("submit")}
         </Button>
       </div>
     </form>
