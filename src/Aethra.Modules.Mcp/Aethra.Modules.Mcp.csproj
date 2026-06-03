@@ -21,6 +21,7 @@
     <ProjectReference Include="..\Aethra.Modules.Cloudflare\Aethra.Modules.Cloudflare.csproj" />
     <ProjectReference Include="..\Aethra.Modules.Notes\Aethra.Modules.Notes.csproj" />
     <ProjectReference Include="..\Aethra.Modules.Identity\Aethra.Modules.Identity.csproj" />
+    <ProjectReference Include="..\Aethra.Modules.Notifications\Aethra.Modules.Notifications.csproj" />
   </ItemGroup>
 
   <ItemGroup>

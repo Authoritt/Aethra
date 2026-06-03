@@ -36,4 +36,32 @@ internal static class McpResponses
 
     /// <summary>Éxito uniforme: <c>{ ok: true, data }</c>.</summary>
     public static object Ok(object data) => new { ok = true, data };
+
+    /// <summary>
+    /// Sugerencia de siguiente tool para el agente IA. Devuelta como parte del array
+    /// <c>next_actions</c> tras mutaciones para guiar el flujo (ej. tras crear un channel,
+    /// sugerir test_channel).
+    /// </summary>
+    public sealed record NextAction(string Tool, string Why, object? SuggestedArgs);
+
+    /// <summary>Éxito con sugerencias de siguientes pasos para el agente IA.</summary>
+    public static object OkWithNextActions(object data, IReadOnlyList<NextAction> nextActions) => new
+    {
+        ok = true,
+        data,
+        next_actions = nextActions,
+    };
+
+    /// <summary>
+    /// Respuesta de dry_run: no se ejecuta la mutación. Devuelve el plan + el endpoint REST
+    /// que se hubiera llamado + las sugerencias de siguientes pasos.
+    /// </summary>
+    public static object DryRun(string wouldCall, object plan, IReadOnlyList<NextAction>? nextActions = null) => new
+    {
+        ok = true,
+        dry_run = true,
+        would_call = wouldCall,
+        plan,
+        next_actions = nextActions ?? [],
+    };
 }

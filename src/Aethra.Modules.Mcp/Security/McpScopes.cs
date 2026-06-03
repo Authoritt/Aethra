@@ -28,6 +28,14 @@ internal static class McpScopes
     public const string CloudflareWrite = "cloudflare:write";
 
     public const string VmsRead = "vms:read";
+    public const string VmsWrite = "vms:write";
 
     public const string NotesWrite = "notes:write";
+
+    // F11.5 — scopes para los nuevos features expuestos via MCP.
+    public const string UsersRead = "users:read";
+    public const string UsersWrite = "users:write";
+
+    public const string NotificationsRead = "notifications:read";
+    public const string NotificationsWrite = "notifications:write";
 }
