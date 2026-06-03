@@ -1,15 +1,20 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
 
 /**
  * Status pill para Monitor (F6): Up/Down/Degraded/Unknown + Disabled.
  */
-const MAP: Record<string, { variant: StatusPillVariant; label: string }> = {
-  up: { variant: "success", label: "Up" },
-  down: { variant: "destructive", label: "Down" },
-  degraded: { variant: "warning", label: "Degradado" },
-  unknown: { variant: "muted", label: "Desconocido" },
-  disabled: { variant: "muted", label: "Deshabilitado" },
+const VARIANTS: Record<string, StatusPillVariant> = {
+  up: "success",
+  down: "destructive",
+  degraded: "warning",
+  unknown: "muted",
+  disabled: "muted",
 };
+
+const KEYS = ["up", "down", "degraded", "unknown", "disabled"] as const;
 
 export interface MonitorStatusPillProps {
   status: string;
@@ -22,18 +27,22 @@ export function MonitorStatusPill({
   enabled = true,
   className,
 }: MonitorStatusPillProps) {
+  const t = useTranslations("status.monitor");
   if (!enabled) {
     return (
       <StatusPill variant="muted" className={className}>
-        Deshabilitado
+        {t("disabled")}
       </StatusPill>
     );
   }
   const key = status.toLowerCase();
-  const entry = MAP[key] ?? { variant: "info" as StatusPillVariant, label: status };
+  const variant = VARIANTS[key] ?? ("info" as StatusPillVariant);
+  const label = (KEYS as readonly string[]).includes(key)
+    ? t(key as (typeof KEYS)[number])
+    : status;
   return (
-    <StatusPill variant={entry.variant} className={className}>
-      {entry.label}
+    <StatusPill variant={variant} className={className}>
+      {label}
     </StatusPill>
   );
 }

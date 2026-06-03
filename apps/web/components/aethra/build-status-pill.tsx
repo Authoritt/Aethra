@@ -1,15 +1,13 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { StatusPill, getStatusVariant } from "@/components/ui/status-pill";
 
 /**
  * Status pill para Build (F4/F9.3): queued -> building -> completed/failed.
  */
-const LABELS: Record<string, string> = {
-  queued: "En cola",
-  building: "Construyendo",
-  completed: "Completado",
-  failed: "Falló",
-  cancelled: "Cancelado",
-};
+const KEYS = ["queued", "building", "completed", "failed", "cancelled"] as const;
+type BuildKey = (typeof KEYS)[number];
 
 export interface BuildStatusPillProps {
   status: string;
@@ -17,7 +15,13 @@ export interface BuildStatusPillProps {
 }
 
 export function BuildStatusPill({ status, className }: BuildStatusPillProps) {
+  const t = useTranslations("status.build");
   const variant = getStatusVariant(status);
-  const label = LABELS[status.toLowerCase()] ?? status;
-  return <StatusPill variant={variant} className={className}>{label}</StatusPill>;
+  const key = status.toLowerCase() as BuildKey;
+  const label = (KEYS as readonly string[]).includes(key) ? t(key) : status;
+  return (
+    <StatusPill variant={variant} className={className}>
+      {label}
+    </StatusPill>
+  );
 }

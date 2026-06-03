@@ -1,14 +1,19 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
 
 /**
  * Status pill para VM (F2): Pending/Connected/Disconnected.
  */
-const MAP: Record<string, { variant: StatusPillVariant; label: string }> = {
-  pending: { variant: "warning", label: "Pendiente" },
-  connected: { variant: "success", label: "Conectada" },
-  disconnected: { variant: "destructive", label: "Desconectada" },
-  unknown: { variant: "muted", label: "Desconocido" },
+const VARIANTS: Record<string, StatusPillVariant> = {
+  pending: "warning",
+  connected: "success",
+  disconnected: "destructive",
+  unknown: "muted",
 };
+
+const KEYS = ["pending", "connected", "disconnected", "unknown"] as const;
 
 export interface VmStatusPillProps {
   status: string;
@@ -16,11 +21,15 @@ export interface VmStatusPillProps {
 }
 
 export function VmStatusPill({ status, className }: VmStatusPillProps) {
+  const t = useTranslations("status.vm");
   const key = status.toLowerCase();
-  const entry = MAP[key] ?? { variant: "info" as StatusPillVariant, label: status };
+  const variant = VARIANTS[key] ?? ("info" as StatusPillVariant);
+  const label = (KEYS as readonly string[]).includes(key)
+    ? t(key as (typeof KEYS)[number])
+    : status;
   return (
-    <StatusPill variant={entry.variant} className={className}>
-      {entry.label}
+    <StatusPill variant={variant} className={className}>
+      {label}
     </StatusPill>
   );
 }

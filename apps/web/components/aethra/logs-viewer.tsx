@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { AlertTriangle, AlertCircle, Info } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,7 @@ export function LogsViewer({
   className,
   heightClassName = "min-h-[400px] max-h-[640px]",
 }: LogsViewerProps) {
+  const t = useTranslations("components.logs_viewer");
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = React.useState(true);
   const [filter, setFilter] = React.useState<FilterLevel>("all");
@@ -71,16 +73,16 @@ export function LogsViewer({
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-info opacity-60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-info" />
               </span>
-              <span className="font-medium text-foreground">Live</span>
+              <span className="font-medium text-foreground">{t("live")}</span>
             </span>
           ) : (
-            <span className="font-medium text-foreground">Logs</span>
+            <span className="font-medium text-foreground">{t("logs_header")}</span>
           )}
           <span aria-hidden>·</span>
-          <span>{filtered.length} líneas</span>
+          <span>{t("lines_count", { count: filtered.length })}</span>
           {!autoScroll && isLive ? (
             <span className="ml-2 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning-foreground">
-              auto-scroll pausado
+              {t("autoscroll_paused")}
             </span>
           ) : null}
         </div>
@@ -93,7 +95,7 @@ export function LogsViewer({
               className="h-7 px-2 text-xs"
               onClick={() => setFilter(lvl)}
             >
-              {lvl === "all" ? "Todos" : lvl}
+              {lvl === "all" ? t("filter_all") : lvl}
             </Button>
           ))}
         </div>
@@ -109,7 +111,7 @@ export function LogsViewer({
       >
         {filtered.length === 0 ? (
           <div className="flex h-full items-center justify-center py-12 text-muted-foreground">
-            <span>{isLive ? "Esperando logs…" : "Sin logs todavía."}</span>
+            <span>{isLive ? t("waiting_logs") : t("no_logs")}</span>
           </div>
         ) : (
           <ol className="space-y-0.5">

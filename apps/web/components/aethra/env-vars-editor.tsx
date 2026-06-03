@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Eye, EyeOff, Plus, Trash2, Upload } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -34,6 +35,7 @@ export function EnvVarsEditor({
   className,
   allowDuplicates = false,
 }: EnvVarsEditorProps) {
+  const t = useTranslations("components.env_vars_editor");
   const [revealedKeys, setRevealedKeys] = React.useState<Record<string, boolean>>(
     {},
   );
@@ -75,7 +77,7 @@ export function EnvVarsEditor({
       setImportText("");
       setImportOpen(false);
     } catch (e) {
-      setImportError(e instanceof Error ? e.message : "Error al parsear");
+      setImportError(e instanceof Error ? e.message : t("parse_error"));
     }
   }
 
@@ -83,7 +85,7 @@ export function EnvVarsEditor({
     <div className={cn("rounded-md border border-border bg-card", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div className="text-sm">
-          <span className="font-medium text-foreground">Variables de entorno</span>
+          <span className="font-medium text-foreground">{t("title")}</span>
           <span className="ml-2 text-muted-foreground">{value.length}</span>
         </div>
         <div className="flex items-center gap-2">
@@ -91,21 +93,20 @@ export function EnvVarsEditor({
             <DialogTrigger asChild>
               <Button variant="outline" size="sm">
                 <Upload className="mr-2 h-4 w-4" />
-                Importar .env
+                {t("import_env")}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
-                <DialogTitle>Importar variables desde .env</DialogTitle>
+                <DialogTitle>{t("import_dialog_title")}</DialogTitle>
                 <DialogDescription>
-                  Pegá el contenido del archivo .env. Comentarios (#) y líneas
-                  vacías son ignoradas. Keys existentes serán actualizadas.
+                  {t("import_dialog_description")}
                 </DialogDescription>
               </DialogHeader>
               <Textarea
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
-                placeholder={"DATABASE_URL=postgres://...\nAPI_KEY=xyz"}
+                placeholder={t("import_placeholder")}
                 className="min-h-[200px] font-mono text-xs"
               />
               {importError ? (
@@ -113,15 +114,15 @@ export function EnvVarsEditor({
               ) : null}
               <DialogFooter>
                 <Button variant="ghost" onClick={() => setImportOpen(false)}>
-                  Cancelar
+                  {t("cancel")}
                 </Button>
-                <Button onClick={commitImport}>Importar</Button>
+                <Button onClick={commitImport}>{t("import")}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
           <Button size="sm" onClick={add}>
             <Plus className="mr-2 h-4 w-4" />
-            Añadir
+            {t("add")}
           </Button>
         </div>
       </div>
@@ -129,9 +130,9 @@ export function EnvVarsEditor({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[35%]">Key</TableHead>
-            <TableHead>Valor</TableHead>
-            <TableHead className="w-[120px]">Secreto</TableHead>
+            <TableHead className="w-[35%]">{t("col_key")}</TableHead>
+            <TableHead>{t("col_value")}</TableHead>
+            <TableHead className="w-[120px]">{t("col_secret")}</TableHead>
             <TableHead className="w-[80px]"></TableHead>
           </TableRow>
         </TableHeader>
@@ -139,7 +140,7 @@ export function EnvVarsEditor({
           {value.length === 0 ? (
             <TableRow>
               <TableCell colSpan={4} className="h-24 text-center text-sm text-muted-foreground">
-                Sin variables aún. Añadí una o importá desde .env.
+                {t("empty")}
               </TableCell>
             </TableRow>
           ) : (
@@ -162,7 +163,7 @@ export function EnvVarsEditor({
                         type={masked ? "password" : "text"}
                         value={envVar.value}
                         onChange={(e) => update(idx, { value: e.target.value })}
-                        placeholder={envVar.isSecret ? "••••••••" : "valor"}
+                        placeholder={envVar.isSecret ? "••••••••" : t("col_value").toLowerCase()}
                         className="font-mono text-xs"
                       />
                       {envVar.isSecret ? (
@@ -172,7 +173,7 @@ export function EnvVarsEditor({
                           size="icon"
                           className="h-8 w-8 shrink-0"
                           onClick={() => toggleReveal(idx)}
-                          aria-label={revealed ? "Ocultar" : "Mostrar"}
+                          aria-label={revealed ? t("hide") : t("show")}
                         >
                           {revealed ? (
                             <EyeOff className="h-4 w-4" />
@@ -197,7 +198,7 @@ export function EnvVarsEditor({
                       variant="ghost"
                       size="icon"
                       onClick={() => remove(idx)}
-                      aria-label="Eliminar"
+                      aria-label={t("delete")}
                     >
                       <Trash2 className="h-4 w-4 text-muted-foreground" />
                     </Button>

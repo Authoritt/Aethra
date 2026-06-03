@@ -3,34 +3,41 @@
 import Link from "next/link";
 import { Fragment } from "react";
 import { ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
 /**
- * Mapping de slug → label en castellano para la ruta visible.
- * Si un segmento no está acá lo mostramos lowercase tal cual.
+ * Mapping de slug → key del namespace `breadcrumbs`. Si un segmento no está
+ * acá lo mostramos lowercase tal cual.
  */
-const LABELS: Record<string, string> = {
-  dashboard: "Dashboard",
-  projects: "Proyectos",
-  templates: "Plantillas",
-  clients: "Clientes",
-  instances: "Instancias",
-  vms: "VMs",
-  services: "Servicios",
-  routes: "Routes",
-  cloudflare: "Cloudflare",
-  monitors: "Monitores",
-  builds: "Builds",
-  deployments: "Deployments",
-  notes: "Notas",
-  settings: "Settings",
-  integrations: "Integraciones",
-  domains: "Dominios",
-  environments: "Ambientes",
-  "api-keys": "API keys",
-  new: "Nuevo",
-  edit: "Editar",
-  records: "Records",
+const SLUG_TO_KEY: Record<string, string> = {
+  dashboard: "dashboard",
+  projects: "projects",
+  templates: "templates",
+  clients: "clients",
+  instances: "instances",
+  vms: "vms",
+  services: "services",
+  routes: "routes",
+  cloudflare: "cloudflare",
+  monitors: "monitors",
+  builds: "builds",
+  deployments: "deployments",
+  notes: "notes",
+  settings: "settings",
+  integrations: "integrations",
+  domains: "domains",
+  environments: "environments",
+  "api-keys": "api-keys",
+  users: "users",
+  roles: "roles",
+  notifications: "notifications",
+  new: "new",
+  edit: "edit",
+  records: "records",
+  bindings: "bindings",
+  rotate: "rotate",
+  created: "created",
 };
 
 /**
@@ -64,7 +71,10 @@ interface Crumb {
   isId: boolean;
 }
 
-function buildCrumbs(pathname: string): Crumb[] {
+function buildCrumbs(
+  pathname: string,
+  resolveLabel: (slug: string) => string,
+): Crumb[] {
   // Saca el primer "/" y filtra vacíos para "/foo/bar" → ["foo","bar"].
   const segments = pathname.split("/").filter(Boolean);
   if (segments.length === 0) return [];
@@ -73,21 +83,37 @@ function buildCrumbs(pathname: string): Crumb[] {
   // Dashboard como root salvo que ya estemos en /dashboard.
   const crumbs: Crumb[] = [];
   if (segments[0] !== "dashboard") {
-    crumbs.push({ href: "/dashboard", label: "Dashboard", isId: false });
+    crumbs.push({
+      href: "/dashboard",
+      label: resolveLabel("dashboard"),
+      isId: false,
+    });
   }
 
   let acc = "";
   for (const seg of segments) {
     acc += `/${seg}`;
     const isId = ID_PREFIXES.some((p) => seg.startsWith(p));
-    const label = isId ? seg : (LABELS[seg] ?? decodeURIComponent(seg));
+    const label = isId ? seg : resolveLabel(seg);
     crumbs.push({ href: acc, label, isId });
   }
   return crumbs;
 }
 
 export function Breadcrumbs({ pathname }: { pathname: string }) {
-  const crumbs = buildCrumbs(pathname);
+  const t = useTranslations("breadcrumbs");
+  const resolveLabel = (slug: string) => {
+    const key = SLUG_TO_KEY[slug];
+    if (key) {
+      try {
+        return t(key);
+      } catch {
+        return decodeURIComponent(slug);
+      }
+    }
+    return decodeURIComponent(slug);
+  };
+  const crumbs = buildCrumbs(pathname, resolveLabel);
   if (crumbs.length === 0) return null;
 
   return (

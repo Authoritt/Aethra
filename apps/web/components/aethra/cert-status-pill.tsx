@@ -1,15 +1,20 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
 
 /**
  * Status pill para certificado TLS (F3): none/pending/issued/failed/renewing.
  */
-const MAP: Record<string, { variant: StatusPillVariant; label: string }> = {
-  none: { variant: "muted", label: "Sin TLS" },
-  pending: { variant: "warning", label: "Pendiente" },
-  issued: { variant: "success", label: "Emitido" },
-  failed: { variant: "destructive", label: "Falló" },
-  renewing: { variant: "running", label: "Renovando" },
+const VARIANTS: Record<string, StatusPillVariant> = {
+  none: "muted",
+  pending: "warning",
+  issued: "success",
+  failed: "destructive",
+  renewing: "running",
 };
+
+const KEYS = ["none", "pending", "issued", "failed", "renewing"] as const;
 
 export interface CertStatusPillProps {
   status: string;
@@ -17,11 +22,15 @@ export interface CertStatusPillProps {
 }
 
 export function CertStatusPill({ status, className }: CertStatusPillProps) {
+  const t = useTranslations("status.cert");
   const key = status.toLowerCase();
-  const entry = MAP[key] ?? { variant: "info" as StatusPillVariant, label: status };
+  const variant = VARIANTS[key] ?? ("info" as StatusPillVariant);
+  const label = (KEYS as readonly string[]).includes(key)
+    ? t(key as (typeof KEYS)[number])
+    : status;
   return (
-    <StatusPill variant={entry.variant} className={className}>
-      {entry.label}
+    <StatusPill variant={variant} className={className}>
+      {label}
     </StatusPill>
   );
 }

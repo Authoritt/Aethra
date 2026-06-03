@@ -13,6 +13,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ChevronsLeft, ChevronsRight, Search } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,12 +41,14 @@ export function DataTable<TData, TValue>({
   columns,
   data,
   globalFilter = false,
-  globalFilterPlaceholder = "Filtrar...",
+  globalFilterPlaceholder,
   pagination = true,
   pageSize = 10,
   emptyState,
   className,
 }: DataTableProps<TData, TValue>) {
+  const t = useTranslations("components.data_table");
+  const placeholder = globalFilterPlaceholder ?? t("filter_placeholder");
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     [],
@@ -78,7 +81,7 @@ export function DataTable<TData, TValue>({
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder={globalFilterPlaceholder}
+            placeholder={placeholder}
             value={globalFilterValue}
             onChange={(e) => setGlobalFilterValue(e.target.value)}
             className="pl-9"
@@ -127,7 +130,7 @@ export function DataTable<TData, TValue>({
                   colSpan={columns.length}
                   className="h-32 text-center text-sm text-muted-foreground"
                 >
-                  {emptyState ?? "No hay resultados."}
+                  {emptyState ?? t("empty")}
                 </TableCell>
               </TableRow>
             )}
@@ -138,8 +141,10 @@ export function DataTable<TData, TValue>({
       {pagination ? (
         <div className="flex items-center justify-between gap-2 px-1">
           <p className="text-xs text-muted-foreground">
-            Página {table.getState().pagination.pageIndex + 1} de{" "}
-            {table.getPageCount() || 1}
+            {t("page_of", {
+              current: table.getState().pagination.pageIndex + 1,
+              total: table.getPageCount() || 1,
+            })}
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -149,7 +154,7 @@ export function DataTable<TData, TValue>({
               disabled={!table.getCanPreviousPage()}
             >
               <ChevronsLeft className="h-4 w-4" />
-              Anterior
+              {t("previous")}
             </Button>
             <Button
               variant="outline"
@@ -157,7 +162,7 @@ export function DataTable<TData, TValue>({
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
             >
-              Siguiente
+              {t("next")}
               <ChevronsRight className="h-4 w-4" />
             </Button>
           </div>
