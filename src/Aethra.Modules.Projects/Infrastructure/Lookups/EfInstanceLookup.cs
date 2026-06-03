@@ -53,6 +53,46 @@ internal sealed class EfInstanceLookup(ProjectsDbContext db) : IInstanceLookup
         return list.Select(i => Project(i, projectId)).ToList();
     }
 
+    /// <summary>
+    /// F12.3 — resuelve el efectivo <c>TrackedRef</c> de cada Instance del Template y devuelve
+    /// solo las que matchean <paramref name="gitRef"/>. Como la resolución depende del Template
+    /// (cascade EnvironmentMapping → DefaultBranch), carga el Template una sola vez y aplica la
+    /// función estática <see cref="Instance.ResolveTrackedRef"/>.
+    /// </summary>
+    public async Task<IReadOnlyList<InstanceForDeployView>> FindByTrackedRefAsync(
+        string templateId, string gitRef, bool autoDeployOnly, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(templateId);
+        ArgumentNullException.ThrowIfNull(gitRef);
+
+        var template = await db.Templates
+            .AsNoTracking()
+            .Include(t => t.EnvironmentMapping)
+            .FirstOrDefaultAsync(t => t.Id.ToString() == templateId, ct)
+            .ConfigureAwait(false);
+        if (template is null)
+        {
+            return Array.Empty<InstanceForDeployView>();
+        }
+
+        var allList = await db.Instances.AsNoTracking().Include(i => i.Ports)
+            .ToListAsync(ct).ConfigureAwait(false);
+        IEnumerable<Instance> query = allList.Where(i => i.TemplateId.ToString() == templateId);
+        if (autoDeployOnly)
+        {
+            query = query.Where(i => i.AutoDeployOnNewBuild);
+        }
+        var filtered = query
+            .Where(i => string.Equals(i.ResolveTrackedRef(template), gitRef, StringComparison.Ordinal))
+            .ToList();
+        if (filtered.Count == 0)
+        {
+            return Array.Empty<InstanceForDeployView>();
+        }
+        var projectId = template.ProjectId.ToString();
+        return filtered.Select(i => Project(i, projectId)).ToList();
+    }
+
     public async Task<IReadOnlyList<InstanceForDeployView>> FindByClientAsync(
         string clientId, CancellationToken ct)
     {
@@ -112,6 +152,9 @@ internal sealed class EfInstanceLookup(ProjectsDbContext db) : IInstanceLookup
             AutoDeployOnNewBuild: i.AutoDeployOnNewBuild,
             CustomDomain: i.CustomDomain,
             AutoHostname: i.AutoHostname,
-            PrimaryContainerPort: primaryPort);
+            PrimaryContainerPort: primaryPort,
+            TrackedRef: i.TrackedRef,
+            IsEphemeral: i.IsEphemeral,
+            CreatedByUserId: i.CreatedByUserId);
     }
 }

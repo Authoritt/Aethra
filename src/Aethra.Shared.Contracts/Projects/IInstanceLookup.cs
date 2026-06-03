@@ -23,6 +23,16 @@ public interface IInstanceLookup
         string templateId, bool autoDeployOnly, CancellationToken ct);
 
     /// <summary>
+    /// F12.3 — Devuelve las Instances de un Template cuyo <c>TrackedRef</c> efectivo (resuelto vía
+    /// cascada Template → EnvironmentMapping → DefaultBranch) coincide con
+    /// <paramref name="gitRef"/>. Filtra opcionalmente por <c>AutoDeployOnNewBuild</c>. Las
+    /// Instances ephemerals (<c>IsEphemeral=true</c>) se incluyen porque tras un push a
+    /// <c>refs/pull/N/head</c> SI deben redeployar.
+    /// </summary>
+    Task<IReadOnlyList<InstanceForDeployView>> FindByTrackedRefAsync(
+        string templateId, string gitRef, bool autoDeployOnly, CancellationToken ct);
+
+    /// <summary>
     /// Devuelve todas las Instances asociadas a un Client. Útil para vistas tenant-céntricas.
     /// </summary>
     Task<IReadOnlyList<InstanceForDeployView>> FindByClientAsync(
@@ -31,7 +41,8 @@ public interface IInstanceLookup
 
 /// <summary>
 /// Proyección read-only de una Instance con los campos necesarios para orquestar un deploy
-/// (target VM, container name, routing).
+/// (target VM, container name, routing). F12.3 agrega <c>TrackedRef</c> y <c>IsEphemeral</c>
+/// para que el fan-out de Deployments filtre por ref y los handlers conozcan el lifecycle.
 /// </summary>
 public sealed record InstanceForDeployView(
     string InstanceId,
@@ -45,4 +56,7 @@ public sealed record InstanceForDeployView(
     bool AutoDeployOnNewBuild,
     string? CustomDomain,
     string? AutoHostname,
-    int? PrimaryContainerPort);
+    int? PrimaryContainerPort,
+    string? TrackedRef = null,
+    bool IsEphemeral = false,
+    string? CreatedByUserId = null);
