@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { FolderKanban, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,19 +15,20 @@ export default async function ProjectsPage() {
   const data = await serverFetch<ProjectSummaryV2[]>("/api/projects");
   if (data === "unauthorized") redirect("/login");
 
+  const t = await getTranslations("pages.projects");
   const projects = Array.isArray(data) ? data : [];
   const errored = data === "error";
 
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Proyectos"
-        description="Agrupan templates, clients e instances bajo un mismo dominio lógico del modelo multi-tenant."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button asChild>
             <Link href="/projects/new">
               <Plus className="mr-2 h-4 w-4" />
-              Nuevo proyecto
+              {t("new_project")}
             </Link>
           </Button>
         }
@@ -35,19 +37,19 @@ export default async function ProjectsPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado. Verificá que la API esté corriendo.
+            {t("load_error")}
           </CardContent>
         </Card>
       ) : projects.length === 0 ? (
         <EmptyState
           icon={<FolderKanban className="h-6 w-6" />}
-          title="Aún no hay proyectos"
-          description="Creá tu primer proyecto. Después podrás agregar templates y clients dentro de él."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
               <Link href="/projects/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Crear proyecto
+                {t("create_project")}
               </Link>
             </Button>
           }
@@ -76,7 +78,7 @@ export default async function ProjectsPage() {
                     </p>
                     {p.icon ? (
                       <p className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                        icon: {p.icon}
+                        {t("icon_label", { value: p.icon })}
                       </p>
                     ) : null}
                   </CardContent>

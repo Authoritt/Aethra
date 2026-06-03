@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import { getTranslations } from "next-intl/server";
 import {
   Activity,
   Boxes,
@@ -58,6 +59,8 @@ export default async function Dashboard() {
   const monitorOverview = await fetchJson<MonitorOverviewDto>(
     "/api/monitors/overview",
   );
+  const t = await getTranslations("pages.dashboard");
+  const tCommon = await getTranslations("common");
 
   const navCards: Array<{
     href: string;
@@ -68,54 +71,54 @@ export default async function Dashboard() {
   }> = [
     {
       href: "/projects",
-      title: "Proyectos",
-      description: "Agrupaciones lógicas con templates y clients multi-tenant.",
+      title: t("navcards.projects_title"),
+      description: t("navcards.projects_description"),
       icon: FolderKanban,
       badge: ctx?.projects.length ?? 0,
     },
     {
       href: "/vms",
-      title: "VMs",
-      description: "Hosts gestionados con satélite y métricas en vivo.",
+      title: t("navcards.vms_title"),
+      description: t("navcards.vms_description"),
       icon: Server,
       badge: ctx?.vms.length ?? 0,
     },
     {
       href: "/services",
-      title: "Servicios compartidos",
-      description: "Postgres, Redis y otros backends bindeables.",
+      title: t("navcards.services_title"),
+      description: t("navcards.services_description"),
       icon: Boxes,
       badge: ctx?.services.length ?? 0,
     },
     {
       href: "/cloudflare",
-      title: "Cloudflare DNS",
-      description: "Zonas y records gestionados via API v4.",
+      title: t("navcards.cloudflare_title"),
+      description: t("navcards.cloudflare_description"),
       icon: Cloud,
       badge: ctx?.cloudflare_zones.length ?? 0,
     },
     {
       href: "/routes",
-      title: "Rutas",
-      description: "Reverse proxy YARP con TLS Let's Encrypt.",
+      title: t("navcards.routes_title"),
+      description: t("navcards.routes_description"),
       icon: Network,
     },
     {
       href: "/builds",
-      title: "Builds",
-      description: "Git → imagen Docker, pipeline en vivo.",
+      title: t("navcards.builds_title"),
+      description: t("navcards.builds_description"),
       icon: Rocket,
     },
     {
       href: "/deployments",
-      title: "Deployments",
-      description: "Despliegues blue-green hacia instancias.",
+      title: t("navcards.deployments_title"),
+      description: t("navcards.deployments_description"),
       icon: Activity,
     },
     {
       href: "/settings",
-      title: "Settings",
-      description: "Integraciones, dominios, environments y API keys.",
+      title: t("navcards.settings_title"),
+      description: t("navcards.settings_description"),
       icon: Settings,
     },
   ];
@@ -123,33 +126,30 @@ export default async function Dashboard() {
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Dashboard"
-        description={
-          <>
-            Bienvenida, <span className="text-foreground">{me.email}</span>.
-            Esto es lo que está pasando ahora mismo.
-          </>
-        }
+        title={t("title")}
+        description={t.rich("description_with_email", {
+          email: () => <span className="text-foreground">{me.email}</span>,
+        })}
       />
 
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <KpiCard
-          label="Proyectos"
+          label={t("kpi_projects")}
           value={ctx?.projects.length ?? 0}
           icon={<FolderKanban className="h-4 w-4" />}
         />
         <KpiCard
-          label="VMs"
+          label={t("kpi_vms")}
           value={ctx?.vms.length ?? 0}
           icon={<Server className="h-4 w-4" />}
         />
         <KpiCard
-          label="Servicios"
+          label={t("kpi_services")}
           value={ctx?.services.length ?? 0}
           icon={<Boxes className="h-4 w-4" />}
         />
         <KpiCard
-          label="Monitores down"
+          label={t("kpi_monitors_down")}
           value={monitorOverview?.down ?? 0}
           icon={<Activity className="h-4 w-4" />}
           tone={(monitorOverview?.down ?? 0) > 0 ? "destructive" : "success"}
@@ -160,21 +160,24 @@ export default async function Dashboard() {
         <Card className="mt-6">
           <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
             <div className="space-y-1">
-              <CardTitle className="text-base">Monitores uptime</CardTitle>
+              <CardTitle className="text-base">
+                {t("monitors_card_title")}
+              </CardTitle>
               <CardDescription>
-                Estado actual de los probes HTTP gestionados por el módulo
-                Monitoring.
+                {t("monitors_card_description")}
               </CardDescription>
             </div>
             <Link
               href="/monitors"
               className="text-xs font-medium text-primary hover:underline underline-offset-4"
             >
-              Ver todos →
+              {tCommon("see_all")} →
             </Link>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">Total {monitorOverview.total}</Badge>
+            <Badge variant="outline">
+              {t("monitors_total", { count: monitorOverview.total })}
+            </Badge>
             <MonitorStatusPill status="up" />
             <span className="text-sm tabular-nums text-muted-foreground">
               {monitorOverview.up}

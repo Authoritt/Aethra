@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Bell, Globe, Key, Lock, Plug2, Settings, User, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +37,8 @@ export default async function SettingsPage() {
   if (!me) {
     redirect("/login");
   }
+  const t = await getTranslations("pages.settings");
+  const tCommon = await getTranslations("common");
 
   const cards: Array<{
     href: string;
@@ -47,64 +50,57 @@ export default async function SettingsPage() {
   }> = [
     {
       href: "/settings/users",
-      title: "Usuarios y roles",
-      description:
-        "Cuentas humanas con acceso a Aethra y los roles RBAC que definen sus permisos.",
+      title: t("users_title"),
+      description: t("users_description"),
       icon: Users,
       available: true,
     },
     {
       href: "/settings/api-keys",
-      title: "API keys",
-      description:
-        "Tokens portadores para integrar herramientas externas y agentes con la API de Aethra.",
+      title: t("api_keys_title"),
+      description: t("api_keys_description"),
       icon: Key,
       available: true,
     },
     {
       href: "/settings/integrations",
-      title: "Integraciones (credenciales)",
-      description:
-        "Credenciales centralizadas (Cloudflare, GitHub PAT, SMTP, registries) que otros módulos resuelven por nombre.",
+      title: t("integrations_title"),
+      description: t("integrations_description"),
       icon: Plug2,
       available: true,
     },
     {
       href: "/settings/domains",
-      title: "Base domain (wildcard)",
-      description:
-        "FQDN bajo el cual Aethra construye los hostnames. Solo uno activo a la vez, con flag de wildcard DNS confirmado.",
+      title: t("domains_title"),
+      description: t("domains_description"),
       icon: Globe,
       available: true,
     },
     {
       href: "/settings/environments",
-      title: "Ambientes",
-      description:
-        "Catálogo de ambientes válidos (production, staging, preview...). Otros módulos validan slugs contra esta lista.",
+      title: t("environments_title"),
+      description: t("environments_description"),
       icon: Settings,
       available: true,
     },
     {
       href: "/settings/notifications",
-      title: "Notificaciones",
-      description:
-        "Canales (Slack/Discord/Telegram/Email/Webhook) que reciben alertas de monitores, builds y certificados.",
+      title: t("notifications_title"),
+      description: t("notifications_description"),
       icon: Bell,
       available: true,
     },
     {
       href: "/settings",
-      title: "Perfil",
-      description: "Email, nombre y preferencias de cuenta.",
+      title: t("profile_title"),
+      description: t("profile_description"),
       icon: User,
       comingSoon: true,
     },
     {
       href: "/settings",
-      title: "DataProtection key",
-      description:
-        "Llave maestra que cifra tokens en reposo. Rotación controlada.",
+      title: t("dpkey_title"),
+      description: t("dpkey_description"),
       icon: Lock,
       comingSoon: true,
     },
@@ -112,10 +108,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
-      <PageHeader
-        title="Settings"
-        description="Configuración de tu cuenta, credenciales y secretos del workspace."
-      />
+      <PageHeader title={t("title")} description={t("description")} />
 
       <section className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
         {cards.map((c) => {
@@ -133,8 +126,12 @@ export default async function SettingsPage() {
                   <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
                     <c.icon className="h-4 w-4" />
                   </div>
-                  {c.available ? <Badge variant="success">Activo</Badge> : null}
-                  {c.comingSoon ? <Badge variant="outline">Pronto</Badge> : null}
+                  {c.available ? (
+                    <Badge variant="success">{tCommon("active")}</Badge>
+                  ) : null}
+                  {c.comingSoon ? (
+                    <Badge variant="outline">{tCommon("coming_soon")}</Badge>
+                  ) : null}
                 </div>
                 <CardTitle className="text-base">{c.title}</CardTitle>
                 <CardDescription>{c.description}</CardDescription>
@@ -157,14 +154,14 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Sesión actual
+            {t("current_session")}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
             <div>
               <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Usuario
+                {t("user_label")}
               </dt>
               <dd className="mt-0.5">
                 <div className="font-medium">{me.displayName ?? me.email}</div>
@@ -175,11 +172,11 @@ export default async function SettingsPage() {
             </div>
             <div>
               <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Roles
+                {t("roles_label")}
               </dt>
               <dd className="mt-0.5 flex flex-wrap gap-1">
                 {me.roles.length === 0 ? (
-                  <span className="text-muted-foreground">(sin roles)</span>
+                  <span className="text-muted-foreground">{t("no_roles")}</span>
                 ) : (
                   me.roles.map((r) => (
                     <Badge
@@ -195,11 +192,11 @@ export default async function SettingsPage() {
             </div>
             <div className="md:col-span-2">
               <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Scopes ({me.scopes.length})
+                {t("scopes_label", { count: me.scopes.length })}
               </dt>
               <dd className="mt-0.5 flex flex-wrap gap-1">
                 {me.scopes.length === 0 ? (
-                  <span className="text-muted-foreground">(sin scopes)</span>
+                  <span className="text-muted-foreground">{t("no_scopes")}</span>
                 ) : (
                   me.scopes.map((s) => (
                     <Badge key={s} variant="outline" className="font-mono text-[10px]">
