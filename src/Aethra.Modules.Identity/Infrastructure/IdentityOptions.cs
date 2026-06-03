@@ -22,4 +22,18 @@ public sealed class IdentityOptions
     /// Tiene precedencia sobre <see cref="AdminPasswordSeed"/>.
     /// </summary>
     public string? AdminPasswordHash { get; set; }
+
+    /// <summary>
+    /// F12.1B — issuer mostrado en Google Authenticator / 1Password / Authy cuando el
+    /// usuario escanea el QR. Default <c>Aethra</c>.
+    /// </summary>
+    public string TotpIssuer { get; set; } = "Aethra";
+
+    /// <summary>
+    /// F12.1B — secret HMAC para firmar el JWT corto del segundo step del login (entre
+    /// password OK y TOTP code OK). Si no se setea, se autogenera al arranque y persiste en
+    /// memoria solo por la vida del proceso (los tokens emitidos antes de un restart pierden
+    /// validez — aceptable porque tienen TTL 15min).
+    /// </summary>
+    public string? TotpChallengeSigningKey { get; set; }
 }
