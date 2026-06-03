@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
@@ -35,6 +36,9 @@ export default async function EditMonitorPage({
 }: {
   params: Promise<{ monitorId: string }>;
 }) {
+  const t = await getTranslations("pages.monitors_form");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
+  const tCommon = await getTranslations("common");
   const { monitorId } = await params;
   const data = await fetchMonitor(monitorId);
   if (data === "unauthorized") redirect("/login");
@@ -44,7 +48,7 @@ export default async function EditMonitorPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando el monitor.
+            {tCommon("load_error_short")}
           </CardContent>
         </Card>
       </div>
@@ -54,12 +58,12 @@ export default async function EditMonitorPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Monitores", href: "/monitors" },
+          { label: tBreadcrumbs("monitors"), href: "/monitors" },
           { label: data.name, href: `/monitors/${data.id}` },
-          { label: "Editar" },
+          { label: tBreadcrumbs("edit") },
         ]}
-        title="Editar monitor"
-        description="Los cambios se aplican al próximo tick del worker."
+        title={t("title_edit")}
+        description={t("description_edit")}
       />
       <div className="max-w-2xl">
         <EditMonitorForm initial={data} />

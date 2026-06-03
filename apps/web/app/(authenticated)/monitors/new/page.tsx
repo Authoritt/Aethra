@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,8 @@ const URL_RE = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 export default function NewMonitorPage() {
+  const t = useTranslations("pages.monitors_form");
+  const tBreadcrumbs = useTranslations("breadcrumbs");
   const router = useRouter();
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
@@ -42,19 +45,16 @@ export default function NewMonitorPage() {
 
   function validate(): string | null {
     if (!SLUG_RE.test(slug.trim())) {
-      return "Slug inválido: solo minúsculas, dígitos y guiones (ej. mi-monitor).";
+      return t("validation_slug_invalid");
     }
-    if (name.trim().length === 0) return "Nombre requerido.";
-    if (!URL_RE.test(url.trim())) return "URL debe ser http(s):// absoluta.";
+    if (name.trim().length === 0) return t("validation_name_required");
+    if (!URL_RE.test(url.trim())) return t("validation_url_invalid");
     const codes = parseExpected(expected);
-    if (codes.length === 0)
-      return "Códigos esperados inválidos: usá comas, ej. '200,204'.";
-    if (interval < 30 || interval > 3600)
-      return "Intervalo entre 30 y 3600 segundos.";
-    if (timeout < 1000 || timeout > 60000)
-      return "Timeout entre 1000 y 60000 ms.";
+    if (codes.length === 0) return t("validation_codes_invalid");
+    if (interval < 30 || interval > 3600) return t("validation_interval_range");
+    if (timeout < 1000 || timeout > 60000) return t("validation_timeout_range");
     if (headersText.trim() && parseHeaders(headersText) === null)
-      return "Headers mal formados. Usá 'Clave: valor' por línea.";
+      return t("validation_headers_invalid");
     return null;
   }
 
@@ -87,7 +87,7 @@ export default function NewMonitorPage() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      toast.success("Monitor creado");
+      toast.success(t("toast_created_simple"));
       router.push(`/monitors/${created.id}`);
       router.refresh();
     } catch (e) {
@@ -99,7 +99,7 @@ export default function NewMonitorPage() {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -110,53 +110,53 @@ export default function NewMonitorPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Monitores", href: "/monitors" },
-          { label: "Nuevo" },
+          { label: tBreadcrumbs("monitors"), href: "/monitors" },
+          { label: tBreadcrumbs("new") },
         ]}
-        title="Nuevo monitor"
-        description="Configurá un probe HTTP. El worker lo ejecuta a partir del próximo tick (10s)."
+        title={t("title_new")}
+        description={t("description_new")}
       />
       <Card className="max-w-2xl">
         <CardContent className="p-6">
           <form onSubmit={onSubmit} className="flex flex-col gap-5">
             <div className="space-y-2">
-              <Label htmlFor="slug">Slug *</Label>
+              <Label htmlFor="slug">{t("label_slug")}</Label>
               <Input
                 id="slug"
                 value={slug}
                 onChange={(e) => setSlug(e.target.value)}
-                placeholder="api-prod"
+                placeholder={t("placeholder_slug")}
                 className="font-mono text-xs"
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Identificador único URL-friendly.
+                {t("slug_hint")}
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="name">Nombre *</Label>
+              <Label htmlFor="name">{t("label_name")}</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="API producción"
+                placeholder={t("placeholder_name")}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="url">URL *</Label>
+              <Label htmlFor="url">{t("label_url")}</Label>
               <Input
                 id="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://api.example.com/health"
+                placeholder={t("placeholder_url")}
                 className="font-mono text-xs"
                 required
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Método HTTP</Label>
+                <Label>{t("label_method")}</Label>
                 <Select
                   value={method}
                   onValueChange={(v) => setMethod(v as MonitorHttpMethod)}
@@ -172,23 +172,23 @@ export default function NewMonitorPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="expected">Códigos OK</Label>
+                <Label htmlFor="expected">{t("label_ok_codes")}</Label>
                 <Input
                   id="expected"
                   value={expected}
                   onChange={(e) => setExpected(e.target.value)}
-                  placeholder="200"
+                  placeholder={t("placeholder_codes")}
                   className="font-mono text-xs"
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  Comas. Ej: 200,204.
+                  {t("codes_hint")}
                 </p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="interval">Intervalo (s)</Label>
+                <Label htmlFor="interval">{t("label_interval_short")}</Label>
                 <Input
                   id="interval"
                   type="number"
@@ -198,10 +198,10 @@ export default function NewMonitorPage() {
                   max={3600}
                   step={10}
                 />
-                <p className="text-xs text-muted-foreground">30..3600.</p>
+                <p className="text-xs text-muted-foreground">{t("interval_hint")}</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="timeout">Timeout (ms)</Label>
+                <Label htmlFor="timeout">{t("label_timeout")}</Label>
                 <Input
                   id="timeout"
                   type="number"
@@ -213,32 +213,32 @@ export default function NewMonitorPage() {
                   max={60000}
                   step={500}
                 />
-                <p className="text-xs text-muted-foreground">1000..60000.</p>
+                <p className="text-xs text-muted-foreground">{t("timeout_hint")}</p>
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="headers">Headers</Label>
+              <Label htmlFor="headers">{t("headers_label")}</Label>
               <Textarea
                 id="headers"
                 value={headersText}
                 onChange={(e) => setHeadersText(e.target.value)}
                 rows={3}
-                placeholder="Authorization: Bearer xxx"
+                placeholder={t("placeholder_headers")}
                 className="font-mono text-xs"
               />
               <p className="text-xs text-muted-foreground">
-                Una por línea, &apos;Clave: valor&apos;. Opcional.
+                {t("headers_hint")}
               </p>
             </div>
             {method === "POST" ? (
               <div className="space-y-2">
-                <Label htmlFor="body">Body</Label>
+                <Label htmlFor="body">{t("body_label")}</Label>
                 <Textarea
                   id="body"
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   rows={4}
-                  placeholder='{"ping": true}'
+                  placeholder={t("placeholder_body")}
                   className="font-mono text-xs"
                 />
               </div>
@@ -250,13 +250,13 @@ export default function NewMonitorPage() {
                 variant="ghost"
                 onClick={() => router.push("/monitors")}
               >
-                Cancelar
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={loading}>
                 {loading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Crear monitor
+                {t("submit_new")}
               </Button>
             </div>
           </form>

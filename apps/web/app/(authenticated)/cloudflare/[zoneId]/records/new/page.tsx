@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,8 @@ const FQDN_RE =
   /^(?=.{1,253}$)(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 
 export default function NewDnsRecordPage() {
+  const t = useTranslations("pages.cloudflare_record_new");
+  const tBreadcrumbs = useTranslations("breadcrumbs");
   const router = useRouter();
   const params = useParams<{ zoneId: string }>();
   const zoneId = params.zoneId;
@@ -42,10 +45,9 @@ export default function NewDnsRecordPage() {
   const [loading, setLoading] = useState(false);
 
   function validate(): string | null {
-    if (!FQDN_RE.test(name.trim()))
-      return "El nombre debe ser un FQDN válido (ej. api.example.com).";
-    if (!content.trim()) return "El contenido es obligatorio.";
-    if (ttl < 1 || ttl > 86400) return "TTL debe estar entre 1 y 86400.";
+    if (!FQDN_RE.test(name.trim())) return t("validation_name_fqdn");
+    if (!content.trim()) return t("validation_content_required");
+    if (ttl < 1 || ttl > 86400) return t("validation_ttl_range");
     return null;
   }
 
@@ -70,7 +72,7 @@ export default function NewDnsRecordPage() {
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success("Record creado");
+      toast.success(t("toast_created_simple"));
       router.push(`/cloudflare/${zoneId}`);
       router.refresh();
     } catch (e) {
@@ -82,10 +84,25 @@ export default function NewDnsRecordPage() {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
+    }
+  }
+
+  function contentHint(rt: DnsRecordType): string {
+    switch (rt) {
+      case "A":
+        return t("content_hint_a");
+      case "AAAA":
+        return t("content_hint_aaaa");
+      case "CNAME":
+        return t("content_hint_cname");
+      case "MX":
+        return t("content_hint_mx");
+      case "TXT":
+        return t("content_hint_txt");
     }
   }
 
@@ -93,18 +110,18 @@ export default function NewDnsRecordPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Cloudflare", href: "/cloudflare" },
-          { label: "Zona", href: `/cloudflare/${zoneId}` },
-          { label: "Nuevo record" },
+          { label: tBreadcrumbs("cloudflare"), href: "/cloudflare" },
+          { label: t("breadcrumb_zone"), href: `/cloudflare/${zoneId}` },
+          { label: t("breadcrumb") },
         ]}
-        title="Nuevo DNS record"
-        description="Se crea en Cloudflare y se guarda localmente con el id devuelto por la API."
+        title={t("title")}
+        description={t("page_description")}
       />
       <Card className="max-w-2xl">
         <CardContent className="p-6">
           <form onSubmit={onSubmit} className="flex flex-col gap-5">
             <div className="space-y-2">
-              <Label>Tipo *</Label>
+              <Label>{t("label_type")}</Label>
               <Select
                 value={type}
                 onValueChange={(v) => setType(v as DnsRecordType)}
@@ -113,32 +130,32 @@ export default function NewDnsRecordPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
+                  {TYPES.map((rt) => (
+                    <SelectItem key={rt} value={rt}>
+                      {rt}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="name">Nombre *</Label>
+              <Label htmlFor="name">{t("label_name")}</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="api.example.com"
+                placeholder={t("placeholder_name")}
                 className="font-mono text-xs"
                 autoComplete="off"
                 spellCheck={false}
                 required
               />
               <p className="text-xs text-muted-foreground">
-                FQDN sin acortar.
+                {t("name_hint")}
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="content">Contenido *</Label>
+              <Label htmlFor="content">{t("label_content")}</Label>
               <Input
                 id="content"
                 value={content}
@@ -155,7 +172,7 @@ export default function NewDnsRecordPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="ttl">TTL *</Label>
+                <Label htmlFor="ttl">{t("label_ttl_short")}</Label>
                 <Input
                   id="ttl"
                   type="number"
@@ -166,11 +183,11 @@ export default function NewDnsRecordPage() {
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  Segundos. 1 = auto en Cloudflare.
+                  {t("ttl_hint")}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label>Proxied</Label>
+                <Label>{t("proxied_label")}</Label>
                 <div className="flex items-center gap-3 rounded-md border border-input bg-background px-3 py-2">
                   <Switch
                     id="proxied"
@@ -181,22 +198,22 @@ export default function NewDnsRecordPage() {
                     htmlFor="proxied"
                     className="cursor-pointer text-xs text-muted-foreground"
                   >
-                    Tráfico vía proxy Cloudflare
+                    {t("proxied_switch_hint")}
                   </Label>
                 </div>
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="comment">Comentario</Label>
+              <Label htmlFor="comment">{t("comment_label")}</Label>
               <Input
                 id="comment"
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="gestionado por Aethra"
+                placeholder={t("comment_placeholder")}
                 spellCheck={false}
               />
               <p className="text-xs text-muted-foreground">
-                Opcional. Aparece en el panel de Cloudflare.
+                {t("comment_hint")}
               </p>
             </div>
 
@@ -206,13 +223,13 @@ export default function NewDnsRecordPage() {
                 variant="ghost"
                 onClick={() => router.push(`/cloudflare/${zoneId}`)}
               >
-                Cancelar
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={loading}>
                 {loading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Crear record
+                {t("submit")}
               </Button>
             </div>
           </form>
@@ -220,21 +237,6 @@ export default function NewDnsRecordPage() {
       </Card>
     </div>
   );
-}
-
-function contentHint(type: DnsRecordType): string {
-  switch (type) {
-    case "A":
-      return "IPv4 de destino (ej. 203.0.113.10).";
-    case "AAAA":
-      return "IPv6 de destino.";
-    case "CNAME":
-      return "FQDN de destino al que apunta el alias.";
-    case "MX":
-      return "Servidor de correo, con prioridad si Cloudflare lo requiere.";
-    case "TXT":
-      return "Texto libre. SPF/DKIM/etc.";
-  }
 }
 
 function contentPlaceholder(type: DnsRecordType): string {

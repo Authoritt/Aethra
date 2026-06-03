@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import type {
 const URL_RE = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
 
 export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
+  const t = useTranslations("pages.monitors_form");
   const router = useRouter();
   const [name, setName] = useState(initial.name);
   const [url, setUrl] = useState(initial.url);
@@ -46,16 +48,13 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
   const [loading, setLoading] = useState(false);
 
   function validate(): string | null {
-    if (!URL_RE.test(url.trim())) return "URL debe ser http(s):// absoluta.";
+    if (!URL_RE.test(url.trim())) return t("validation_url_invalid");
     const codes = parseExpected(expected);
-    if (codes.length === 0)
-      return "Códigos esperados inválidos: usá comas, ej. '200,204'.";
-    if (interval < 30 || interval > 3600)
-      return "Intervalo entre 30 y 3600 segundos.";
-    if (timeout < 1000 || timeout > 60000)
-      return "Timeout entre 1000 y 60000 ms.";
+    if (codes.length === 0) return t("validation_codes_invalid");
+    if (interval < 30 || interval > 3600) return t("validation_interval_range");
+    if (timeout < 1000 || timeout > 60000) return t("validation_timeout_range");
     if (headersText.trim() && parseHeaders(headersText) === null)
-      return "Headers mal formados.";
+      return t("validation_headers_invalid_short");
     return null;
   }
 
@@ -88,7 +87,7 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
-      toast.success("Cambios guardados");
+      toast.success(t("toast_updated_simple"));
       router.push(`/monitors/${initial.id}`);
       router.refresh();
     } catch (e) {
@@ -100,7 +99,7 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -112,7 +111,7 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
       <Card>
         <CardContent className="space-y-5 p-6">
           <div className="space-y-2">
-            <Label htmlFor="name">Nombre *</Label>
+            <Label htmlFor="name">{t("label_name")}</Label>
             <Input
               id="name"
               value={name}
@@ -121,7 +120,7 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="url">URL *</Label>
+            <Label htmlFor="url">{t("label_url")}</Label>
             <Input
               id="url"
               value={url}
@@ -132,7 +131,7 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Método</Label>
+              <Label>{t("header_simple_method")}</Label>
               <Select
                 value={method}
                 onValueChange={(v) => setMethod(v as MonitorHttpMethod)}
@@ -148,7 +147,7 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="expected">Códigos OK</Label>
+              <Label htmlFor="expected">{t("label_ok_codes")}</Label>
               <Input
                 id="expected"
                 value={expected}
@@ -160,7 +159,7 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="interval">Intervalo (s)</Label>
+              <Label htmlFor="interval">{t("label_interval_short")}</Label>
               <Input
                 id="interval"
                 type="number"
@@ -172,7 +171,7 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="timeout">Timeout (ms)</Label>
+              <Label htmlFor="timeout">{t("label_timeout")}</Label>
               <Input
                 id="timeout"
                 type="number"
@@ -185,7 +184,7 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="headers">Headers</Label>
+            <Label htmlFor="headers">{t("headers_label")}</Label>
             <Textarea
               id="headers"
               value={headersText}
@@ -194,12 +193,12 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
               className="font-mono text-xs"
             />
             <p className="text-xs text-muted-foreground">
-              &apos;Clave: valor&apos; por línea. Vacío = sin headers.
+              {t("headers_hint_edit")}
             </p>
           </div>
           {method === "POST" ? (
             <div className="space-y-2">
-              <Label htmlFor="body">Body</Label>
+              <Label htmlFor="body">{t("body_label")}</Label>
               <Textarea
                 id="body"
                 value={body}
@@ -216,13 +215,13 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
               variant="ghost"
               onClick={() => router.push(`/monitors/${initial.id}`)}
             >
-              Cancelar
+              {t("cancel")}
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Guardar cambios
+              {t("submit_edit")}
             </Button>
           </div>
         </CardContent>
