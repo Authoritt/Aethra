@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -32,20 +33,26 @@ export function RotateIntegrationForm({
 }: {
   credential: IntegrationCredentialDto;
 }) {
+  const t = useTranslations("pages.settings_integrations.rotate");
+  const tParent = useTranslations("pages.settings_integrations");
   const router = useRouter();
   const [reveal, setReveal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const confirmExpected = credential.name;
 
-  const schema = z.object({
-    newPlainValue: z.string().min(1, "Requerido"),
-    confirm: z
-      .string()
-      .refine((v) => v.trim() === confirmExpected, {
-        message: `Tenés que escribir exactamente "${confirmExpected}".`,
+  const schema = useMemo(
+    () =>
+      z.object({
+        newPlainValue: z.string().min(1, t("validation_required")),
+        confirm: z
+          .string()
+          .refine((v) => v.trim() === confirmExpected, {
+            message: t("confirm_error", { name: confirmExpected }),
+          }),
       }),
-  });
+    [t, confirmExpected],
+  );
 
   type FormValues = z.infer<typeof schema>;
 
@@ -67,7 +74,7 @@ export function RotateIntegrationForm({
           body: JSON.stringify(body),
         },
       );
-      toast.success("Credencial rotada");
+      toast.success(t("toast_rotated"));
       router.push("/settings/integrations");
       router.refresh();
     } catch (e) {
@@ -79,7 +86,7 @@ export function RotateIntegrationForm({
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : tParent("error_unknown");
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -97,7 +104,7 @@ export function RotateIntegrationForm({
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Name
+                  {t("label_name")}
                 </dt>
                 <dd className="mt-0.5 font-mono text-xs text-foreground">
                   {credential.name}
@@ -105,13 +112,13 @@ export function RotateIntegrationForm({
               </div>
               <div>
                 <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Tipo
+                  {t("label_type")}
                 </dt>
                 <dd className="mt-0.5 text-foreground">{credential.type}</dd>
               </div>
               <div className="col-span-2">
                 <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Display
+                  {t("label_display")}
                 </dt>
                 <dd className="mt-0.5 text-foreground">
                   {credential.displayName}
@@ -124,7 +131,7 @@ export function RotateIntegrationForm({
               name="newPlainValue"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nuevo valor *</FormLabel>
+                  <FormLabel>{t("label_new_value")}</FormLabel>
                   <FormControl>
                     <div className="flex items-stretch gap-2">
                       <Textarea
@@ -154,20 +161,19 @@ export function RotateIntegrationForm({
                         {reveal ? (
                           <>
                             <EyeOff className="mr-2 h-3.5 w-3.5" />
-                            Ocultar
+                            {t("value_hide")}
                           </>
                         ) : (
                           <>
                             <Eye className="mr-2 h-3.5 w-3.5" />
-                            Mostrar
+                            {t("value_show")}
                           </>
                         )}
                       </Button>
                     </div>
                   </FormControl>
                   <FormDescription>
-                    Texto plano del nuevo token / secret. Se cifra al guardar
-                    y reemplaza al anterior.
+                    {t("new_value_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -180,7 +186,7 @@ export function RotateIntegrationForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>
-                    Para confirmar, escribí el name:{" "}
+                    {t("confirm_label")}{" "}
                     <span className="font-mono">{credential.name}</span>
                   </FormLabel>
                   <FormControl>
@@ -200,10 +206,7 @@ export function RotateIntegrationForm({
               <CardContent className="flex items-start gap-2 p-3 text-xs text-muted-foreground">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
                 <span>
-                  Cualquier módulo que ya resolvió el valor anterior y lo esté
-                  usando en memoria seguirá funcionando hasta su próximo
-                  lookup. Si querés invalidar inmediatamente, después de rotar
-                  reiniciá el servicio consumidor.
+                  {t("warning")}
                 </span>
               </CardContent>
             </Card>
@@ -214,7 +217,7 @@ export function RotateIntegrationForm({
                 variant="ghost"
                 onClick={() => router.push("/settings/integrations")}
               >
-                Cancelar
+                {tParent("cancel")}
               </Button>
               <Button
                 type="submit"
@@ -224,7 +227,7 @@ export function RotateIntegrationForm({
                 {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Rotar credencial
+                {t("submit")}
               </Button>
             </div>
           </form>

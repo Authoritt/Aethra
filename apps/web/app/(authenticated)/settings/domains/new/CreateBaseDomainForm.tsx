@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -41,27 +42,30 @@ const FQDN_RE =
 
 const NO_ZONE_VALUE = "__none__";
 
-const schema = z.object({
-  hostname: z
-    .string()
-    .min(1, "Requerido")
-    .max(253, "Máximo 253 caracteres.")
-    .regex(
-      FQDN_RE,
-      "Debe ser un FQDN válido (lowercase, mínimo dos labels, sin guiones al inicio/fin).",
-    ),
-  cloudflareZoneId: z.string().optional(),
-});
-
-type FormValues = z.infer<typeof schema>;
-
 export function CreateBaseDomainForm({
   zones,
 }: {
   zones: CloudflareZoneOption[];
 }) {
+  const t = useTranslations("pages.settings_domains.new");
+  const tParent = useTranslations("pages.settings_domains");
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+
+  const schema = useMemo(
+    () =>
+      z.object({
+        hostname: z
+          .string()
+          .min(1, t("validation_required"))
+          .max(253, t("validation_max"))
+          .regex(FQDN_RE, t("validation_format")),
+        cloudflareZoneId: z.string().optional(),
+      }),
+    [t],
+  );
+
+  type FormValues = z.infer<typeof schema>;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -88,7 +92,7 @@ export function CreateBaseDomainForm({
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success("Base domain registrado");
+      toast.success(t("toast_created"));
       router.push(
         `/settings/domains?created=${encodeURIComponent(created.id)}`,
       );
@@ -102,7 +106,7 @@ export function CreateBaseDomainForm({
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : tParent("error_unknown");
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -122,7 +126,7 @@ export function CreateBaseDomainForm({
               name="hostname"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Hostname *</FormLabel>
+                  <FormLabel>{t("label_hostname")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -130,15 +134,14 @@ export function CreateBaseDomainForm({
                         field.onChange(e.target.value.toLowerCase())
                       }
                       maxLength={253}
-                      placeholder="aethra.tu-empresa.com"
+                      placeholder={t("placeholder_hostname")}
                       autoComplete="off"
                       spellCheck={false}
                       autoFocus
                     />
                   </FormControl>
                   <FormDescription>
-                    FQDN bajo el cual Aethra creará subdominios. Ej:
-                    aethra.tu-empresa.com.
+                    {t("hostname_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -150,17 +153,16 @@ export function CreateBaseDomainForm({
               name="cloudflareZoneId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Zona Cloudflare (opcional)</FormLabel>
+                  <FormLabel>{t("label_zone")}</FormLabel>
                   {zones.length === 0 ? (
                     <Card className="border-border">
                       <CardContent className="p-3 text-xs text-muted-foreground">
-                        Aún no hay zonas registradas en el módulo
-                        Cloudflare.{" "}
+                        {t("no_zones_message")}{" "}
                         <Link
                           href="/cloudflare/new"
                           className="text-primary underline-offset-4 hover:underline"
                         >
-                          Registrar una zona
+                          {t("no_zones_cta")}
                         </Link>
                         .
                       </CardContent>
@@ -172,12 +174,12 @@ export function CreateBaseDomainForm({
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="— sin enlazar —" />
+                          <SelectValue placeholder={t("zone_unlinked")} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         <SelectItem value={NO_ZONE_VALUE}>
-                          — sin enlazar —
+                          {t("zone_unlinked")}
                         </SelectItem>
                         {zones.map((z) => (
                           <SelectItem key={z.id} value={z.id}>
@@ -188,9 +190,7 @@ export function CreateBaseDomainForm({
                     </Select>
                   )}
                   <FormDescription>
-                    Si la zona ya está registrada en el módulo Cloudflare,
-                    enlazala para que la UI muestre el vínculo. Podés dejarla
-                    en blanco y enlazarla después.
+                    {t("zone_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -201,9 +201,7 @@ export function CreateBaseDomainForm({
               <CardContent className="flex items-start gap-2 p-3 text-xs text-muted-foreground">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
                 <span>
-                  Crear un base domain no lo activa automáticamente. Después
-                  de registrarlo, marcá el wildcard DNS como configurado y
-                  luego activalo.
+                  {t("warning")}
                 </span>
               </CardContent>
             </Card>
@@ -214,13 +212,13 @@ export function CreateBaseDomainForm({
                 variant="ghost"
                 onClick={() => router.push("/settings/domains")}
               >
-                Cancelar
+                {tParent("cancel")}
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Registrar base domain
+                {t("submit")}
               </Button>
             </div>
           </form>

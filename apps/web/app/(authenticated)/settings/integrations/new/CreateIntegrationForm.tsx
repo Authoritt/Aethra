@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -39,46 +40,14 @@ const NAME_RE = /^[a-z]+:[a-z0-9-]+$/;
 const NAME_MAX = 100;
 const DISPLAY_MAX = 200;
 
-const TYPE_OPTIONS: { value: IntegrationCredentialType; label: string }[] = [
-  { value: "Cloudflare", label: "Cloudflare API Token" },
-  { value: "GitHubPat", label: "GitHub Personal Access Token" },
-  { value: "Smtp", label: "SMTP (usuario + password)" },
-  { value: "Registry", label: "Docker Registry" },
-  { value: "GenericApiKey", label: "API Key genérica" },
-];
-
 interface MetadataRow {
   key: string;
   value: string;
 }
 
-const schema = z.object({
-  name: z
-    .string()
-    .min(1, "Requerido")
-    .max(NAME_MAX, `Máximo ${NAME_MAX} caracteres.`)
-    .regex(
-      NAME_RE,
-      "Debe seguir el formato 'namespace:slug' (lowercase, alfanumérico y guiones). Ej: cloudflare:default.",
-    ),
-  type: z.enum([
-    "Cloudflare",
-    "GitHubPat",
-    "Smtp",
-    "Registry",
-    "GenericApiKey",
-  ]),
-  displayName: z
-    .string()
-    .min(1, "Requerido")
-    .max(DISPLAY_MAX, `Máximo ${DISPLAY_MAX} caracteres.`),
-  description: z.string().max(500).optional().or(z.literal("")),
-  plainValue: z.string().min(1, "Requerido"),
-});
-
-type FormValues = z.infer<typeof schema>;
-
 export function CreateIntegrationForm() {
+  const t = useTranslations("pages.settings_integrations.new");
+  const tParent = useTranslations("pages.settings_integrations");
   const router = useRouter();
   const [metadata, setMetadata] = useState<MetadataRow[]>([]);
   const [revealValue, setRevealValue] = useState(false);
@@ -86,6 +55,41 @@ export function CreateIntegrationForm() {
   const [createdValuePreview, setCreatedValuePreview] = useState<
     { dto: IntegrationCredentialDto; plainValue: string } | null
   >(null);
+
+  const TYPE_OPTIONS: { value: IntegrationCredentialType; label: string }[] = [
+    { value: "Cloudflare", label: t("type_cloudflare") },
+    { value: "GitHubPat", label: t("type_github_pat") },
+    { value: "Smtp", label: t("type_smtp") },
+    { value: "Registry", label: t("type_registry") },
+    { value: "GenericApiKey", label: t("type_generic") },
+  ];
+
+  const schema = useMemo(
+    () =>
+      z.object({
+        name: z
+          .string()
+          .min(1, t("validation_required"))
+          .max(NAME_MAX, t("validation_max", { max: NAME_MAX }))
+          .regex(NAME_RE, t("validation_format")),
+        type: z.enum([
+          "Cloudflare",
+          "GitHubPat",
+          "Smtp",
+          "Registry",
+          "GenericApiKey",
+        ]),
+        displayName: z
+          .string()
+          .min(1, t("validation_required"))
+          .max(DISPLAY_MAX, t("validation_max", { max: DISPLAY_MAX })),
+        description: z.string().max(500).optional().or(z.literal("")),
+        plainValue: z.string().min(1, t("validation_required")),
+      }),
+    [t],
+  );
+
+  type FormValues = z.infer<typeof schema>;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -138,7 +142,7 @@ export function CreateIntegrationForm() {
           body: JSON.stringify(body),
         },
       );
-      toast.success("Credencial creada");
+      toast.success(t("toast_created"));
       setCreatedValuePreview({ dto: created, plainValue: values.plainValue });
       form.setValue("plainValue", "");
     } catch (e) {
@@ -150,7 +154,7 @@ export function CreateIntegrationForm() {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : tParent("error_unknown");
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -180,21 +184,20 @@ export function CreateIntegrationForm() {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name *</FormLabel>
+                  <FormLabel>{tParent("label_name")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
                       onChange={(e) =>
                         field.onChange(e.target.value.toLowerCase())
                       }
-                      placeholder="cloudflare:default"
+                      placeholder={t("placeholder_name")}
                       maxLength={NAME_MAX}
                       autoFocus
                     />
                   </FormControl>
                   <FormDescription>
-                    Identificador estable formato 'namespace:slug'. Ej:
-                    cloudflare:default, registry:internal, github:bot.
+                    {t("name_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -206,7 +209,7 @@ export function CreateIntegrationForm() {
               name="type"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tipo *</FormLabel>
+                  <FormLabel>{t("label_type")}</FormLabel>
                   <Select
                     value={field.value}
                     onValueChange={(v) =>
@@ -215,7 +218,7 @@ export function CreateIntegrationForm() {
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar tipo" />
+                        <SelectValue placeholder={t("type_placeholder")} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -227,7 +230,7 @@ export function CreateIntegrationForm() {
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    Solo es metadata para la UI; el resolver siempre usa el nombre.
+                    {t("type_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -239,16 +242,16 @@ export function CreateIntegrationForm() {
               name="displayName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Display name *</FormLabel>
+                  <FormLabel>{t("label_display_name")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="Cloudflare cuenta principal"
+                      placeholder={t("placeholder_display_name")}
                       maxLength={DISPLAY_MAX}
                     />
                   </FormControl>
                   <FormDescription>
-                    Nombre legible que verás en listados.
+                    {t("display_name_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -260,16 +263,16 @@ export function CreateIntegrationForm() {
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Descripción (opcional)</FormLabel>
+                  <FormLabel>{t("label_description")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="Token con scope Zone.DNS.Edit creado por mayra"
+                      placeholder={t("placeholder_description")}
                       maxLength={500}
                     />
                   </FormControl>
                   <FormDescription>
-                    Útil cuando hay varias credenciales del mismo tipo.
+                    {t("description_hint")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -281,12 +284,16 @@ export function CreateIntegrationForm() {
               name="plainValue"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Valor *</FormLabel>
+                  <FormLabel>{t("label_value")}</FormLabel>
                   <FormControl>
                     <div className="flex items-stretch gap-2">
                       <Textarea
                         {...field}
-                        placeholder={revealValue ? "tu-token-aqui" : "••••••••"}
+                        placeholder={
+                          revealValue
+                            ? t("placeholder_value")
+                            : t("placeholder_value_hidden")
+                        }
                         className="min-h-[88px] flex-1 font-mono text-xs"
                         spellCheck={false}
                         autoComplete="off"
@@ -309,12 +316,12 @@ export function CreateIntegrationForm() {
                         {revealValue ? (
                           <>
                             <EyeOff className="mr-2 h-3.5 w-3.5" />
-                            Ocultar
+                            {t("value_hide")}
                           </>
                         ) : (
                           <>
                             <Eye className="mr-2 h-3.5 w-3.5" />
-                            Mostrar
+                            {t("value_show")}
                           </>
                         )}
                       </Button>
@@ -324,8 +331,7 @@ export function CreateIntegrationForm() {
                     <CardContent className="flex items-start gap-2 p-2 text-xs text-muted-foreground">
                       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
                       <span>
-                        Solo verás este valor una vez. Si lo olvidás tendrás
-                        que rotar la credencial.
+                        {t("value_warning")}
                       </span>
                     </CardContent>
                   </Card>
@@ -338,11 +344,10 @@ export function CreateIntegrationForm() {
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-sm font-medium text-foreground">
-                    Metadata (opcional)
+                    {t("metadata_title")}
                   </span>
                   <p className="text-xs text-muted-foreground">
-                    Pares clave-valor para datos no secretos (account_id,
-                    region...).
+                    {t("metadata_hint")}
                   </p>
                 </div>
                 <Button
@@ -352,13 +357,12 @@ export function CreateIntegrationForm() {
                   onClick={addMetadataRow}
                 >
                   <Plus className="mr-2 h-3.5 w-3.5" />
-                  Añadir fila
+                  {t("metadata_add_row")}
                 </Button>
               </div>
               {metadata.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Sin entradas. Añadí filas solo si el proveedor necesita
-                  parámetros extra.
+                  {t("metadata_empty")}
                 </p>
               )}
               {metadata.map((row, i) => (
@@ -368,7 +372,7 @@ export function CreateIntegrationForm() {
                     onChange={(e) =>
                       updateMetadataRow(i, { key: e.target.value })
                     }
-                    placeholder="clave"
+                    placeholder={t("metadata_key_placeholder")}
                     maxLength={64}
                     className="w-1/3 font-mono text-xs"
                   />
@@ -377,7 +381,7 @@ export function CreateIntegrationForm() {
                     onChange={(e) =>
                       updateMetadataRow(i, { value: e.target.value })
                     }
-                    placeholder="valor"
+                    placeholder={t("metadata_value_placeholder")}
                     className="flex-1 font-mono text-xs"
                   />
                   <Button
@@ -385,7 +389,7 @@ export function CreateIntegrationForm() {
                     variant="ghost"
                     size="icon"
                     onClick={() => removeMetadataRow(i)}
-                    aria-label="Eliminar fila"
+                    aria-label={t("metadata_remove_aria")}
                   >
                     <X className="h-4 w-4 text-destructive" />
                   </Button>
@@ -399,13 +403,13 @@ export function CreateIntegrationForm() {
                 variant="ghost"
                 onClick={() => router.push("/settings/integrations")}
               >
-                Cancelar
+                {tParent("cancel")}
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Crear credencial
+                {t("submit")}
               </Button>
             </div>
           </form>
@@ -424,16 +428,17 @@ function CreatedConfirmation({
   plainValue: string;
   onContinue: () => void;
 }) {
+  const t = useTranslations("pages.settings_integrations.new");
   const [copied, setCopied] = useState(false);
 
   async function onCopy() {
     try {
       await navigator.clipboard.writeText(plainValue);
       setCopied(true);
-      toast.success("Valor copiado al portapapeles");
+      toast.success(t("copy_value_success"));
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error("No se pudo copiar; copialo a mano.");
+      toast.error(t("copy_value_fail"));
     }
   }
 
@@ -442,24 +447,23 @@ function CreatedConfirmation({
       <CardContent className="flex flex-col gap-5 p-6">
         <div>
           <h2 className="text-xl font-semibold text-foreground">
-            Credencial creada
+            {t("confirmation_title")}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Copiá el valor ahora. Es la única vez que podrás verlo: a partir
-            de aquí solo persiste el blob cifrado.
+            {t("confirmation_description")}
           </p>
         </div>
 
         <dl className="grid grid-cols-1 gap-3 text-sm">
-          <Row label="Name" value={dto.name} mono />
-          <Row label="Tipo" value={dto.type} />
-          <Row label="Display" value={dto.displayName} />
+          <Row label={t("row_name")} value={dto.name} mono />
+          <Row label={t("row_type")} value={dto.type} />
+          <Row label={t("row_display")} value={dto.displayName} />
         </dl>
 
         <Card>
           <CardContent className="flex flex-col gap-2 p-3">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">
-              Valor en claro
+              {t("plain_value_label")}
             </div>
             <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-foreground">
               {plainValue}
@@ -474,12 +478,12 @@ function CreatedConfirmation({
               {copied ? (
                 <>
                   <Check className="mr-2 h-3.5 w-3.5" />
-                  Copiado
+                  {t("copy_value_copied")}
                 </>
               ) : (
                 <>
                   <Copy className="mr-2 h-3.5 w-3.5" />
-                  Copiar al portapapeles
+                  {t("copy_value")}
                 </>
               )}
             </Button>
@@ -488,7 +492,7 @@ function CreatedConfirmation({
 
         <div className="flex justify-end">
           <Button type="button" onClick={onContinue}>
-            Continuar
+            {t("continue")}
           </Button>
         </div>
       </CardContent>

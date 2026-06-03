@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -58,6 +59,7 @@ export function EnvironmentsManager({
 }: {
   initial: EnvironmentDefinitionDto[];
 }) {
+  const t = useTranslations("pages.settings_environments");
   const router = useRouter();
   const sortedInitial = useMemo(
     () => [...initial].sort((a, b) => a.order - b.order),
@@ -90,7 +92,7 @@ export function EnvironmentsManager({
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success("Orden actualizado");
+      toast.success(t("reorder_toast"));
       router.refresh();
     } catch (e) {
       setItems(sortedInitial);
@@ -102,7 +104,7 @@ export function EnvironmentsManager({
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setPending(null);
@@ -127,7 +129,7 @@ export function EnvironmentsManager({
       await api(`/api/settings/environments/${encodeURIComponent(target.id)}`, {
         method: "DELETE",
       });
-      toast.success(`Ambiente "${target.slug}" eliminado`);
+      toast.success(t("delete_toast", { slug: target.slug }));
       router.refresh();
     } catch (e) {
       const msg =
@@ -138,7 +140,7 @@ export function EnvironmentsManager({
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setPending(null);
@@ -152,10 +154,10 @@ export function EnvironmentsManager({
         <Card>
           <CardContent className="flex flex-col items-center gap-2 p-12 text-center">
             <h2 className="text-xl font-semibold text-foreground">
-              Aún sin ambientes
+              {t("empty_card_title")}
             </h2>
             <p className="text-sm text-muted-foreground">
-              Creá el primero abajo. La convención es{" "}
+              {t("empty_card_description_prefix")}{" "}
               <span className="font-mono">preview</span> →{" "}
               <span className="font-mono">test</span> →{" "}
               <span className="font-mono">staging</span> →{" "}
@@ -199,11 +201,10 @@ export function EnvironmentsManager({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Borrar ambiente "{deleteTarget?.slug}"
+              {t("delete_dialog_title", { slug: deleteTarget?.slug ?? "" })}
             </DialogTitle>
             <DialogDescription>
-              Si algún proyecto lo referencia, esos referers quedarán
-              apuntando a un slug inválido. Esta acción no se puede deshacer.
+              {t("delete_dialog_description")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -212,7 +213,7 @@ export function EnvironmentsManager({
               onClick={() => setDeleteTarget(null)}
               disabled={pending !== null}
             >
-              Cancelar
+              {t("delete_dialog_cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -222,7 +223,7 @@ export function EnvironmentsManager({
               {pending === deleteTarget?.id ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Borrar
+              {t("delete_dialog_confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -240,6 +241,7 @@ function EnvironmentRow({
   busy: boolean;
   onDelete: () => void;
 }) {
+  const t = useTranslations("pages.settings_environments");
   const {
     attributes,
     listeners,
@@ -266,7 +268,7 @@ function EnvironmentRow({
           <button
             type="button"
             className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground active:cursor-grabbing"
-            aria-label="Arrastrar para reordenar"
+            aria-label={t("drag_aria")}
             disabled={busy}
             {...attributes}
             {...listeners}
@@ -291,7 +293,7 @@ function EnvironmentRow({
             className="text-destructive hover:bg-destructive/10 hover:text-destructive"
           >
             <Trash2 className="mr-1 h-3.5 w-3.5" />
-            Borrar
+            {t("delete_button")}
           </Button>
         </CardContent>
       </Card>
@@ -306,21 +308,23 @@ function NewEnvironmentForm({
   existingSlugs: string[];
   onCreated: () => void;
 }) {
+  const t = useTranslations("pages.settings_environments");
   const [submitting, setSubmitting] = useState(false);
 
-  const schema = z.object({
-    slug: z
-      .string()
-      .min(1, "Requerido")
-      .regex(
-        SLUG_RE,
-        "Slug lowercase alfanumérico con guiones (2-32 chars, sin guión al inicio/fin).",
-      )
-      .refine((s) => !existingSlugs.includes(s.trim().toLowerCase()), {
-        message: "Ya existe un ambiente con ese slug.",
+  const schema = useMemo(
+    () =>
+      z.object({
+        slug: z
+          .string()
+          .min(1, t("new_validation_required"))
+          .regex(SLUG_RE, t("new_validation_slug"))
+          .refine((s) => !existingSlugs.includes(s.trim().toLowerCase()), {
+            message: t("new_validation_duplicate"),
+          }),
+        displayName: z.string().min(1, t("new_validation_required")).max(100),
       }),
-    displayName: z.string().min(1, "Requerido").max(100),
-  });
+    [t, existingSlugs],
+  );
 
   type FormValues = z.infer<typeof schema>;
 
@@ -341,7 +345,7 @@ function NewEnvironmentForm({
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success("Ambiente creado");
+      toast.success(t("new_toast_created"));
       form.reset({ slug: "", displayName: "" });
       onCreated();
     } catch (e) {
@@ -353,7 +357,7 @@ function NewEnvironmentForm({
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -364,7 +368,7 @@ function NewEnvironmentForm({
     <Card>
       <CardContent className="flex flex-col gap-4 p-5">
         <h3 className="text-sm font-semibold text-foreground">
-          Nuevo ambiente
+          {t("new_form_title")}
         </h3>
         <Form {...form}>
           <form
@@ -376,7 +380,7 @@ function NewEnvironmentForm({
               name="slug"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Slug *</FormLabel>
+                  <FormLabel>{t("new_label_slug")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -384,7 +388,7 @@ function NewEnvironmentForm({
                         field.onChange(e.target.value.toLowerCase())
                       }
                       maxLength={32}
-                      placeholder="preview"
+                      placeholder={t("new_placeholder_slug")}
                       className="font-mono text-xs"
                     />
                   </FormControl>
@@ -397,9 +401,13 @@ function NewEnvironmentForm({
               name="displayName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Display name *</FormLabel>
+                  <FormLabel>{t("new_label_display")}</FormLabel>
                   <FormControl>
-                    <Input {...field} maxLength={100} placeholder="Preview" />
+                    <Input
+                      {...field}
+                      maxLength={100}
+                      placeholder={t("new_placeholder_display")}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -410,12 +418,11 @@ function NewEnvironmentForm({
                 {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Crear ambiente
+                {t("new_submit")}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground md:col-span-3">
-              Aethra aplica order = max(order) + 1 automáticamente; después
-              podés reordenarlo arrastrando con el handle.
+              {t("new_hint")}
             </p>
           </form>
         </Form>
