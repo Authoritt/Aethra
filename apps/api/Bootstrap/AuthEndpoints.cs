@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure;
 using Aethra.Modules.Identity.Infrastructure.Authentication;
@@ -12,7 +13,14 @@ namespace Aethra.Api.Bootstrap;
 public static class AuthEndpoints
 {
     public sealed record LoginRequest(string Email, string Password);
-    public sealed record TotpLoginRequest(string TotpToken, string Code);
+
+    /// <summary>
+    /// F12.1B — body del segundo paso del login. Acepta tanto <c>totp_token</c> (snake_case,
+    /// recomendado por el plan F12.1) como <c>totpToken</c> (camelCase, default ASP.NET).
+    /// </summary>
+    public sealed record TotpLoginRequest(
+        [property: JsonPropertyName("totp_token")] string TotpToken,
+        string Code);
 
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
@@ -109,8 +117,11 @@ public static class AuthEndpoints
             var userIdRaw = totpTokens.ValidateAndGetUserId(req.TotpToken);
             if (string.IsNullOrWhiteSpace(userIdRaw))
             {
-                return Results.Json(new { error = "totp_token_invalid_or_expired" },
-                    statusCode: StatusCodes.Status401Unauthorized);
+                return Results.Json(new
+                {
+                    error = "totp_token_invalid_or_expired",
+                    detail = totpTokens.GetLastValidationError(),
+                }, statusCode: StatusCodes.Status401Unauthorized);
             }
             if (!Aethra.Shared.Kernel.Ids.AethraId.TryParse(userIdRaw, out var parsed) || parsed.Value.Prefix != "usr")
             {
