@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ export function TemplatePicker({
   templates: ServiceTemplateDto[];
   vms: VmDto[];
 }) {
+  const t = useTranslations("pages.services_new");
   const router = useRouter();
   const [selected, setSelected] = useState<ServiceTemplateDto | null>(null);
   const [slug, setSlug] = useState("");
@@ -45,10 +47,8 @@ export function TemplatePicker({
 
   const slugError = useMemo(() => {
     if (!slug) return null;
-    return SLUG_RE.test(slug)
-      ? null
-      : "Solo minúsculas, dígitos y guiones; debe iniciar con letra (máx 31).";
-  }, [slug]);
+    return SLUG_RE.test(slug) ? null : t("slug_invalid");
+  }, [slug, t]);
 
   function pickTemplate(tpl: ServiceTemplateDto) {
     setSelected(tpl);
@@ -64,7 +64,7 @@ export function TemplatePicker({
       return;
     }
     if (!targetVmId) {
-      toast.error("Seleccioná una VM target.");
+      toast.error(t("select_vm_error"));
       return;
     }
     setLoading(true);
@@ -80,7 +80,7 @@ export function TemplatePicker({
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success(`Servicio "${created.slug}" creado`);
+      toast.success(t("toast_created", { name: created.slug }));
       router.push(`/services/${created.id}`);
       router.refresh();
     } catch (e) {
@@ -90,7 +90,7 @@ export function TemplatePicker({
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -101,7 +101,7 @@ export function TemplatePicker({
     return (
       <section className="flex flex-col gap-4">
         <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Elegí una plantilla
+          {t("pick_template_heading")}
         </h2>
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {templates.map((tpl) => (
@@ -127,7 +127,7 @@ export function TemplatePicker({
                       </Badge>
                     </div>
                     <p className="line-clamp-3 text-xs text-muted-foreground">
-                      {tpl.notes || "—"}
+                      {tpl.notes || t("template_no_notes")}
                     </p>
                     <div className="mt-auto flex items-center justify-between font-mono text-[11px] text-muted-foreground">
                       <span>{tpl.image}</span>
@@ -149,7 +149,7 @@ export function TemplatePicker({
         <CardContent className="flex items-center justify-between gap-3 p-4">
           <div className="min-w-0">
             <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Plantilla
+              {t("section_template_label")}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-foreground">
@@ -164,7 +164,7 @@ export function TemplatePicker({
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => setSelected(null)}>
-            Cambiar
+            {t("change_template")}
           </Button>
         </CardContent>
       </Card>
@@ -173,7 +173,7 @@ export function TemplatePicker({
         <Card>
           <CardContent className="space-y-5 p-6">
             <div className="space-y-2">
-              <Label htmlFor="name">Nombre *</Label>
+              <Label htmlFor="name">{t("label_name")}</Label>
               <Input
                 id="name"
                 value={name}
@@ -184,12 +184,12 @@ export function TemplatePicker({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="slug">Slug *</Label>
+              <Label htmlFor="slug">{t("label_slug")}</Label>
               <Input
                 id="slug"
                 value={slug}
                 onChange={(e) => setSlug(e.target.value)}
-                placeholder="prod-postgres"
+                placeholder={t("placeholder_slug")}
                 className="font-mono text-xs"
                 required
                 autoComplete="off"
@@ -199,20 +199,20 @@ export function TemplatePicker({
                 <p className="text-xs text-destructive">{slugError}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Identificador del servicio. Minúsculas + dígitos + guiones.
+                  {t("slug_hint")}
                 </p>
               )}
             </div>
             <div className="space-y-2">
-              <Label>VM target *</Label>
+              <Label>{t("label_target_vm")}</Label>
               <Select value={targetVmId} onValueChange={setTargetVmId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccioná una VM" />
+                  <SelectValue placeholder={t("placeholder_target_vm")} />
                 </SelectTrigger>
                 <SelectContent>
                   {vms.length === 0 ? (
                     <SelectItem value="__none__" disabled>
-                      No hay VMs
+                      {t("no_vms")}
                     </SelectItem>
                   ) : (
                     vms.map((vm) => (
@@ -224,7 +224,7 @@ export function TemplatePicker({
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                VM donde se ejecutará el contenedor del servicio.
+                {t("target_vm_hint")}
               </p>
             </div>
 
@@ -236,12 +236,10 @@ export function TemplatePicker({
               />
               <div className="flex flex-col gap-1">
                 <Label htmlFor="exposed" className="cursor-pointer">
-                  Exponer externamente
+                  {t("label_exposed")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Por defecto el servicio solo es accesible vía red Docker
-                  interna. Activalo para abrir el puerto en la VM (ej. conectar
-                  DBeaver).
+                  {t("exposed_hint")}
                 </p>
               </div>
             </div>
@@ -252,7 +250,7 @@ export function TemplatePicker({
                 variant="ghost"
                 onClick={() => router.push("/services")}
               >
-                Cancelar
+                {t("cancel")}
               </Button>
               <Button
                 type="submit"
@@ -263,7 +261,7 @@ export function TemplatePicker({
                 {loading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Crear servicio
+                {t("submit")}
               </Button>
             </div>
           </CardContent>

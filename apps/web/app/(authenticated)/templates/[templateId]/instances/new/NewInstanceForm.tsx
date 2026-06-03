@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ export function NewInstanceForm({
   environments: EnvironmentDefinitionDto[];
   vms: VmDto[];
 }) {
+  const t = useTranslations("pages.instances_new");
   const router = useRouter();
   const [clientId, setClientId] = useState<string>(clients[0]?.id ?? "");
   const [environment, setEnvironment] = useState<string>(
@@ -79,10 +81,8 @@ export function NewInstanceForm({
 
   const slugError = useMemo(() => {
     if (!slug) return null;
-    return SLUG_RE.test(slug)
-      ? null
-      : "Slug inválido (lowercase + guiones, máx 31).";
-  }, [slug]);
+    return SLUG_RE.test(slug) ? null : t("slug_invalid");
+  }, [slug, t]);
 
   const canSubmit =
     !loading && !!clientId && !!environment && !!targetVmId && !!slug && !slugError;
@@ -153,7 +153,7 @@ export function NewInstanceForm({
         `/api/templates/${encodeURIComponent(templateId)}/instances`,
         { method: "POST", body: JSON.stringify(body) },
       );
-      toast.success("Instance creada");
+      toast.success(t("toast_created"));
       router.push(`/instances/${response.id}`);
       router.refresh();
     } catch (e) {
@@ -163,7 +163,7 @@ export function NewInstanceForm({
               ?.message ?? `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -176,19 +176,19 @@ export function NewInstanceForm({
         <CardContent className="space-y-6 p-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Client *</Label>
+              <Label>{t("label_client")}</Label>
               <Select
                 value={clientId}
                 onValueChange={setClientId}
                 disabled={clients.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccioná un client" />
+                  <SelectValue placeholder={t("placeholder_client")} />
                 </SelectTrigger>
                 <SelectContent>
                   {clients.length === 0 ? (
                     <SelectItem value="__none__" disabled>
-                      No hay clients en este proyecto
+                      {t("no_clients")}
                     </SelectItem>
                   ) : (
                     clients.map((c) => (
@@ -201,19 +201,19 @@ export function NewInstanceForm({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Environment *</Label>
+              <Label>{t("label_environment")}</Label>
               <Select
                 value={environment}
                 onValueChange={setEnvironment}
                 disabled={environments.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccioná un environment" />
+                  <SelectValue placeholder={t("placeholder_environment")} />
                 </SelectTrigger>
                 <SelectContent>
                   {environments.length === 0 ? (
                     <SelectItem value="__none__" disabled>
-                      No hay environments definidos
+                      {t("no_environments")}
                     </SelectItem>
                   ) : (
                     environments.map((env) => (
@@ -226,19 +226,19 @@ export function NewInstanceForm({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>VM destino *</Label>
+              <Label>{t("label_target_vm")}</Label>
               <Select
                 value={targetVmId}
                 onValueChange={setTargetVmId}
                 disabled={vms.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccioná una VM" />
+                  <SelectValue placeholder={t("placeholder_target_vm")} />
                 </SelectTrigger>
                 <SelectContent>
                   {vms.length === 0 ? (
                     <SelectItem value="__none__" disabled>
-                      No hay VMs registradas
+                      {t("no_vms")}
                     </SelectItem>
                   ) : (
                     vms.map((vm) => (
@@ -251,12 +251,12 @@ export function NewInstanceForm({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="slug">Slug *</Label>
+              <Label htmlFor="slug">{t("label_slug")}</Label>
               <Input
                 id="slug"
                 value={slug}
                 onChange={(e) => setSlug(e.target.value.toLowerCase())}
-                placeholder="instance-prod"
+                placeholder={t("placeholder_slug")}
                 className="font-mono text-xs"
                 maxLength={31}
                 required
@@ -265,24 +265,23 @@ export function NewInstanceForm({
                 <p className="text-xs text-destructive">{slugError}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Aethra arma containerName y hostname con esto.
+                  {t("slug_hint")}
                 </p>
               )}
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="custom">Custom domain</Label>
+            <Label htmlFor="custom">{t("label_custom_domain")}</Label>
             <Input
               id="custom"
               value={customDomain}
               onChange={(e) => setCustomDomain(e.target.value)}
-              placeholder="app.mi-cliente.com"
+              placeholder={t("placeholder_custom_domain")}
               className="font-mono text-xs"
             />
             <p className="text-xs text-muted-foreground">
-              Opcional. Si lo dejas vacío se usa el auto-hostname
-              template-client-env.base_domain.
+              {t("custom_domain_hint")}
             </p>
           </div>
 
@@ -293,23 +292,23 @@ export function NewInstanceForm({
               onCheckedChange={setAutoDeploy}
             />
             <Label htmlFor="autodeploy" className="cursor-pointer">
-              Auto-deploy al detectar un nuevo build verde
+              {t("auto_deploy_label")}
             </Label>
           </div>
 
           <fieldset className="rounded-md border border-border bg-muted/30 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <legend className="px-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Ports
+                {t("ports_legend")}
               </legend>
               <Button type="button" variant="outline" size="sm" onClick={addPort}>
                 <Plus className="mr-2 h-4 w-4" />
-                Añadir
+                {t("add_label")}
               </Button>
             </div>
             {ports.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                Sin puertos. Añadí uno si tu container expone alguno.
+                {t("ports_empty")}
               </p>
             ) : (
               <ul className="space-y-2">
@@ -326,7 +325,7 @@ export function NewInstanceForm({
                         })
                       }
                       className="col-span-3 font-mono text-xs"
-                      placeholder="containerPort"
+                      placeholder={t("ports_container_placeholder")}
                     />
                     <Input
                       type="number"
@@ -339,7 +338,7 @@ export function NewInstanceForm({
                         })
                       }
                       className="col-span-3 font-mono text-xs"
-                      placeholder="hostPort (auto)"
+                      placeholder={t("ports_host_placeholder")}
                     />
                     <div className="col-span-4">
                       <Select
@@ -363,7 +362,7 @@ export function NewInstanceForm({
                       size="icon"
                       className="col-span-2 mx-auto"
                       onClick={() => removePort(i)}
-                      aria-label="Quitar"
+                      aria-label={t("remove_aria")}
                     >
                       <Trash2 className="h-4 w-4 text-muted-foreground" />
                     </Button>
@@ -376,7 +375,7 @@ export function NewInstanceForm({
           <fieldset className="rounded-md border border-border bg-muted/30 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <legend className="px-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Volumes
+                {t("volumes_legend")}
               </legend>
               <Button
                 type="button"
@@ -385,11 +384,11 @@ export function NewInstanceForm({
                 onClick={addVolume}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                Añadir
+                {t("add_label")}
               </Button>
             </div>
             {volumes.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Sin volumes.</p>
+              <p className="text-xs text-muted-foreground">{t("volumes_empty")}</p>
             ) : (
               <ul className="space-y-2">
                 {volumes.map((v, i) => (
@@ -398,7 +397,7 @@ export function NewInstanceForm({
                       value={v.name}
                       onChange={(e) => setVolume(i, { name: e.target.value })}
                       className="col-span-3 font-mono text-xs"
-                      placeholder="name"
+                      placeholder={t("volume_name_placeholder")}
                     />
                     <Input
                       value={v.containerPath}
@@ -406,7 +405,7 @@ export function NewInstanceForm({
                         setVolume(i, { containerPath: e.target.value })
                       }
                       className="col-span-5 font-mono text-xs"
-                      placeholder="/data"
+                      placeholder={t("volume_path_placeholder")}
                     />
                     <div className="col-span-2 flex items-center gap-1.5">
                       <Checkbox
@@ -415,7 +414,9 @@ export function NewInstanceForm({
                           setVolume(i, { readOnly: Boolean(checked) })
                         }
                       />
-                      <Label className="cursor-pointer text-xs">ro</Label>
+                      <Label className="cursor-pointer text-xs">
+                        {t("volume_readonly")}
+                      </Label>
                     </div>
                     <Button
                       type="button"
@@ -423,7 +424,7 @@ export function NewInstanceForm({
                       size="icon"
                       className="col-span-2 mx-auto"
                       onClick={() => removeVolume(i)}
-                      aria-label="Quitar"
+                      aria-label={t("remove_aria")}
                     >
                       <Trash2 className="h-4 w-4 text-muted-foreground" />
                     </Button>
@@ -439,9 +440,9 @@ export function NewInstanceForm({
               onClick={() => setShowHealthcheck((v) => !v)}
               className="flex w-full items-center justify-between text-xs font-medium uppercase tracking-wider text-foreground"
             >
-              <span>Healthcheck</span>
+              <span>{t("healthcheck_legend")}</span>
               <span className="text-muted-foreground">
-                {showHealthcheck ? "ocultar" : "configurar"}
+                {showHealthcheck ? t("healthcheck_hide") : t("healthcheck_show")}
               </span>
             </button>
 
@@ -455,10 +456,10 @@ export function NewInstanceForm({
                       setHealthcheck((h) => ({ ...h, enabled: checked }))
                     }
                   />
-                  <Label htmlFor="hc-enabled">Habilitar healthcheck</Label>
+                  <Label htmlFor="hc-enabled">{t("healthcheck_enable")}</Label>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="hc-test">Comando de test</Label>
+                  <Label htmlFor="hc-test">{t("healthcheck_test_label")}</Label>
                   <Textarea
                     id="hc-test"
                     value={healthcheck.testRaw}
@@ -469,12 +470,12 @@ export function NewInstanceForm({
                     className="font-mono text-xs"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Una línea por argumento. Ej: CMD-SHELL / curl ...
+                    {t("healthcheck_test_hint")}
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   <div className="space-y-2">
-                    <Label>Interval (s)</Label>
+                    <Label>{t("healthcheck_interval")}</Label>
                     <Input
                       type="number"
                       min={1}
@@ -489,7 +490,7 @@ export function NewInstanceForm({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Retries</Label>
+                    <Label>{t("healthcheck_retries")}</Label>
                     <Input
                       type="number"
                       min={0}
@@ -504,7 +505,7 @@ export function NewInstanceForm({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Timeout (s)</Label>
+                    <Label>{t("healthcheck_timeout")}</Label>
                     <Input
                       type="number"
                       min={0}
@@ -519,7 +520,7 @@ export function NewInstanceForm({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Start period (s)</Label>
+                    <Label>{t("healthcheck_start_period")}</Label>
                     <Input
                       type="number"
                       min={0}
@@ -544,13 +545,13 @@ export function NewInstanceForm({
               variant="ghost"
               onClick={() => router.push(`/templates/${templateId}`)}
             >
-              Cancelar
+              {t("cancel")}
             </Button>
             <Button type="submit" disabled={!canSubmit}>
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Crear instance
+              {t("submit")}
             </Button>
           </div>
         </CardContent>

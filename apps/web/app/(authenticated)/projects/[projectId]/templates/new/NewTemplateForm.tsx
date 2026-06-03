@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   AlertTriangle,
   ArrowRight,
@@ -38,6 +39,7 @@ import type {
 const SLUG_RE = /^[a-z][a-z0-9-]{0,30}$/;
 
 export function NewTemplateForm({ projectId }: { projectId: string }) {
+  const t = useTranslations("pages.templates_new");
   const router = useRouter();
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
@@ -58,10 +60,8 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
 
   const slugError = useMemo(() => {
     if (!slug) return null;
-    return SLUG_RE.test(slug)
-      ? null
-      : "Slug debe iniciar con letra, lowercase con guiones (máx 31).";
-  }, [slug]);
+    return SLUG_RE.test(slug) ? null : t("slug_invalid");
+  }, [slug, t]);
 
   const watchPaths = useMemo(
     () =>
@@ -103,7 +103,7 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
    */
   async function onDetect() {
     if (!gitRepoUrl.trim()) {
-      toast.error("Pone primero el git repo URL.");
+      toast.error(t("detect_missing_url"));
       return;
     }
     setDetecting(true);
@@ -122,10 +122,12 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
       setDetection(result);
       setBuildType(result.suggestedBuildType);
       toast.success(
-        `Detectado: ${result.suggestedBuildType}` +
-          (result.detectedLanguages.length > 0
-            ? ` (${result.detectedLanguages.join(", ")})`
-            : ""),
+        result.detectedLanguages.length > 0
+          ? t("detect_success_with_langs", {
+              type: result.suggestedBuildType,
+              langs: result.detectedLanguages.join(", "),
+            })
+          : t("detect_success", { type: result.suggestedBuildType }),
       );
     } catch (e) {
       const msg =
@@ -134,8 +136,8 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
-      toast.error(`Discover falló: ${msg}`);
+            : t("error_unknown");
+      toast.error(t("detect_failed", { message: msg }));
     } finally {
       setDetecting(false);
     }
@@ -169,7 +171,7 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
         `/api/projects/${encodeURIComponent(projectId)}/templates`,
         { method: "POST", body: JSON.stringify(body) },
       );
-      toast.success("Template creado");
+      toast.success(t("toast_simple_created"));
       setCreated(response);
     } catch (e) {
       const msg =
@@ -178,7 +180,7 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
               ?.message ?? `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -195,12 +197,12 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
         <CardContent className="space-y-6 p-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="slug">Slug *</Label>
+              <Label htmlFor="slug">{t("label_slug")}</Label>
               <Input
                 id="slug"
                 value={slug}
                 onChange={(e) => setSlug(e.target.value.toLowerCase())}
-                placeholder="api-service"
+                placeholder={t("placeholder_slug")}
                 className="font-mono text-xs"
                 maxLength={31}
                 required
@@ -209,24 +211,24 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
                 <p className="text-xs text-destructive">{slugError}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  URL-friendly, lowercase con guiones (máx 31).
+                  {t("slug_hint")}
                 </p>
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="name">Nombre *</Label>
+              <Label htmlFor="name">{t("label_name")}</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="API Service"
+                placeholder={t("placeholder_name")}
                 required
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Descripción</Label>
+            <Label htmlFor="description">{t("label_description")}</Label>
             <Textarea
               id="description"
               value={description}
@@ -237,10 +239,10 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
 
           <fieldset className="rounded-md border border-border bg-muted/30 p-4 space-y-4">
             <legend className="px-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Source
+              {t("section_source")}
             </legend>
             <div className="space-y-2">
-              <Label htmlFor="git">Git repo URL *</Label>
+              <Label htmlFor="git">{t("label_git_repo")}</Label>
               <div className="flex gap-2">
                 <Input
                   id="git"
@@ -251,7 +253,7 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
                     // de ser confiable: limpiamos para no mostrar info engañosa.
                     if (detection) setDetection(null);
                   }}
-                  placeholder="git@github.com:org/repo.git"
+                  placeholder={t("placeholder_git_url")}
                   className="font-mono text-xs"
                   required
                 />
@@ -260,46 +262,46 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
                   variant="outline"
                   onClick={onDetect}
                   disabled={detecting || !gitRepoUrl.trim()}
-                  title="Hace shallow clone del repo y autodetecta Dockerfile / Compose / Nixpacks"
+                  title={t("detect_title")}
                 >
                   {detecting ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Search className="h-4 w-4" />
                   )}
-                  <span className="ml-2">Detectar</span>
+                  <span className="ml-2">{t("detect_label")}</span>
                 </Button>
               </div>
               {detection ? (
                 <div className="rounded-md border border-success/30 bg-success/5 p-3 text-xs space-y-1">
                   <div className="flex items-center gap-2 text-success-foreground">
                     <CheckCircle2 className="h-4 w-4 text-success" />
-                    <strong>Sugerido:</strong>
+                    <strong>{t("detection_suggested")}</strong>
                     <span className="font-mono">{detection.suggestedBuildType}</span>
                   </div>
                   <ul className="ml-6 list-disc text-muted-foreground space-y-0.5">
                     <li>
-                      Lenguajes detectados:{" "}
+                      {t("detection_languages")}{" "}
                       <span className="font-mono">
                         {detection.detectedLanguages.length > 0
                           ? detection.detectedLanguages.join(", ")
-                          : "ninguno"}
+                          : t("detection_none")}
                       </span>
                     </li>
                     <li>
-                      Archivos en raíz:{" "}
+                      {t("detection_files_root")}{" "}
                       {detection.hasDockerfile ? "Dockerfile " : ""}
                       {detection.hasCompose ? "compose.yml " : ""}
                       {detection.hasNixpacksToml ? "nixpacks.toml " : ""}
                       {!detection.hasDockerfile &&
                       !detection.hasCompose &&
                       !detection.hasNixpacksToml
-                        ? "ninguno de los típicos"
+                        ? t("detection_none_typical")
                         : ""}
                     </li>
                     {detection.exposedPorts.length > 0 ? (
                       <li>
-                        Puertos sugeridos:{" "}
+                        {t("detection_ports")}{" "}
                         <span className="font-mono">
                           {detection.exposedPorts.join(", ")}
                         </span>
@@ -311,7 +313,7 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="branch">Branch *</Label>
+                <Label htmlFor="branch">{t("label_branch")}</Label>
                 <Input
                   id="branch"
                   value={branch}
@@ -321,7 +323,7 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="basedir">Base directory</Label>
+                <Label htmlFor="basedir">{t("label_base_dir")}</Label>
                 <Input
                   id="basedir"
                   value={baseDirectory}
@@ -329,32 +331,32 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
                   className="font-mono text-xs"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Subdir dentro del repo. Default `.`.
+                  {t("base_dir_hint")}
                 </p>
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="watch">Watch paths *</Label>
+              <Label htmlFor="watch">{t("label_watch_paths")} *</Label>
               <Textarea
                 id="watch"
                 value={watchPathsRaw}
                 onChange={(e) => setWatchPathsRaw(e.target.value)}
                 rows={3}
                 className="font-mono text-xs"
-                placeholder="**"
+                placeholder={t("placeholder_watch_paths")}
               />
               <p className="text-xs text-muted-foreground">
-                Globs uno por línea. Solo cambios en estos paths disparan build.
+                {t("watch_paths_hint")}
               </p>
             </div>
           </fieldset>
 
           <fieldset className="rounded-md border border-border bg-muted/30 p-4 space-y-4">
             <legend className="px-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Build
+              {t("section_build")}
             </legend>
             <div className="space-y-2">
-              <Label>Build type *</Label>
+              <Label>{t("label_build_type")}</Label>
               <Select
                 value={buildType}
                 onValueChange={(v) => setBuildType(v as BuildType)}
@@ -364,25 +366,24 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Dockerfile">
-                    Dockerfile — usa tu propio <code className="font-mono">Dockerfile</code>
+                    {t("build_type_dockerfile")}
                   </SelectItem>
                   <SelectItem value="DockerCompose">
-                    Docker Compose — varios servicios desde <code className="font-mono">compose.yml</code>
+                    {t("build_type_compose")}
                   </SelectItem>
                   <SelectItem value="Nixpacks">
-                    Nixpacks — auto-detecta lenguaje (Node, Python, Go, Rust, ...). No requiere Dockerfile.
+                    {t("build_type_nixpacks")}
                   </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Es la estrategia para construir la imagen. El runtime que la ejecuta (Docker o Podman) se configura por VM en{" "}
-                <span className="font-mono">Satellite:ContainerRuntime</span>.
+                {t("build_strategy_hint")}
               </p>
             </div>
 
             {buildType === "Dockerfile" ? (
               <div className="space-y-2">
-                <Label htmlFor="dockerfile">Dockerfile path *</Label>
+                <Label htmlFor="dockerfile">{t("dockerfile_path_label")}</Label>
                 <Input
                   id="dockerfile"
                   value={dockerfilePath}
@@ -393,7 +394,7 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
               </div>
             ) : buildType === "DockerCompose" ? (
               <div className="space-y-2">
-                <Label htmlFor="compose">Compose file path *</Label>
+                <Label htmlFor="compose">{t("compose_path_label")}</Label>
                 <Input
                   id="compose"
                   value={composeFilePath}
@@ -404,27 +405,21 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
               </div>
             ) : (
               <p className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-                Nixpacks detecta el stack automáticamente. No requiere Dockerfile.
-                El satélite que ejecute el build debe tener <code className="font-mono">nixpacks</code>{" "}
-                en el PATH (instalar con{" "}
-                <code className="font-mono">
-                  curl -fsSL https://nixpacks.com/install.sh | bash
-                </code>
-                ).
+                {t("nixpacks_hint")}
               </p>
             )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Build args</Label>
+                <Label>{t("label_build_args")}</Label>
                 <Button type="button" variant="outline" size="sm" onClick={addArg}>
                   <Plus className="mr-2 h-4 w-4" />
-                  Añadir
+                  {t("build_args_add")}
                 </Button>
               </div>
               {buildArgs.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  Sin args. Añadí pares clave/valor para inyectar al build.
+                  {t("build_args_empty")}
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -433,13 +428,13 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
                       <Input
                         value={arg.key}
                         onChange={(e) => setArg(i, { key: e.target.value })}
-                        placeholder="KEY"
+                        placeholder={t("build_args_key_placeholder")}
                         className="w-40 font-mono text-xs"
                       />
                       <Input
                         value={arg.value}
                         onChange={(e) => setArg(i, { value: e.target.value })}
-                        placeholder="value"
+                        placeholder={t("build_args_value_placeholder")}
                         className="flex-1 font-mono text-xs"
                       />
                       <Button
@@ -447,7 +442,7 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
                         variant="ghost"
                         size="icon"
                         onClick={() => removeArg(i)}
-                        aria-label="Quitar"
+                        aria-label={t("remove_aria")}
                       >
                         <Trash2 className="h-4 w-4 text-muted-foreground" />
                       </Button>
@@ -464,13 +459,13 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
               variant="ghost"
               onClick={() => router.push(`/projects/${projectId}`)}
             >
-              Cancelar
+              {t("cancel")}
             </Button>
             <Button type="submit" disabled={!canSubmit}>
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Crear template
+              {t("submit")}
             </Button>
           </div>
         </CardContent>
@@ -480,15 +475,16 @@ export function NewTemplateForm({ projectId }: { projectId: string }) {
 }
 
 function WebhookSecretScreen({ template }: { template: TemplateDetail }) {
+  const t = useTranslations("pages.templates_new");
   const secret = template.webhookSecret ?? "";
 
   async function copy() {
     if (!secret) return;
     try {
       await navigator.clipboard.writeText(secret);
-      toast.success("Webhook secret copiado");
+      toast.success(t("webhook_secret_copied"));
     } catch {
-      toast.error("No se pudo copiar al portapapeles");
+      toast.error(t("webhook_secret_copy_failed"));
     }
   }
 
@@ -496,7 +492,7 @@ function WebhookSecretScreen({ template }: { template: TemplateDetail }) {
     <div className="flex flex-col gap-6">
       <Card className="border-success/30 bg-success/5">
         <CardContent className="p-4 text-sm text-success-foreground">
-          <strong>Template creado.</strong> {template.name} ({template.slug})
+          <strong>{t("webhook_screen_title")}</strong> {template.name} ({template.slug})
         </CardContent>
       </Card>
 
@@ -505,11 +501,10 @@ function WebhookSecretScreen({ template }: { template: TemplateDetail }) {
           <AlertTriangle className="h-5 w-5 shrink-0 text-warning" />
           <div>
             <CardTitle className="text-sm">
-              El webhook secret solo se muestra esta vez
+              {t("webhook_secret_one_time_title")}
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              Copialo y configurarlo en tu provider Git (GitHub/Gitlab) ahora.
-              Si lo perdés, rotalo desde el detalle del template.
+              {t("webhook_secret_one_time_description")}
             </p>
           </div>
         </CardHeader>
@@ -518,7 +513,7 @@ function WebhookSecretScreen({ template }: { template: TemplateDetail }) {
             <div className="rounded-md border border-border bg-card">
               <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Webhook secret
+                  {t("webhook_secret_label")}
                 </span>
                 <Button
                   type="button"
@@ -527,7 +522,7 @@ function WebhookSecretScreen({ template }: { template: TemplateDetail }) {
                   onClick={copy}
                 >
                   <Copy className="mr-2 h-4 w-4" />
-                  Copiar
+                  {t("webhook_secret_copy")}
                 </Button>
               </div>
               <pre className="overflow-x-auto whitespace-nowrap px-3 py-2 font-mono text-xs text-foreground">
@@ -538,7 +533,7 @@ function WebhookSecretScreen({ template }: { template: TemplateDetail }) {
         ) : (
           <CardContent className="pt-0">
             <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              La API no devolvió webhook secret. Verificá el contrato.
+              {t("webhook_secret_missing")}
             </p>
           </CardContent>
         )}
@@ -547,7 +542,7 @@ function WebhookSecretScreen({ template }: { template: TemplateDetail }) {
       <div className="flex justify-end">
         <Button asChild>
           <Link href={`/templates/${template.id}`}>
-            Ir al detalle
+            {t("webhook_go_to_detail")}
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </Button>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -36,24 +37,6 @@ export interface ApplicationOption {
 
 type RunOn = "binding_create" | "deploy" | "manual";
 
-const PERMS: { value: BindingPermissions; label: string; hint: string }[] = [
-  {
-    value: "Owner",
-    label: "Owner",
-    hint: "Acceso total. Recomendado para migraciones y administración.",
-  },
-  {
-    value: "ReadWrite",
-    label: "ReadWrite",
-    hint: "Lectura y escritura sobre el recurso, sin DDL ni admin.",
-  },
-  {
-    value: "ReadOnly",
-    label: "ReadOnly",
-    hint: "Solo lectura. Útil para dashboards, reportes o réplicas.",
-  },
-];
-
 export function NewBindingForm({
   serviceId,
   serviceType,
@@ -63,6 +46,7 @@ export function NewBindingForm({
   serviceType: string;
   applications: ApplicationOption[];
 }) {
+  const t = useTranslations("pages.bindings_new");
   const router = useRouter();
   const [applicationId, setApplicationId] = useState<string>(
     applications[0]?.id ?? "",
@@ -78,14 +62,32 @@ export function NewBindingForm({
   const [hookRunOn, setHookRunOn] = useState<RunOn>("binding_create");
   const [loading, setLoading] = useState(false);
 
+  const PERMS: { value: BindingPermissions; label: string; hint: string }[] = [
+    {
+      value: "Owner",
+      label: t("perm_owner_label"),
+      hint: t("perm_owner_hint"),
+    },
+    {
+      value: "ReadWrite",
+      label: t("perm_readwrite_label"),
+      hint: t("perm_readwrite_hint"),
+    },
+    {
+      value: "ReadOnly",
+      label: t("perm_readonly_label"),
+      hint: t("perm_readonly_hint"),
+    },
+  ];
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!applicationId) {
-      toast.error("Seleccioná una application.");
+      toast.error(t("select_app_error"));
       return;
     }
     if (hookEnabled && !hookCommand.trim()) {
-      toast.error("Indicá el comando del migrations hook o desactivalo.");
+      toast.error(t("hook_command_error"));
       return;
     }
     setLoading(true);
@@ -108,7 +110,7 @@ export function NewBindingForm({
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success("Binding creado");
+      toast.success(t("toast_created"));
       router.push(`/services/${serviceId}`);
       router.refresh();
     } catch (e) {
@@ -118,7 +120,7 @@ export function NewBindingForm({
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -128,11 +130,11 @@ export function NewBindingForm({
   if (applications.length === 0) {
     return (
       <EmptyState
-        title="Aún sin aplicaciones"
-        description="Creá una application en un proyecto antes de bindearla a un servicio."
+        title={t("no_apps_title")}
+        description={t("no_apps_description")}
         action={
           <Button asChild variant="outline">
-            <Link href="/projects">Ir a proyectos</Link>
+            <Link href="/projects">{t("go_to_projects")}</Link>
           </Button>
         }
       />
@@ -144,10 +146,10 @@ export function NewBindingForm({
       <Card>
         <CardContent className="space-y-5 p-6">
           <div className="space-y-2">
-            <Label>Application *</Label>
+            <Label>{t("label_application")}</Label>
             <Select value={applicationId} onValueChange={setApplicationId}>
               <SelectTrigger>
-                <SelectValue placeholder="Seleccioná una application" />
+                <SelectValue placeholder={t("placeholder_application")} />
               </SelectTrigger>
               <SelectContent>
                 {applications.map((a) => (
@@ -160,23 +162,22 @@ export function NewBindingForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="resource">Resource name</Label>
+            <Label htmlFor="resource">{t("label_resource")}</Label>
             <Input
               id="resource"
               value={resourceName}
               onChange={(e) => setResourceName(e.target.value)}
-              placeholder="se autogenera de app.slug"
+              placeholder={t("resource_placeholder")}
               autoComplete="off"
               spellCheck={false}
             />
             <p className="text-xs text-muted-foreground">
-              Nombre del recurso (database, queue, etc.). Si lo dejas vacío se
-              autogenera del slug de la application.
+              {t("resource_hint")}
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label>Permisos *</Label>
+            <Label>{t("label_permissions")}</Label>
             <div className="flex flex-col gap-2">
               {PERMS.map((p) => (
                 <label
@@ -210,19 +211,18 @@ export function NewBindingForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="prefix">Env var prefix</Label>
+            <Label htmlFor="prefix">{t("label_env_prefix")}</Label>
             <Input
               id="prefix"
               value={envVarPrefix}
               onChange={(e) => setEnvVarPrefix(e.target.value)}
-              placeholder="vacío para sin prefix"
+              placeholder={t("env_prefix_placeholder")}
               className="font-mono text-xs"
               autoComplete="off"
               spellCheck={false}
             />
             <p className="text-xs text-muted-foreground">
-              Se añade a las env vars inyectadas (ej. &quot;DB_&quot; → DB_URL,
-              DB_PASSWORD).
+              {t("env_prefix_hint")}
             </p>
           </div>
 
@@ -235,11 +235,10 @@ export function NewBindingForm({
               />
               <div>
                 <Label htmlFor="hook" className="cursor-pointer">
-                  Activar migrations hook
+                  {t("label_migrations_hook")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Aethra ejecuta el comando dentro del contenedor de la
-                  application según el evento que elijas.
+                  {t("migrations_hook_hint")}
                 </p>
               </div>
             </div>
@@ -247,25 +246,25 @@ export function NewBindingForm({
             {hookEnabled ? (
               <div className="space-y-4 pt-2">
                 <div className="space-y-2">
-                  <Label htmlFor="hookcmd">Comando *</Label>
+                  <Label htmlFor="hookcmd">{t("hook_command_label")}</Label>
                   <Input
                     id="hookcmd"
                     value={hookCommand}
                     onChange={(e) => setHookCommand(e.target.value)}
-                    placeholder="npx prisma migrate deploy"
+                    placeholder={t("hook_command_placeholder")}
                     className="font-mono text-xs"
                     autoComplete="off"
                     spellCheck={false}
                   />
                   <p className="text-xs text-muted-foreground">
                     {serviceType.toLowerCase().includes("postgres")
-                      ? 'Ej. "npx prisma migrate deploy" o "alembic upgrade head".'
-                      : "Comando a ejecutar dentro del contenedor de la application."}
+                      ? t("hook_command_hint_postgres")
+                      : t("hook_command_hint_default")}
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label htmlFor="timeout">Timeout (s)</Label>
+                    <Label htmlFor="timeout">{t("hook_timeout_label")}</Label>
                     <Input
                       id="timeout"
                       type="number"
@@ -278,7 +277,7 @@ export function NewBindingForm({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Disparar en</Label>
+                    <Label>{t("hook_trigger_label")}</Label>
                     <Select
                       value={hookRunOn}
                       onValueChange={(v) => setHookRunOn(v as RunOn)}
@@ -288,10 +287,10 @@ export function NewBindingForm({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="binding_create">
-                          Al crear el binding
+                          {t("hook_trigger_binding_create")}
                         </SelectItem>
-                        <SelectItem value="deploy">En cada deploy</SelectItem>
-                        <SelectItem value="manual">Manual</SelectItem>
+                        <SelectItem value="deploy">{t("hook_trigger_deploy")}</SelectItem>
+                        <SelectItem value="manual">{t("hook_trigger_manual")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -304,11 +303,10 @@ export function NewBindingForm({
                   />
                   <div>
                     <Label htmlFor="failon" className="cursor-pointer">
-                      Fallar el deploy si el hook falla
+                      {t("hook_fail_on_label")}
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Si está activo, un exit code distinto de 0 aborta el
-                      deploy y revierte el binding.
+                      {t("hook_fail_on_hint")}
                     </p>
                   </div>
                 </div>
@@ -322,13 +320,13 @@ export function NewBindingForm({
               variant="ghost"
               onClick={() => router.push(`/services/${serviceId}`)}
             >
-              Cancelar
+              {t("cancel")}
             </Button>
             <Button type="submit" disabled={loading || !applicationId}>
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Crear binding
+              {t("submit")}
             </Button>
           </div>
         </CardContent>
