@@ -75,3 +75,30 @@ public sealed record BackupPolicyDto(
     string CronExpression,
     int RetentionCount,
     string Destination);
+
+public sealed record ScheduledJobDto(
+    string Id,
+    string ServiceId,
+    string Name,
+    string? Description,
+    string Command,
+    string CronExpression,
+    string TimeZone,
+    bool Enabled,
+    int MaxConcurrent,
+    int TimeoutSeconds,
+    DateTimeOffset? LastRunAt,
+    DateTimeOffset? NextRunAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+public sealed record ScheduledJobRunDto(
+    string Id,
+    string JobId,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? FinishedAt,
+    string Status,
+    int? ExitCode,
+    string? Stdout,
+    string? Stderr,
+    long? DurationMs);

@@ -2,6 +2,7 @@ using Aethra.Modules.Services.Infrastructure;
 using Aethra.Modules.Services.Infrastructure.Backup;
 using Aethra.Modules.Services.Infrastructure.Binding;
 using Aethra.Modules.Services.Infrastructure.Provisioning;
+using Aethra.Modules.Services.Infrastructure.Scheduling;
 using Aethra.Modules.Services.Presentation;
 using Aethra.Modules.Services.Templates;
 using Aethra.Shared.Infrastructure.Modules;
@@ -51,6 +52,10 @@ public static class ServicesModule
         services.AddHttpClient("services-backup", c => c.Timeout = TimeSpan.FromMinutes(5));
 
         services.AddHostedService<BackupWorker>();
+
+        // F12.1A: scheduled jobs por servicio (cron + docker exec via satellite RPC).
+        services.AddSingleton<ScheduledJobWorker>();
+        services.AddHostedService(sp => sp.GetRequiredService<ScheduledJobWorker>());
 
         return services;
     }
