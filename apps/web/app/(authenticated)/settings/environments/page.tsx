@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
@@ -26,6 +27,10 @@ async function fetchEnvironments(): Promise<
 }
 
 export default async function EnvironmentsPage() {
+  const t = await getTranslations("pages.settings_environments");
+  const tSettings = await getTranslations("pages.settings");
+  const tCommon = await getTranslations("common");
+
   const data = await fetchEnvironments();
   if (data === "unauthorized") {
     redirect("/login");
@@ -35,17 +40,17 @@ export default async function EnvironmentsPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "Ambientes" },
+          { label: tSettings("title"), href: "/settings" },
+          { label: t("list_breadcrumb") },
         ]}
-        title="Ambientes"
-        description="Catálogo de ambientes válidos (production, staging, preview...). El orden refleja la progresión natural y se respeta en la UI de otros módulos."
+        title={t("title")}
+        description={t("list_description")}
       />
 
       {data === "error" ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado.
+            {tCommon("load_error_short")}
           </CardContent>
         </Card>
       ) : Array.isArray(data) ? (
@@ -55,15 +60,14 @@ export default async function EnvironmentsPage() {
       <Card className="mt-6">
         <CardContent className="p-5 text-sm text-muted-foreground">
           <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Cómo se consume
+            {t("info_title")}
           </h3>
           <p className="mt-2">
-            Otros módulos (Projects, Deployments) inyectan{" "}
+            {t("info_prefix")}
             <code className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
-              IEnvironmentCatalog
-            </code>{" "}
-            y validan slugs contra esta lista. Así se evita que cada módulo
-            duplique el enum de ambientes.
+              {t("info_catalog")}
+            </code>
+            {t("info_suffix")}
           </p>
         </CardContent>
       </Card>

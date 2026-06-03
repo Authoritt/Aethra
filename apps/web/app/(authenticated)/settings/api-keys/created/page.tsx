@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import { CreatedSecretCard } from "./CreatedSecretCard";
@@ -24,6 +25,9 @@ async function checkAuth(): Promise<boolean> {
 }
 
 export default async function ApiKeyCreatedPage({ searchParams }: PageProps) {
+  const t = await getTranslations("pages.settings_api_keys");
+  const tSettings = await getTranslations("pages.settings");
+
   const ok = await checkAuth();
   if (!ok) redirect("/login");
 
@@ -34,12 +38,12 @@ export default async function ApiKeyCreatedPage({ searchParams }: PageProps) {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "API keys", href: "/settings/api-keys" },
-          { label: "Creada" },
+          { label: tSettings("title"), href: "/settings" },
+          { label: t("list_breadcrumb"), href: "/settings/api-keys" },
+          { label: t("created_breadcrumb") },
         ]}
-        title="API key creada"
-        description="Copiá el secret ahora. Es la única vez que podrás verlo: por seguridad solo guardamos su hash en la base."
+        title={t("created_title")}
+        description={t("created_description")}
       />
       <div className="max-w-3xl">
         <CreatedSecretCard id={id ?? null} />

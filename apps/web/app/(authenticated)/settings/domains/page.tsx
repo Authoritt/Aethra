@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Globe, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,10 @@ async function fetchDomains(): Promise<
 }
 
 export default async function BaseDomainsPage() {
+  const t = await getTranslations("pages.settings_domains");
+  const tSettings = await getTranslations("pages.settings");
+  const tCommon = await getTranslations("common");
+
   const data = await fetchDomains();
   if (data === "unauthorized") {
     redirect("/login");
@@ -53,16 +58,16 @@ export default async function BaseDomainsPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "Base domains" },
+          { label: tSettings("title"), href: "/settings" },
+          { label: t("list_breadcrumb") },
         ]}
-        title="Base domains"
-        description="FQDN bajo el cual Aethra construye los hostnames. Solo uno puede estar activo a la vez."
+        title={t("list_title")}
+        description={t("list_description")}
         actions={
           <Button asChild>
             <Link href="/settings/domains/new">
               <Plus className="mr-2 h-4 w-4" />
-              Nuevo base domain
+              {t("list_action_new")}
             </Link>
           </Button>
         }
@@ -71,19 +76,19 @@ export default async function BaseDomainsPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado.
+            {tCommon("load_error_short")}
           </CardContent>
         </Card>
       ) : domains.length === 0 ? (
         <EmptyState
           icon={<Globe className="h-6 w-6" />}
-          title="Aún sin base domains"
-          description="Registrá el FQDN bajo el cual Aethra creará hostnames. Después marcá el wildcard como configurado cuando crees el registro DNS."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
               <Link href="/settings/domains/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Nuevo base domain
+                {t("list_action_new")}
               </Link>
             </Button>
           }
@@ -93,12 +98,12 @@ export default async function BaseDomainsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Hostname</TableHead>
-                <TableHead>Cloudflare zone</TableHead>
-                <TableHead>Wildcard DNS</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Creado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                <TableHead>{t("col_hostname")}</TableHead>
+                <TableHead>{t("col_zone")}</TableHead>
+                <TableHead>{t("col_wildcard")}</TableHead>
+                <TableHead>{t("col_status")}</TableHead>
+                <TableHead>{t("col_created")}</TableHead>
+                <TableHead className="text-right">{t("col_actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -119,21 +124,21 @@ export default async function BaseDomainsPage() {
                         {d.cloudflareZoneId}
                       </Link>
                     ) : (
-                      <span className="text-muted-foreground">no enlazada</span>
+                      <span className="text-muted-foreground">{t("zone_unlinked")}</span>
                     )}
                   </TableCell>
                   <TableCell className="align-top">
                     {d.wildcardConfigured ? (
-                      <Badge variant="success">confirmado</Badge>
+                      <Badge variant="success">{t("wildcard_confirmed")}</Badge>
                     ) : (
                       <MarkWildcardButton id={d.id} />
                     )}
                   </TableCell>
                   <TableCell className="align-top">
                     {d.isActive ? (
-                      <Badge variant="success">activo</Badge>
+                      <Badge variant="success">{t("status_active")}</Badge>
                     ) : (
-                      <Badge variant="outline">inactivo</Badge>
+                      <Badge variant="outline">{t("status_inactive")}</Badge>
                     )}
                   </TableCell>
                   <TableCell className="align-top text-xs text-muted-foreground">
@@ -164,16 +169,16 @@ export default async function BaseDomainsPage() {
       <Card className="mt-6">
         <CardContent className="p-5 text-sm text-muted-foreground">
           <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Cómo funciona el wildcard
+            {t("info_title")}
           </h3>
           <p className="mt-2">
-            Creá en tu DNS un registro{" "}
+            {t("info_prefix")}
             <code className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
-              *.tu-base-domain
-            </code>{" "}
-            apuntando a la IP pública del Edge VM. Cuando lo verifiques, marcá
-            <em> Wildcard configurado</em> para que el módulo Proxy use ese
-            hostname como wildcard SAN al pedir certificados.
+              {t("info_record")}
+            </code>
+            {t("info_suffix_prefix")}
+            <em>{t("info_suffix_em")}</em>
+            {t("info_suffix_end")}
           </p>
         </CardContent>
       </Card>

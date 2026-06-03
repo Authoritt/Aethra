@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -48,6 +49,9 @@ const STATUS_VARIANTS: Record<
 };
 
 export default async function DeliveriesPage() {
+  const t = await getTranslations("pages.settings_notifications.deliveries");
+  const tSettings = await getTranslations("pages.settings");
+
   const data = await fetchDeliveries();
   if (data === "unauthorized") redirect("/login");
 
@@ -58,38 +62,38 @@ export default async function DeliveriesPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "Notificaciones", href: "/settings/notifications" },
-          { label: "Historial" },
+          { label: tSettings("title"), href: "/settings" },
+          { label: t("breadcrumb_parent"), href: "/settings/notifications" },
+          { label: t("breadcrumb") },
         ]}
-        title="Historial de entregas"
-        description="Ultimas 100 notificaciones enviadas o intentadas. Las Pending se reintentaran segun el backoff del dispatcher."
+        title={t("title")}
+        description={t("description")}
       />
 
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el historial.
+            {t("load_error")}
           </CardContent>
         </Card>
       ) : rows.length === 0 ? (
         <EmptyState
           icon={<History className="h-6 w-6" />}
-          title="Sin entregas registradas"
-          description="No hay notificaciones disparadas todavia. Activa monitores o builds para verlas aparecer."
+          title={t("empty_title")}
+          description={t("empty_description")}
         />
       ) : (
         <Card>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Canal</TableHead>
-                <TableHead>Evento</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Intentos</TableHead>
-                <TableHead>Creada</TableHead>
-                <TableHead>Enviada</TableHead>
-                <TableHead>Error</TableHead>
+                <TableHead>{t("col_channel")}</TableHead>
+                <TableHead>{t("col_event")}</TableHead>
+                <TableHead>{t("col_status")}</TableHead>
+                <TableHead>{t("col_attempts")}</TableHead>
+                <TableHead>{t("col_created")}</TableHead>
+                <TableHead>{t("col_sent")}</TableHead>
+                <TableHead>{t("col_error")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

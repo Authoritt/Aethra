@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Lock, Plus, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,11 @@ async function fetchRoles(): Promise<RoleDto[] | "unauthorized" | "error"> {
 }
 
 export default async function RolesPage() {
+  const t = await getTranslations("pages.settings_roles");
+  const tSettings = await getTranslations("pages.settings");
+  const tUsers = await getTranslations("pages.settings_users");
+  const tCommon = await getTranslations("common");
+
   const data = await fetchRoles();
   if (data === "unauthorized") redirect("/login");
 
@@ -47,17 +53,17 @@ export default async function RolesPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "Users", href: "/settings/users" },
-          { label: "Roles" },
+          { label: tSettings("title"), href: "/settings" },
+          { label: tUsers("list_breadcrumb"), href: "/settings/users" },
+          { label: t("list_breadcrumb") },
         ]}
-        title="Roles"
-        description="Agrupan scopes y se asignan a los usuarios. Los tres roles builtin (admin/developer/viewer) no pueden borrarse."
+        title={t("list_title")}
+        description={t("list_description")}
         actions={
           <Button asChild>
             <Link href="/settings/roles/new">
               <Plus className="mr-2 h-4 w-4" />
-              Crear rol
+              {t("list_action_new")}
             </Link>
           </Button>
         }
@@ -66,25 +72,25 @@ export default async function RolesPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado.
+            {tCommon("load_error_short")}
           </CardContent>
         </Card>
       ) : roles.length === 0 ? (
         <EmptyState
           icon={<Shield className="h-6 w-6" />}
-          title="Aún sin roles"
-          description="El bootstrap debería haber creado admin/developer/viewer. Si no, contactá al admin."
+          title={t("empty_title")}
+          description={t("empty_description")}
         />
       ) : (
         <Card>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Rol</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead>Scopes</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                <TableHead>{t("col_role")}</TableHead>
+                <TableHead>{t("col_slug")}</TableHead>
+                <TableHead>{t("col_scopes")}</TableHead>
+                <TableHead>{t("col_type")}</TableHead>
+                <TableHead className="text-right">{t("col_actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -102,7 +108,7 @@ export default async function RolesPage() {
                     <div className="flex flex-wrap gap-1">
                       {r.scopes.includes("*") ? (
                         <Badge variant="warning" className="text-[10px]">
-                          admin (*)
+                          {t("scope_admin")}
                         </Badge>
                       ) : (
                         <>
@@ -131,18 +137,18 @@ export default async function RolesPage() {
                     {r.isSystem ? (
                       <Badge variant="outline" className="text-[10px]">
                         <Lock className="mr-1 h-3 w-3" />
-                        builtin
+                        {t("type_builtin")}
                       </Badge>
                     ) : (
                       <Badge variant="success" className="text-[10px]">
-                        custom
+                        {t("type_custom")}
                       </Badge>
                     )}
                   </TableCell>
                   <TableCell className="align-top text-right">
                     {r.isSystem ? (
                       <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                        protegido
+                        {t("protected_label")}
                       </span>
                     ) : (
                       <DeleteRoleButton id={r.id} slug={r.slug} />

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Bell, Plus, History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,10 @@ async function fetchChannels(): Promise<
 }
 
 export default async function NotificationsPage() {
+  const t = await getTranslations("pages.settings_notifications");
+  const tSettings = await getTranslations("pages.settings");
+  const tCommon = await getTranslations("common");
+
   const data = await fetchChannels();
   if (data === "unauthorized") {
     redirect("/login");
@@ -53,23 +58,23 @@ export default async function NotificationsPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "Notificaciones" },
+          { label: tSettings("title"), href: "/settings" },
+          { label: t("list_breadcrumb") },
         ]}
-        title="Notificaciones"
-        description="Canales que reciben alertas operativas (monitores down, builds fallidos, certificados expirados). El payload se manda al webhook configurado segun cada tipo."
+        title={t("list_title")}
+        description={t("list_description")}
         actions={
           <div className="flex items-center gap-2">
             <Button asChild variant="outline">
               <Link href="/settings/notifications/deliveries">
                 <History className="mr-2 h-4 w-4" />
-                Historial
+                {t("list_action_history")}
               </Link>
             </Button>
             <Button asChild>
               <Link href="/settings/notifications/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Nuevo canal
+                {t("list_action_new")}
               </Link>
             </Button>
           </div>
@@ -79,19 +84,19 @@ export default async function NotificationsPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado.
+            {tCommon("load_error_short")}
           </CardContent>
         </Card>
       ) : channels.length === 0 ? (
         <EmptyState
           icon={<Bell className="h-6 w-6" />}
-          title="Sin canales configurados"
-          description="Crea un canal Slack/Discord/Telegram/Email/Webhook para recibir alertas de monitores, builds y deploys."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
               <Link href="/settings/notifications/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Nuevo canal
+                {t("list_action_new")}
               </Link>
             </Button>
           }
@@ -101,12 +106,12 @@ export default async function NotificationsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Eventos</TableHead>
-                <TableHead>Activo</TableHead>
-                <TableHead>Ultimo envio</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                <TableHead>{t("col_name")}</TableHead>
+                <TableHead>{t("col_type")}</TableHead>
+                <TableHead>{t("col_events")}</TableHead>
+                <TableHead>{t("col_active")}</TableHead>
+                <TableHead>{t("col_last_sent")}</TableHead>
+                <TableHead className="text-right">{t("col_actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -125,7 +130,7 @@ export default async function NotificationsPage() {
                   </TableCell>
                   <TableCell className="align-top">
                     {c.eventFilters.length === 0 ? (
-                      <Badge variant="outline">todos</Badge>
+                      <Badge variant="outline">{t("events_all")}</Badge>
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {c.eventFilters.map((e) => (
@@ -140,7 +145,13 @@ export default async function NotificationsPage() {
                     <ToggleActiveSwitch id={c.id} isActive={c.isActive} />
                   </TableCell>
                   <TableCell className="align-top text-xs text-muted-foreground">
-                    {formatRelative(c.lastDeliveredAt)}
+                    {formatRelative(c.lastDeliveredAt, {
+                      never: t("relative_never"),
+                      seconds: t("relative_seconds_ago"),
+                      minutes: (m) => t("relative_minutes_ago", { minutes: m }),
+                      hours: (h) => t("relative_hours_ago", { hours: h }),
+                      days: (d) => t("relative_days_ago", { days: d }),
+                    })}
                   </TableCell>
                   <TableCell className="align-top text-right">
                     <div className="inline-flex items-center gap-2">
@@ -158,17 +169,25 @@ export default async function NotificationsPage() {
   );
 }
 
-function formatRelative(iso: string | null | undefined): string {
-  if (!iso) return "nunca";
+interface RelativeStrings {
+  never: string;
+  seconds: string;
+  minutes: (n: number) => string;
+  hours: (n: number) => string;
+  days: (n: number) => string;
+}
+
+function formatRelative(iso: string | null | undefined, s: RelativeStrings): string {
+  if (!iso) return s.never;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   const diffMs = Date.now() - d.getTime();
   if (diffMs < 0) return d.toLocaleString();
   const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 1) return "hace unos seg.";
-  if (minutes < 60) return `hace ${minutes} min`;
+  if (minutes < 1) return s.seconds;
+  if (minutes < 60) return s.minutes(minutes);
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `hace ${hours} h`;
+  if (hours < 24) return s.hours(hours);
   const days = Math.floor(hours / 24);
-  return `hace ${days} d`;
+  return s.days(days);
 }

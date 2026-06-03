@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Key, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,10 @@ async function fetchKeys(): Promise<
 }
 
 export default async function ApiKeysPage() {
+  const t = await getTranslations("pages.settings_api_keys");
+  const tSettings = await getTranslations("pages.settings");
+  const tCommon = await getTranslations("common");
+
   const data = await fetchKeys();
   if (data === "unauthorized") {
     redirect("/login");
@@ -52,16 +57,16 @@ export default async function ApiKeysPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "API keys" },
+          { label: tSettings("title"), href: "/settings" },
+          { label: t("list_breadcrumb") },
         ]}
-        title="API keys"
-        description="Tokens portadores para integrar herramientas externas y agentes con la API de Aethra. El secret se muestra una única vez al crearlas."
+        title={t("list_title")}
+        description={t("list_description")}
         actions={
           <Button asChild>
             <Link href="/settings/api-keys/new">
               <Plus className="mr-2 h-4 w-4" />
-              Crear API key
+              {t("list_action_new")}
             </Link>
           </Button>
         }
@@ -70,19 +75,19 @@ export default async function ApiKeysPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado.
+            {tCommon("load_error_short")}
           </CardContent>
         </Card>
       ) : keys.length === 0 ? (
         <EmptyState
           icon={<Key className="h-6 w-6" />}
-          title="Aún sin API keys"
-          description="Creá tu primera API key para que tus integraciones, scripts y agentes IA puedan llamar a la API de Aethra."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
               <Link href="/settings/api-keys/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Crear API key
+                {t("list_action_new")}
               </Link>
             </Button>
           }
@@ -92,14 +97,14 @@ export default async function ApiKeysPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Prefix</TableHead>
-                <TableHead>Scopes</TableHead>
-                <TableHead>Creada</TableHead>
-                <TableHead>Último uso</TableHead>
-                <TableHead>Expira</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                <TableHead>{t("col_name")}</TableHead>
+                <TableHead>{t("col_prefix")}</TableHead>
+                <TableHead>{t("col_scopes")}</TableHead>
+                <TableHead>{t("col_created")}</TableHead>
+                <TableHead>{t("col_last_used")}</TableHead>
+                <TableHead>{t("col_expires")}</TableHead>
+                <TableHead>{t("col_status")}</TableHead>
+                <TableHead className="text-right">{t("col_actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -122,16 +127,26 @@ export default async function ApiKeysPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="align-top">
-                      <ScopesPills scopes={key.scopes} />
+                      <ScopesPills
+                        scopes={key.scopes}
+                        labelNone={t("scope_none")}
+                        labelAdmin={t("scope_admin")}
+                      />
                     </TableCell>
                     <TableCell className="align-top text-xs text-muted-foreground">
                       {formatDate(key.created_at)}
                     </TableCell>
                     <TableCell className="align-top text-xs text-muted-foreground">
-                      {formatRelative(key.last_used_at)}
+                      {formatRelative(key.last_used_at, {
+                        never: t("relative_never"),
+                        seconds: t("relative_seconds_ago"),
+                        minutes: (m) => t("relative_minutes_ago", { minutes: m }),
+                        hours: (h) => t("relative_hours_ago", { hours: h }),
+                        days: (d) => t("relative_days_ago", { days: d }),
+                      })}
                     </TableCell>
                     <TableCell className="align-top text-xs text-muted-foreground">
-                      {formatExpires(key.expires_at)}
+                      {formatExpires(key.expires_at, t("relative_never"))}
                     </TableCell>
                     <TableCell className="align-top">
                       <ApiKeyStatusPill status={status} />
@@ -154,18 +169,18 @@ export default async function ApiKeysPage() {
       <Card className="mt-6">
         <CardContent className="p-5 text-sm text-muted-foreground">
           <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Cómo usar una API key
+            {t("info_title")}
           </h3>
           <p className="mt-2">
-            Enviá el secret en el header{" "}
+            {t("info_prefix")}
             <code className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
-              Authorization: Bearer aethra_…
-            </code>{" "}
-            o como{" "}
+              {t("info_bearer")}
+            </code>
+            {t("info_or")}
             <code className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
-              X-Api-Key
-            </code>{" "}
-            según la integración.
+              {t("info_xapikey")}
+            </code>
+            {t("info_suffix")}
           </p>
         </CardContent>
       </Card>
@@ -173,12 +188,18 @@ export default async function ApiKeysPage() {
   );
 }
 
-function ScopesPills({ scopes }: { scopes: string[] }) {
+interface ScopesPillsProps {
+  scopes: string[];
+  labelNone: string;
+  labelAdmin: string;
+}
+
+function ScopesPills({ scopes, labelNone, labelAdmin }: ScopesPillsProps) {
   if (scopes.length === 0) {
-    return <span className="text-xs text-muted-foreground">(ninguno)</span>;
+    return <span className="text-xs text-muted-foreground">{labelNone}</span>;
   }
   if (scopes.includes("*")) {
-    return <Badge variant="warning">admin (*)</Badge>;
+    return <Badge variant="warning">{labelAdmin}</Badge>;
   }
   const max = 4;
   const visible = scopes.slice(0, max);
@@ -209,22 +230,30 @@ function formatDate(iso: string): string {
   });
 }
 
-function formatRelative(iso: string | null | undefined): string {
-  if (!iso) return "nunca";
+interface RelativeStrings {
+  never: string;
+  seconds: string;
+  minutes: (n: number) => string;
+  hours: (n: number) => string;
+  days: (n: number) => string;
+}
+
+function formatRelative(iso: string | null | undefined, s: RelativeStrings): string {
+  if (!iso) return s.never;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   const diffMs = Date.now() - d.getTime();
   if (diffMs < 0) return d.toLocaleString();
   const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 1) return "hace unos seg.";
-  if (minutes < 60) return `hace ${minutes} min`;
+  if (minutes < 1) return s.seconds;
+  if (minutes < 60) return s.minutes(minutes);
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `hace ${hours} h`;
+  if (hours < 24) return s.hours(hours);
   const days = Math.floor(hours / 24);
-  return `hace ${days} d`;
+  return s.days(days);
 }
 
-function formatExpires(iso: string | null | undefined): string {
-  if (!iso) return "nunca";
+function formatExpires(iso: string | null | undefined, never: string): string {
+  if (!iso) return never;
   return formatDate(iso);
 }

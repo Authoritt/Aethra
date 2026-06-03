@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Plus, UserIcon, Users as UsersIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,10 @@ async function fetchUsers(): Promise<UserSummary[] | "unauthorized" | "error"> {
 }
 
 export default async function UsersPage() {
+  const t = await getTranslations("pages.settings_users");
+  const tSettings = await getTranslations("pages.settings");
+  const tCommon = await getTranslations("common");
+
   const data = await fetchUsers();
   if (data === "unauthorized") redirect("/login");
 
@@ -48,20 +53,20 @@ export default async function UsersPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Settings", href: "/settings" },
-          { label: "Users" },
+          { label: tSettings("title"), href: "/settings" },
+          { label: t("list_breadcrumb") },
         ]}
-        title="Usuarios"
-        description="Cuentas humanas con acceso a Aethra. Cada usuario tiene uno o más roles que determinan sus permisos."
+        title={t("list_title")}
+        description={t("list_description")}
         actions={
           <div className="flex gap-2">
             <Button asChild variant="outline">
-              <Link href="/settings/roles">Roles</Link>
+              <Link href="/settings/roles">{t("list_action_roles")}</Link>
             </Button>
             <Button asChild>
               <Link href="/settings/users/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Crear usuario
+                {t("list_action_new")}
               </Link>
             </Button>
           </div>
@@ -71,19 +76,19 @@ export default async function UsersPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar el listado.
+            {tCommon("load_error_short")}
           </CardContent>
         </Card>
       ) : users.length === 0 ? (
         <EmptyState
           icon={<UsersIcon className="h-6 w-6" />}
-          title="Aún sin usuarios"
-          description="Creá tu primer usuario para empezar a invitar a tu equipo."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
               <Link href="/settings/users/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Crear usuario
+                {t("list_action_new")}
               </Link>
             </Button>
           }
@@ -93,11 +98,11 @@ export default async function UsersPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Usuario</TableHead>
-                <TableHead>Roles</TableHead>
-                <TableHead>Último login</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                <TableHead>{t("col_user")}</TableHead>
+                <TableHead>{t("col_roles")}</TableHead>
+                <TableHead>{t("col_last_login")}</TableHead>
+                <TableHead>{t("col_status")}</TableHead>
+                <TableHead className="text-right">{t("col_actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -122,7 +127,7 @@ export default async function UsersPage() {
                     <div className="flex flex-wrap gap-1">
                       {u.roles.length === 0 ? (
                         <Badge variant="outline" className="text-[10px]">
-                          (sin roles)
+                          {t("no_roles")}
                         </Badge>
                       ) : (
                         u.roles.map((r) => (
@@ -140,16 +145,22 @@ export default async function UsersPage() {
                     </div>
                   </TableCell>
                   <TableCell className="align-top text-xs text-muted-foreground">
-                    {formatRelative(u.lastLoginAt)}
+                    {formatRelative(u.lastLoginAt, {
+                      never: t("relative_never"),
+                      seconds: t("relative_seconds_ago"),
+                      minutes: (m) => t("relative_minutes_ago", { minutes: m }),
+                      hours: (h) => t("relative_hours_ago", { hours: h }),
+                      days: (d) => t("relative_days_ago", { days: d }),
+                    })}
                   </TableCell>
                   <TableCell className="align-top">
                     {u.isActive ? (
                       <Badge variant="success" className="text-[10px]">
-                        Activo
+                        {t("status_active")}
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="text-[10px]">
-                        Inactivo
+                        {t("status_inactive")}
                       </Badge>
                     )}
                   </TableCell>
@@ -170,17 +181,25 @@ export default async function UsersPage() {
   );
 }
 
-function formatRelative(iso: string | null | undefined): string {
-  if (!iso) return "nunca";
+interface RelativeStrings {
+  never: string;
+  seconds: string;
+  minutes: (n: number) => string;
+  hours: (n: number) => string;
+  days: (n: number) => string;
+}
+
+function formatRelative(iso: string | null | undefined, s: RelativeStrings): string {
+  if (!iso) return s.never;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   const diffMs = Date.now() - d.getTime();
   if (diffMs < 0) return d.toLocaleString();
   const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 1) return "hace unos seg.";
-  if (minutes < 60) return `hace ${minutes} min`;
+  if (minutes < 1) return s.seconds;
+  if (minutes < 60) return s.minutes(minutes);
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `hace ${hours} h`;
+  if (hours < 24) return s.hours(hours);
   const days = Math.floor(hours / 24);
-  return `hace ${days} d`;
+  return s.days(days);
 }
