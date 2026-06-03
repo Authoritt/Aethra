@@ -46,3 +46,23 @@ public sealed record ListContainersRequest(string CorrelationId);
 
 /// <summary>Respuesta del satélite al <see cref="ListContainersRequest"/> con la lista de contenedores conocidos.</summary>
 public sealed record ListContainersResponse(string CorrelationId, IReadOnlyList<ContainerInfo> Containers);
+
+/// <summary>
+/// F12.1A — pide al satélite ejecutar un comando shell dentro de un contenedor (vía
+/// <c>docker exec</c>). Captura stdout/stderr y exit code. Usado por scheduled jobs y migrations hooks.
+/// </summary>
+/// <param name="CorrelationId">Identificador único del job/request.</param>
+/// <param name="ContainerNameOrId">Nombre o ID del contenedor donde ejecutar.</param>
+/// <param name="Command">Comando en formato shell. El satélite lo ejecuta como
+/// <c>sh -c "command"</c> dentro del contenedor.</param>
+/// <param name="TimeoutSeconds">Timeout maximo. Si se excede, el satélite mata el proceso y
+/// devuelve <see cref="ExecResult.TimedOut"/>.</param>
+public sealed record ExecInContainerRequest(
+    string CorrelationId, string ContainerNameOrId, string Command, int TimeoutSeconds);
+
+/// <summary>Respuesta del satélite al <see cref="ExecInContainerRequest"/>.</summary>
+public sealed record ExecInContainerResponse(string CorrelationId, ExecResult Result);
+
+/// <summary>Resultado de un exec. Si <paramref name="TimedOut"/> true, <paramref name="ExitCode"/>
+/// puede ser <c>-1</c> y el proceso fue terminado por el satélite.</summary>
+public sealed record ExecResult(int ExitCode, string Stdout, string Stderr, bool TimedOut);

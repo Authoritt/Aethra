@@ -115,6 +115,21 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
         return resp.Containers;
     }
 
+    public async Task<ExecResult> SendExecAsync(
+        string vmId, string containerNameOrId, string command, int timeoutSeconds, CancellationToken ct)
+    {
+        var correlationId = NewCorrelationId();
+        // El timeout en el cliente RPC debe superar al timeout del exec en el satelite,
+        // para que el satelite tenga tiempo de matar el proceso y responder con TimedOut=true
+        // antes de que el cliente caiga en su propio timeout.
+        var clientTimeout = TimeSpan.FromSeconds(Math.Max(timeoutSeconds + 30, (int)_defaultTimeout.TotalSeconds));
+        var resp = await SendAndAwaitAsync<ExecInContainerResponse>(
+            vmId, correlationId, "ExecInContainer",
+            new ExecInContainerRequest(correlationId, containerNameOrId, command, timeoutSeconds),
+            clientTimeout, ct).ConfigureAwait(false);
+        return resp.Result;
+    }
+
     // -------------------------------------------------------------------------
     // ISatelliteRpcClient — streams.
     // -------------------------------------------------------------------------

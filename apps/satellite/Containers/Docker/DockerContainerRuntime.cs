@@ -483,6 +483,65 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
         }
     }
 
+    /// <summary>
+    /// F12.1A — ejecuta un comando shell dentro de un contenedor corriendo. Usa la API
+    /// nativa de Docker (<c>docker exec</c>) para crear un proceso exec, attach a stdout/stderr,
+    /// y leer hasta que el proceso termine o se exceda <paramref name="timeoutSeconds"/>.
+    /// </summary>
+    public async Task<ExecResult> ExecInContainerAsync(
+        string containerNameOrId, string command, int timeoutSeconds, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(containerNameOrId))
+        {
+            return new ExecResult(-1, string.Empty, "container_name_required", TimedOut: false);
+        }
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            return new ExecResult(-1, string.Empty, "command_required", TimedOut: false);
+        }
+        var timeoutSec = timeoutSeconds <= 0 ? 300 : timeoutSeconds;
+
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSec));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        try
+        {
+            var execParams = new ContainerExecCreateParameters
+            {
+                AttachStdout = true,
+                AttachStderr = true,
+                Tty = false,
+                Cmd = new List<string> { "sh", "-c", command },
+            };
+            var execCreate = await _client.Exec.ExecCreateContainerAsync(
+                containerNameOrId, execParams, linked.Token).ConfigureAwait(false);
+
+            var stdoutBuilder = new StringBuilder();
+            var stderrBuilder = new StringBuilder();
+
+            using (var stream = await _client.Exec.StartAndAttachContainerExecAsync(
+                execCreate.ID, tty: false, linked.Token).ConfigureAwait(false))
+            {
+                var (stdout, stderr) = await stream.ReadOutputToEndAsync(linked.Token).ConfigureAwait(false);
+                stdoutBuilder.Append(stdout);
+                stderrBuilder.Append(stderr);
+            }
+
+            var inspect = await _client.Exec.InspectContainerExecAsync(execCreate.ID, linked.Token)
+                .ConfigureAwait(false);
+            var exitCode = (int)inspect.ExitCode;
+            return new ExecResult(exitCode, stdoutBuilder.ToString(), stderrBuilder.ToString(), TimedOut: false);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            return new ExecResult(-1, string.Empty, $"exec timed out after {timeoutSec}s", TimedOut: true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Exec en contenedor {Name} falló", containerNameOrId);
+            return new ExecResult(-1, string.Empty, ex.Message, TimedOut: false);
+        }
+    }
+
     public async Task<IReadOnlyList<ContainerInfo>> ListContainersAsync(CancellationToken ct)
     {
         var raw = await _client.Containers.ListContainersAsync(

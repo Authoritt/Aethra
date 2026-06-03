@@ -156,6 +156,12 @@ public sealed class SatelliteHub(
         return Task.CompletedTask;
     }
 
+    public Task ExecInContainerResponse(ExecInContainerResponse response)
+    {
+        rpcCallbacks.CompleteRequest(response.CorrelationId, response);
+        return Task.CompletedTask;
+    }
+
     public Task RpcFailed(string correlationId, string errorMessage)
     {
         rpcCallbacks.FailRequest(correlationId, new InvalidOperationException(errorMessage));

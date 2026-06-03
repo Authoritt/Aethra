@@ -36,4 +36,10 @@ public interface IContainerRuntime
 
     /// <summary>Lista los contenedores conocidos por el runtime (incluidos los detenidos).</summary>
     Task<IReadOnlyList<ContainerInfo>> ListContainersAsync(CancellationToken ct);
+
+    /// <summary>F12.1A — ejecuta un comando shell (<c>sh -c "command"</c>) dentro de un
+    /// contenedor corriendo. Captura stdout/stderr y exit code. Si el comando excede
+    /// <paramref name="timeoutSeconds"/>, mata el proceso y marca <c>TimedOut=true</c>.</summary>
+    Task<ExecResult> ExecInContainerAsync(
+        string containerNameOrId, string command, int timeoutSeconds, CancellationToken ct);
 }

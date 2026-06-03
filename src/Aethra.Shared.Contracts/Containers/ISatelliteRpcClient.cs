@@ -40,4 +40,12 @@ public interface ISatelliteRpcClient
 
     /// <summary>Lista los contenedores conocidos por el satélite de la VM indicada.</summary>
     Task<IReadOnlyList<ContainerInfo>> SendListContainersAsync(string vmId, CancellationToken ct);
+
+    /// <summary>F12.1A — ejecuta un comando shell dentro de un contenedor en la VM indicada.</summary>
+    /// <param name="vmId">VM target.</param>
+    /// <param name="containerNameOrId">Contenedor donde ejecutar (debe estar corriendo).</param>
+    /// <param name="command">Comando a ejecutar (se invoca como <c>sh -c "command"</c>).</param>
+    /// <param name="timeoutSeconds">Timeout maximo en segundos.</param>
+    Task<ExecResult> SendExecAsync(
+        string vmId, string containerNameOrId, string command, int timeoutSeconds, CancellationToken ct);
 }

@@ -149,6 +149,22 @@ public sealed class SatelliteCommandHandler(
                     CancellationToken.None);
             });
         });
+
+        // F12.1A — ExecInContainer.
+        connection.On<ExecInContainerRequest>("ExecInContainer", async (req) =>
+        {
+            await HandleAsync(connection, req.CorrelationId, "ExecInContainer", async () =>
+            {
+                logger.LogInformation("Central → ExecInContainer (corr={Corr}, container={Name})",
+                    req.CorrelationId, req.ContainerNameOrId);
+                var result = await runtime.ExecInContainerAsync(
+                    req.ContainerNameOrId, req.Command, req.TimeoutSeconds, CancellationToken.None);
+                await connection.InvokeAsync(
+                    "ExecInContainerResponse",
+                    new ExecInContainerResponse(req.CorrelationId, result),
+                    CancellationToken.None);
+            });
+        });
     }
 
     /// <summary>

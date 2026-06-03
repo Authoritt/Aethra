@@ -477,6 +477,37 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
         }
     }
 
+    /// <summary>
+    /// F12.1A — exec via <c>podman exec</c> CLI. Captura stdout/stderr y maneja timeout
+    /// matando el proceso podman si excede <paramref name="timeoutSeconds"/>.
+    /// </summary>
+    public async Task<ExecResult> ExecInContainerAsync(
+        string containerNameOrId, string command, int timeoutSeconds, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(containerNameOrId))
+        {
+            return new ExecResult(-1, string.Empty, "container_name_required", TimedOut: false);
+        }
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            return new ExecResult(-1, string.Empty, "command_required", TimedOut: false);
+        }
+        var timeoutSec = timeoutSeconds <= 0 ? 300 : timeoutSeconds;
+
+        var args = new List<string> { "exec", containerNameOrId, "sh", "-c", command };
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSec));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        try
+        {
+            var (exitCode, stdout, stderr) = await RunPodmanAsync(args, linked.Token).ConfigureAwait(false);
+            return new ExecResult(exitCode, stdout, stderr, TimedOut: false);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            return new ExecResult(-1, string.Empty, $"exec timed out after {timeoutSec}s", TimedOut: true);
+        }
+    }
+
     private async Task<(int ExitCode, string Stdout, string Stderr)> RunPodmanAsync(
         IReadOnlyList<string> args, CancellationToken ct)
     {
