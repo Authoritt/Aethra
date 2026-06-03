@@ -17,6 +17,7 @@ import { ServiceStatusPill } from "../ServiceStatusPill";
 import { BindingActions } from "../BindingActions";
 import { DeleteServiceButton } from "./DeleteServiceButton";
 import { BackupsTab } from "./BackupsTab";
+import { ScheduledJobsTab } from "./ScheduledJobsTab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const dynamic = "force-dynamic";
@@ -160,6 +161,7 @@ export default async function ServiceDetailPage({
         <TabsList>
           <TabsTrigger value="bindings">{t("tab_bindings")}</TabsTrigger>
           <TabsTrigger value="backups">{t("tab_backups")}</TabsTrigger>
+          <TabsTrigger value="scheduled-jobs">Scheduled jobs</TabsTrigger>
         </TabsList>
         <TabsContent value="bindings">
           <section className="space-y-3">
@@ -202,6 +204,9 @@ export default async function ServiceDetailPage({
         </TabsContent>
         <TabsContent value="backups">
           <BackupsTab serviceId={service.id} />
+        </TabsContent>
+        <TabsContent value="scheduled-jobs">
+          <ScheduledJobsTab serviceId={service.id} />
         </TabsContent>
       </Tabs>
     </div>
