@@ -20,32 +20,33 @@ internal sealed class EfTemplateLookup(ProjectsDbContext db, IWebhookSecretCodec
         ArgumentNullException.ThrowIfNull(repoUrl);
         ArgumentNullException.ThrowIfNull(branch);
 
-        // Match por (Source.GitRepoUrl, Source.Branch). Como ambos son columnas owned de la
-        // misma tabla, EF traduce esto a un WHERE simple sin joins. El converter de
-        // <c>GitRepoUrl</c> permite comparar la columna como string sin instanciar el VO.
-        var matches = await db.Templates
+        // El ValueConverter de GitRepoUrl impide a EF traducir t.Source.GitRepoUrl.Value == repoUrl.
+        // Materializamos y filtramos en cliente — la cardinalidad de Templates es muy baja (decenas).
+        // F12.3 — además del DefaultBranch, aceptamos push si la branch aparece en cualquier
+        // EnvironmentMapping del Template (para soportar prod→main + staging→develop sin que el
+        // push a develop sea descartado por no coincidir con DefaultBranch).
+        var all = await db.Templates
             .AsNoTracking()
-            .Where(t => t.Source.GitRepoUrl.Value == repoUrl && t.Source.DefaultBranch == branch)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+            .Include(t => t.EnvironmentMapping)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var matches = all.Where(t =>
+                string.Equals(t.Source.GitRepoUrl.Value, repoUrl, StringComparison.Ordinal)
+                && (string.Equals(t.Source.DefaultBranch, branch, StringComparison.Ordinal)
+                    || t.EnvironmentMapping.Any(m => string.Equals(m.Branch, branch, StringComparison.Ordinal))))
+            .ToList();
 
-        var result = new List<TemplateForBuildView>(matches.Count);
-        foreach (var t in matches)
-        {
-            result.Add(Project(t));
-        }
-        return result;
+        return matches.Select(Project).ToList();
     }
 
     public async Task<IReadOnlyList<TemplateForBuildView>> FindAllByRepoAsync(
         string repoUrl, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(repoUrl);
-        var matches = await db.Templates
-            .AsNoTracking()
-            .Where(t => t.Source.GitRepoUrl.Value == repoUrl)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        // Mismo motivo: materializar antes de filtrar por el converted property.
+        var all = await db.Templates.AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
+        var matches = all.Where(t =>
+                string.Equals(t.Source.GitRepoUrl.Value, repoUrl, StringComparison.Ordinal))
+            .ToList();
         return matches.Select(Project).ToList();
     }
 

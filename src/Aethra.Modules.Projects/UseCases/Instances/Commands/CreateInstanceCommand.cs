@@ -85,6 +85,7 @@ internal sealed class CreateInstanceHandler(
 
         var template = await db.Templates
             .AsNoTracking()
+            .Include(t => t.EnvironmentMapping)
             .FirstOrDefaultAsync(t => t.Id == templateId, cancellationToken)
             .ConfigureAwait(false);
         if (template is null)
@@ -194,7 +195,7 @@ internal sealed class CreateInstanceHandler(
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        return Project(instance, client.Slug);
+        return Project(instance, client.Slug, template);
     }
 
     private static Result<IReadOnlyList<PortMapping>> MapPorts(IReadOnlyList<CreateInstancePortDto>? ports)
@@ -239,7 +240,7 @@ internal sealed class CreateInstanceHandler(
         return new Healthcheck(hc.test, hc.intervalSeconds, hc.retries, hc.timeoutSeconds, hc.startPeriodSeconds);
     }
 
-    private static InstanceDetail Project(Instance i, string clientSlug)
+    private static InstanceDetail Project(Instance i, string clientSlug, Template template)
     {
         IReadOnlyList<InstancePortDto> ports =
             [.. i.Ports.Select(p => new InstancePortDto(p.ContainerPort.Value, p.HostPort, p.Protocol.ToString()))];
@@ -272,7 +273,7 @@ internal sealed class CreateInstanceHandler(
             createdAt: i.CreatedAt,
             updatedAt: i.UpdatedAt,
             trackedRef: i.TrackedRef,
-            effectiveTrackedRef: i.TrackedRef,
+            effectiveTrackedRef: i.ResolveTrackedRef(template),
             isEphemeral: i.IsEphemeral,
             expiresAt: i.ExpiresAt,
             createdByUserId: i.CreatedByUserId);
