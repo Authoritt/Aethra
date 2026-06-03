@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
@@ -41,6 +42,7 @@ export default async function NewBindingPage({
 }: {
   params: Promise<{ serviceId: string }>;
 }) {
+  const t = await getTranslations("pages.services_bindings_new");
   const { serviceId } = await params;
   const data = await fetchService(serviceId);
   if (data === "unauthorized") redirect("/login");
@@ -51,7 +53,7 @@ export default async function NewBindingPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando el servicio.
+            {t("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -65,17 +67,16 @@ export default async function NewBindingPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Servicios", href: "/services" },
+          { label: t("breadcrumb_root"), href: "/services" },
           { label: service.slug, href: `/services/${service.id}` },
-          { label: "Nuevo binding" },
+          { label: t("breadcrumb_current") },
         ]}
-        title="Bindear aplicación"
+        title={t("title")}
         description={
           <>
-            Conectá una application al servicio{" "}
+            {t("description_prefix")}
             <span className="font-mono text-foreground">{service.slug}</span> (
-            {service.type}). Aethra crea el recurso aislado y expone las
-            credenciales como env vars.
+            {service.type}){t("description_suffix")}
           </>
         }
       />

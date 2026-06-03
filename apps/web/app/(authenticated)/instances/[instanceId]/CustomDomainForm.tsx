@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export function CustomDomainForm({
   instanceId: string;
   initialDomain: string | null;
 }) {
+  const t = useTranslations("pages.instances_detail.custom_domain");
   const router = useRouter();
   const [domain, setDomain] = useState(initialDomain ?? "");
   const [busy, setBusy] = useState(false);
@@ -43,9 +45,7 @@ export function CustomDomainForm({
       );
       setDomain(response.customDomain ?? "");
       toast.success(
-        response.customDomain
-          ? "Custom domain guardado"
-          : "Custom domain limpio: ahora se usa el auto-hostname",
+        response.customDomain ? t("toast_saved") : t("toast_cleared"),
       );
       router.refresh();
     } catch (e) {
@@ -55,7 +55,7 @@ export function CustomDomainForm({
               ?.message ?? `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setBusy(false);
@@ -72,18 +72,18 @@ export function CustomDomainForm({
   return (
     <form onSubmit={onSave} className="flex flex-col gap-2">
       <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        Custom domain
+        {t("label")}
       </Label>
       <div className="flex gap-2">
         <Input
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
-          placeholder="app.mi-cliente.com"
+          placeholder={t("placeholder")}
           className="font-mono text-xs"
         />
         <Button type="submit" disabled={busy}>
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Guardar
+          {t("save")}
         </Button>
         <Button
           type="button"
@@ -91,21 +91,19 @@ export function CustomDomainForm({
           onClick={() => setConfirmClear(true)}
           disabled={busy || (!initialDomain && !domain)}
         >
-          Limpiar
+          {t("clear")}
         </Button>
       </div>
 
       <Dialog open={confirmClear} onOpenChange={setConfirmClear}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Quitar custom domain</DialogTitle>
-            <DialogDescription>
-              Las requests volverán a resolverse por el auto-hostname.
-            </DialogDescription>
+            <DialogTitle>{t("dialog_title")}</DialogTitle>
+            <DialogDescription>{t("dialog_description")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmClear(false)}>
-              Cancelar
+              {t("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -115,7 +113,7 @@ export function CustomDomainForm({
               }}
               disabled={busy}
             >
-              Quitar
+              {t("confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

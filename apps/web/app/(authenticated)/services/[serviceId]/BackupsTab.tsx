@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Database, Loader2, Play, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,7 @@ const STATUS_VARIANTS: Record<
 };
 
 export function BackupsTab({ serviceId }: { serviceId: string }) {
+  const t = useTranslations("pages.services_detail.backups");
   const router = useRouter();
   const [rows, setRows] = useState<ServiceBackupDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +62,7 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -79,7 +81,7 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
         `/api/services/${encodeURIComponent(serviceId)}/backups/run`,
         { method: "POST" },
       );
-      toast.success("Backup encolado");
+      toast.success(t("toast_enqueued"));
       await load();
       router.refresh();
     } catch (e) {
@@ -89,7 +91,7 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setBusyRun(false);
@@ -104,7 +106,7 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
         `/api/services/${encodeURIComponent(serviceId)}/backups/${encodeURIComponent(confirmRestore.id)}/restore`,
         { method: "POST" },
       );
-      toast.success("Restore aplicado");
+      toast.success(t("toast_restored"));
       setConfirmRestore(null);
       await load();
       router.refresh();
@@ -115,7 +117,7 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setBusyRestore(false);
@@ -123,13 +125,13 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
   }
 
   async function onDelete(id: string) {
-    if (!confirm("Eliminar este backup?")) return;
+    if (!confirm(t("delete_confirm"))) return;
     try {
       await api(
         `/api/services/${encodeURIComponent(serviceId)}/backups/${encodeURIComponent(id)}`,
         { method: "DELETE" },
       );
-      toast.success("Backup eliminado");
+      toast.success(t("toast_deleted"));
       await load();
     } catch (e) {
       const msg =
@@ -138,7 +140,7 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     }
   }
@@ -147,7 +149,7 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
     <section className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Backups ({rows.length})
+          {t("title", { count: rows.length })}
         </h2>
         <Button size="sm" onClick={onRun} disabled={busyRun}>
           {busyRun ? (
@@ -155,34 +157,34 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
           ) : (
             <Play className="mr-2 h-4 w-4" />
           )}
-          Backup ahora
+          {t("run_now")}
         </Button>
       </div>
 
       {loading ? (
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">
-            Cargando...
+            {t("loading")}
           </CardContent>
         </Card>
       ) : rows.length === 0 ? (
         <EmptyState
           icon={<Database className="h-6 w-6" />}
-          title="Sin backups"
-          description="Ejecuta un backup manual o configura una BackupPolicy para que se disparen automaticamente segun el cron."
+          title={t("empty_title")}
+          description={t("empty_description")}
         />
       ) : (
         <Card>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Status</TableHead>
-                <TableHead>Inicio</TableHead>
-                <TableHead>Fin</TableHead>
-                <TableHead>Tamaño</TableHead>
-                <TableHead>Destino</TableHead>
-                <TableHead>Error</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                <TableHead>{t("col_status")}</TableHead>
+                <TableHead>{t("col_started")}</TableHead>
+                <TableHead>{t("col_finished")}</TableHead>
+                <TableHead>{t("col_size")}</TableHead>
+                <TableHead>{t("col_destination")}</TableHead>
+                <TableHead>{t("col_error")}</TableHead>
+                <TableHead className="text-right">{t("col_actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -220,7 +222,7 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
                           onClick={() => setConfirmRestore(b)}
                         >
                           <RotateCcw className="mr-2 h-4 w-4" />
-                          Restore
+                          {t("action_restore")}
                         </Button>
                       ) : null}
                       <Button
@@ -245,22 +247,22 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar restore</DialogTitle>
+            <DialogTitle>{t("restore_dialog_title")}</DialogTitle>
             <DialogDescription>
-              Vas a restaurar el backup{" "}
-              <span className="font-mono">{confirmRestore?.id}</span>. Esta
-              accion puede sobreescribir datos actuales del servicio.
+              {t("restore_dialog_description_prefix")}
+              <span className="font-mono">{confirmRestore?.id}</span>
+              {t("restore_dialog_description_suffix")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmRestore(null)}>
-              Cancelar
+              {t("restore_cancel")}
             </Button>
             <Button onClick={onConfirmRestore} disabled={busyRestore}>
               {busyRestore ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Restaurar
+              {t("restore_confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

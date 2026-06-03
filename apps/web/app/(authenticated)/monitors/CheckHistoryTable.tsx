@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -15,9 +16,11 @@ interface Props {
   checks: MonitorCheckDto[];
 }
 
-export function CheckHistoryTable({ checks }: Props) {
+export async function CheckHistoryTable({ checks }: Props) {
+  const t = await getTranslations("pages.monitors_detail.check_history");
+
   if (checks.length === 0) {
-    return <EmptyState title="Sin checks registrados" />;
+    return <EmptyState title={t("empty")} />;
   }
   const newestFirst = [...checks].reverse();
   return (
@@ -25,11 +28,11 @@ export function CheckHistoryTable({ checks }: Props) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Cuando</TableHead>
-            <TableHead>Estado</TableHead>
-            <TableHead>HTTP</TableHead>
-            <TableHead>Latencia</TableHead>
-            <TableHead>Detalle</TableHead>
+            <TableHead>{t("col_when")}</TableHead>
+            <TableHead>{t("col_status")}</TableHead>
+            <TableHead>{t("col_http")}</TableHead>
+            <TableHead>{t("col_latency")}</TableHead>
+            <TableHead>{t("col_detail")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
