@@ -20,6 +20,13 @@ public interface IMcpCallerContext
 
     /// <summary>true si el caller tiene <paramref name="scope"/> exacto o el wildcard <c>"*"</c>.</summary>
     bool HasScope(string scope);
+
+    /// <summary>
+    /// F12.3 — userId Aethra asociado al caller (claim NameIdentifier). <c>null</c> si es
+    /// cookie bootstrap admin o API key sin owner_user_id. Lo usan tools que ejecutan
+    /// operaciones "del propio user" (ej. update profile).
+    /// </summary>
+    string? UserId { get; }
 }
 
 /// <summary>
@@ -75,5 +82,19 @@ internal sealed class HttpMcpCallerContext(IMcpSessionPrincipalAccessor accessor
     {
         var s = Resolve().Scopes;
         return s.Contains(ApiKeyAuthSchemes.AdminScope) || s.Contains(scope);
+    }
+
+    public string? UserId
+    {
+        get
+        {
+            var user = accessor.CurrentPrincipal;
+            if (user is null || user.Identity?.IsAuthenticated != true)
+            {
+                return null;
+            }
+            var sub = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            return string.IsNullOrWhiteSpace(sub) ? null : sub;
+        }
     }
 }
