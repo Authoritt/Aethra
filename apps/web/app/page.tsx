@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { ArrowRight, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +29,7 @@ async function fetchHealth(): Promise<HealthResponse | { error: string }> {
 }
 
 export default async function Home() {
+  const t = await getTranslations("pages.landing");
   const health = await fetchHealth();
   const ok = "status" in health && health.status === "ok";
 
@@ -36,7 +38,7 @@ export default async function Home() {
       <div className="flex flex-col items-center gap-3">
         <Logo variant="lockup" />
         <p className="max-w-md text-center text-muted-foreground">
-          Plataforma unificada de despliegue, monitoreo y operación.
+          {t("tagline")}
         </p>
       </div>
 
@@ -44,17 +46,17 @@ export default async function Home() {
         <CardContent className="flex flex-col gap-4 p-6">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              API
+              {t("api_label")}
             </span>
             {ok ? (
               <StatusPill variant="success">
                 <CheckCircle2 className="h-3 w-3" />
-                operativa
+                {t("operational")}
               </StatusPill>
             ) : (
               <StatusPill variant="destructive">
                 <XCircle className="h-3 w-3" />
-                no alcanzable
+                {t("unreachable")}
               </StatusPill>
             )}
           </div>
@@ -62,7 +64,7 @@ export default async function Home() {
             {JSON.stringify(health, null, 2)}
           </pre>
           <p className="text-xs text-muted-foreground">
-            URL: <code className="font-mono text-foreground">{API_URL}</code>
+            {t("url_label")} <code className="font-mono text-foreground">{API_URL}</code>
           </p>
         </CardContent>
       </Card>
@@ -70,7 +72,7 @@ export default async function Home() {
       <div className="flex flex-wrap items-center justify-center gap-3">
         <Button asChild>
           <Link href="/login">
-            Iniciar sesión
+            {t("login_cta")}
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </Button>
@@ -80,13 +82,13 @@ export default async function Home() {
             target="_blank"
             rel="noopener noreferrer"
           >
-            OpenAPI
+            {t("openapi_cta")}
           </a>
         </Button>
       </div>
 
       <footer className="mt-8 text-xs text-muted-foreground">
-        Aethra · v1
+        {t("footer")}
       </footer>
     </main>
   );

@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { serverFetch } from "@/lib/server-fetch";
@@ -12,6 +13,9 @@ export default async function NewClientPage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
+  const t = await getTranslations("pages.clients_new");
+  const tBreadcrumbs = await getTranslations("breadcrumbs");
+  const tProjects = await getTranslations("pages.projects_detail");
   const { projectId } = await params;
   const project = await serverFetch<ProjectDetailV2>(
     `/api/projects/${projectId}`,
@@ -23,7 +27,7 @@ export default async function NewClientPage({
       <div className="px-6 py-8 md:px-10 md:py-10">
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Error cargando el proyecto.
+            {tProjects("load_error")}
           </CardContent>
         </Card>
       </div>
@@ -34,12 +38,12 @@ export default async function NewClientPage({
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Proyectos", href: "/projects" },
+          { label: tBreadcrumbs("projects"), href: "/projects" },
           { label: project.name, href: `/projects/${project.id}` },
-          { label: "Nuevo client" },
+          { label: t("breadcrumb") },
         ]}
-        title="Nuevo client"
-        description="Cada client representa un tenant: tendrá sus propias instancias del template que decidas."
+        title={t("title")}
+        description={t("description")}
       />
       <div className="max-w-2xl">
         <NewClientForm projectId={project.id} />

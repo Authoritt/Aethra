@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -62,25 +63,32 @@ const ICON_OPTIONS = [
   "leaf",
 ];
 
-const schema = z.object({
-  slug: z
-    .string()
-    .min(1, "Requerido")
-    .regex(
-      SLUG_RE,
-      "Slug debe iniciar con letra, lowercase con guiones (máx 31 chars).",
-    ),
-  name: z.string().min(1, "Requerido"),
-  description: z.string().optional(),
-  color: z.string().min(1),
-  icon: z.string().min(1),
-});
-
-type FormValues = z.infer<typeof schema>;
+type FormValues = {
+  slug: string;
+  name: string;
+  description?: string;
+  color: string;
+  icon: string;
+};
 
 export default function NewProjectPage() {
+  const t = useTranslations("pages.projects_new");
+  const tBreadcrumbs = useTranslations("breadcrumbs");
+  const tValidation = useTranslations("forms.validation");
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+
+  const schema = z.object({
+    slug: z
+      .string()
+      .min(1, tValidation("required"))
+      .regex(SLUG_RE, tValidation("slug_invalid")),
+    name: z.string().min(1, tValidation("required")),
+    description: z.string().optional(),
+    color: z.string().min(1),
+    icon: z.string().min(1),
+  });
+
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -106,17 +114,17 @@ export default function NewProjectPage() {
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success(`Proyecto "${response.name}" creado`);
+      toast.success(t("toast_created", { name: response.name }));
       router.push(`/projects/${response.id}`);
       router.refresh();
     } catch (e) {
       const msg =
         e instanceof ApiError
           ? (e.body as { message?: string; detail?: string } | undefined)
-              ?.message ?? `Error ${e.status}`
+              ?.message ?? t("error_status", { status: e.status })
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -129,11 +137,11 @@ export default function NewProjectPage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Proyectos", href: "/projects" },
-          { label: "Nuevo proyecto" },
+          { label: tBreadcrumbs("projects"), href: "/projects" },
+          { label: t("breadcrumb") },
         ]}
-        title="Nuevo proyecto"
-        description="Una agrupación lógica para tus templates y clients multi-tenant."
+        title={t("title")}
+        description={t("description")}
       />
       <Card className="max-w-2xl">
         <CardContent className="p-6">
@@ -147,21 +155,19 @@ export default function NewProjectPage() {
                 name="slug"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Slug *</FormLabel>
+                    <FormLabel>{t("label_slug")}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
                         onChange={(e) =>
                           field.onChange(e.target.value.toLowerCase())
                         }
-                        placeholder="mi-proyecto"
+                        placeholder={t("placeholder_slug")}
                         className="font-mono text-xs"
                         maxLength={31}
                       />
                     </FormControl>
-                    <FormDescription>
-                      Identificador URL-friendly: lowercase, alfanumérico + guiones.
-                    </FormDescription>
+                    <FormDescription>{t("help_slug")}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -171,9 +177,9 @@ export default function NewProjectPage() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nombre *</FormLabel>
+                    <FormLabel>{t("label_name")}</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Mi proyecto" />
+                      <Input {...field} placeholder={t("placeholder_name")} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -184,12 +190,12 @@ export default function NewProjectPage() {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Descripción</FormLabel>
+                    <FormLabel>{t("label_description")}</FormLabel>
                     <FormControl>
                       <Textarea
                         {...field}
                         rows={3}
-                        placeholder="Opcional"
+                        placeholder={t("placeholder_description")}
                       />
                     </FormControl>
                     <FormMessage />
@@ -201,14 +207,14 @@ export default function NewProjectPage() {
                 name="color"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Color</FormLabel>
+                    <FormLabel>{t("label_color")}</FormLabel>
                     <div className="flex flex-wrap items-center gap-2">
                       {COLOR_SWATCHES.map((c) => (
                         <button
                           key={c}
                           type="button"
                           onClick={() => field.onChange(c)}
-                          aria-label={`Color ${c}`}
+                          aria-label={t("color_aria", { color: c })}
                           className={cn(
                             "size-7 rounded-full border-2 transition",
                             field.value === c
@@ -223,7 +229,7 @@ export default function NewProjectPage() {
                         value={field.value}
                         onChange={(e) => field.onChange(e.target.value)}
                         className="h-7 w-10 cursor-pointer rounded-md border border-input bg-background"
-                        aria-label="Color custom"
+                        aria-label={t("color_custom_aria")}
                       />
                       <span className="font-mono text-xs text-muted-foreground">
                         {color}
@@ -238,7 +244,7 @@ export default function NewProjectPage() {
                 name="icon"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Icono</FormLabel>
+                    <FormLabel>{t("label_icon")}</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger>
@@ -264,13 +270,13 @@ export default function NewProjectPage() {
                   variant="ghost"
                   onClick={() => router.push("/projects")}
                 >
-                  Cancelar
+                  {t("cancel")}
                 </Button>
                 <Button type="submit" disabled={submitting}>
                   {submitting ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : null}
-                  Crear proyecto
+                  {t("submit")}
                 </Button>
               </div>
             </form>

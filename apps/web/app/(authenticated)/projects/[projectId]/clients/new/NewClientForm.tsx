@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -12,7 +13,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -25,19 +25,32 @@ import type { ClientDetail, CreateClientRequest } from "@/lib/types";
 
 const SLUG_RE = /^[a-z][a-z0-9-]{0,30}$/;
 
-const schema = z.object({
-  slug: z.string().regex(SLUG_RE, "Slug inválido (lowercase + guiones, máx 31)."),
-  displayName: z.string().min(1, "Requerido"),
-  description: z.string().optional(),
-  contactEmail: z.string().email("Email inválido").or(z.literal("")).optional(),
-  billingTag: z.string().optional(),
-});
-
-type FormValues = z.infer<typeof schema>;
+type FormValues = {
+  slug: string;
+  displayName: string;
+  description?: string;
+  contactEmail?: string;
+  billingTag?: string;
+};
 
 export function NewClientForm({ projectId }: { projectId: string }) {
+  const t = useTranslations("pages.clients_new");
+  const tValidation = useTranslations("forms.validation");
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+
+  const schema = z.object({
+    slug: z.string().regex(SLUG_RE, tValidation("slug_invalid")),
+    displayName: z.string().min(1, tValidation("required")),
+    description: z.string().optional(),
+    contactEmail: z
+      .string()
+      .email(tValidation("email_invalid"))
+      .or(z.literal(""))
+      .optional(),
+    billingTag: z.string().optional(),
+  });
+
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -63,7 +76,7 @@ export function NewClientForm({ projectId }: { projectId: string }) {
         `/api/projects/${encodeURIComponent(projectId)}/clients`,
         { method: "POST", body: JSON.stringify(body) },
       );
-      toast.success("Client creado");
+      toast.success(t("toast_created", { name: response.displayName }));
       router.push(`/clients/${response.id}`);
       router.refresh();
     } catch (e) {
@@ -73,7 +86,7 @@ export function NewClientForm({ projectId }: { projectId: string }) {
               ?.message ?? `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -93,7 +106,7 @@ export function NewClientForm({ projectId }: { projectId: string }) {
               name="slug"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Slug *</FormLabel>
+                  <FormLabel>{t("label_slug")}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
@@ -105,9 +118,6 @@ export function NewClientForm({ projectId }: { projectId: string }) {
                       maxLength={31}
                     />
                   </FormControl>
-                  <FormDescription>
-                    URL-friendly, lowercase con guiones.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -117,7 +127,7 @@ export function NewClientForm({ projectId }: { projectId: string }) {
               name="displayName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Display name *</FormLabel>
+                  <FormLabel>{t("label_display_name")}</FormLabel>
                   <FormControl>
                     <Input {...field} placeholder="ACME Corp" />
                   </FormControl>
@@ -130,7 +140,7 @@ export function NewClientForm({ projectId }: { projectId: string }) {
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Descripción</FormLabel>
+                  <FormLabel>{t("label_description")}</FormLabel>
                   <FormControl>
                     <Textarea {...field} rows={2} />
                   </FormControl>
@@ -144,7 +154,7 @@ export function NewClientForm({ projectId }: { projectId: string }) {
                 name="contactEmail"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Contact email</FormLabel>
+                    <FormLabel>{t("label_contact_email")}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -161,7 +171,7 @@ export function NewClientForm({ projectId }: { projectId: string }) {
                 name="billingTag"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Billing tag</FormLabel>
+                    <FormLabel>{t("label_billing_tag")}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -169,9 +179,6 @@ export function NewClientForm({ projectId }: { projectId: string }) {
                         className="font-mono text-xs"
                       />
                     </FormControl>
-                    <FormDescription>
-                      Identificador opcional para reportes de costo.
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -184,13 +191,13 @@ export function NewClientForm({ projectId }: { projectId: string }) {
                 variant="ghost"
                 onClick={() => router.push(`/projects/${projectId}`)}
               >
-                Cancelar
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Crear client
+                {t("submit")}
               </Button>
             </div>
           </form>

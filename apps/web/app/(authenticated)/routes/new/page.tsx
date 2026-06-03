@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,6 +19,9 @@ const FQDN_RE =
 const BACKEND_RE = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
 
 export default function NewRoutePage() {
+  const t = useTranslations("pages.routes_new");
+  const tBreadcrumbs = useTranslations("breadcrumbs");
+  const tValidation = useTranslations("forms.validation");
   const router = useRouter();
   const [hostname, setHostname] = useState("");
   const [backendUrl, setBackendUrl] = useState("");
@@ -25,10 +29,8 @@ export default function NewRoutePage() {
   const [loading, setLoading] = useState(false);
 
   function validate(): string | null {
-    if (!FQDN_RE.test(hostname.trim()))
-      return "El hostname debe ser un FQDN válido (ej. app.example.com).";
-    if (!BACKEND_RE.test(backendUrl.trim()))
-      return "El backend debe ser una URL http(s) (ej. http://10.0.0.5:8080).";
+    if (!FQDN_RE.test(hostname.trim())) return tValidation("url_invalid");
+    if (!BACKEND_RE.test(backendUrl.trim())) return tValidation("url_invalid");
     return null;
   }
 
@@ -50,7 +52,7 @@ export default function NewRoutePage() {
         method: "POST",
         body: JSON.stringify(body),
       });
-      toast.success("Ruta creada");
+      toast.success(t("toast_created", { hostname: hostname.trim() }));
       router.push("/routes");
       router.refresh();
     } catch (e) {
@@ -60,7 +62,7 @@ export default function NewRoutePage() {
             `Error ${e.status}`
           : e instanceof Error
             ? e.message
-            : "Error desconocido";
+            : t("error_unknown");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -71,47 +73,41 @@ export default function NewRoutePage() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: "Rutas", href: "/routes" },
-          { label: "Nueva" },
+          { label: tBreadcrumbs("routes"), href: "/routes" },
+          { label: tBreadcrumbs("new") },
         ]}
-        title="Nueva ruta"
-        description="Exponé un backend interno a través del reverse proxy YARP."
+        title={t("title")}
+        description={t("description")}
       />
       <Card className="max-w-2xl">
         <CardContent className="p-6">
           <form onSubmit={onSubmit} className="flex flex-col gap-5">
             <div className="space-y-2">
-              <Label htmlFor="hostname">Hostname *</Label>
+              <Label htmlFor="hostname">{t("label_hostname")}</Label>
               <Input
                 id="hostname"
                 value={hostname}
                 onChange={(e) => setHostname(e.target.value)}
-                placeholder="app.example.com"
+                placeholder={t("placeholder_hostname")}
                 className="font-mono text-xs"
                 autoComplete="off"
                 spellCheck={false}
                 required
               />
-              <p className="text-xs text-muted-foreground">
-                FQDN público que se servirá.
-              </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="backend">Backend URL *</Label>
+              <Label htmlFor="backend">{t("label_backend")}</Label>
               <Input
                 id="backend"
                 value={backendUrl}
                 onChange={(e) => setBackendUrl(e.target.value)}
-                placeholder="http://10.0.0.5:8080"
+                placeholder={t("placeholder_backend")}
                 className="font-mono text-xs"
                 autoComplete="off"
                 spellCheck={false}
                 required
               />
-              <p className="text-xs text-muted-foreground">
-                Destino interno al que se enrutará el tráfico.
-              </p>
             </div>
 
             <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">
@@ -122,10 +118,10 @@ export default function NewRoutePage() {
               />
               <div>
                 <Label htmlFor="tls" className="cursor-pointer">
-                  Habilitar TLS (HTTPS)
+                  {t("label_tls")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Termina TLS en el reverse proxy y redirige HTTP → HTTPS.
+                  {t("help_tls")}
                 </p>
               </div>
             </div>
@@ -135,9 +131,7 @@ export default function NewRoutePage() {
                 <CardContent className="flex items-start gap-3 p-3">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                   <p className="text-xs text-muted-foreground">
-                    Aethra solicitará un certificado Let&apos;s Encrypt
-                    automáticamente. El dominio debe apuntar a esta IP y el
-                    puerto 80 debe estar abierto para el HTTP-01 challenge.
+                    {t("help_tls")}
                   </p>
                 </CardContent>
               </Card>
@@ -149,13 +143,13 @@ export default function NewRoutePage() {
                 variant="ghost"
                 onClick={() => router.push("/routes")}
               >
-                Cancelar
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={loading}>
                 {loading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Crear ruta
+                {t("submit")}
               </Button>
             </div>
           </form>
