@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   Activity,
   Bell,
@@ -24,44 +25,50 @@ import { cn } from "@/lib/utils";
 
 interface NavItem {
   href: string;
-  label: string;
+  /** Key dentro de `nav.*` en messages/{locale}.json. */
+  labelKey: string;
   icon: LucideIcon;
 }
 
 interface NavGroup {
-  label: string;
+  /** Key dentro de `nav.*` en messages/{locale}.json. */
+  labelKey: string;
   items: NavItem[];
 }
 
+/**
+ * Estructura del menú lateral. Las strings concretas viven en `messages/`,
+ * acá solo declaramos las keys para que `useTranslations("nav")` las resuelva.
+ */
 const navGroups: NavGroup[] = [
   {
-    label: "Operación",
+    labelKey: "group_operation",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/projects", label: "Proyectos", icon: FolderKanban },
-      { href: "/templates", label: "Plantillas", icon: FileCode },
-      { href: "/clients", label: "Clientes", icon: Users },
-      { href: "/instances", label: "Instancias", icon: Boxes },
-      { href: "/builds", label: "Builds", icon: Hammer },
-      { href: "/deployments", label: "Deployments", icon: Rocket },
-      { href: "/monitors", label: "Monitores", icon: Activity },
+      { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
+      { href: "/projects", labelKey: "projects", icon: FolderKanban },
+      { href: "/templates", labelKey: "templates", icon: FileCode },
+      { href: "/clients", labelKey: "clients", icon: Users },
+      { href: "/instances", labelKey: "instances", icon: Boxes },
+      { href: "/builds", labelKey: "builds", icon: Hammer },
+      { href: "/deployments", labelKey: "deployments", icon: Rocket },
+      { href: "/monitors", labelKey: "monitors", icon: Activity },
     ],
   },
   {
-    label: "Infraestructura",
+    labelKey: "group_infrastructure",
     items: [
-      { href: "/vms", label: "VMs", icon: Server },
-      { href: "/routes", label: "Routes", icon: Network },
-      { href: "/services", label: "Servicios", icon: Database },
-      { href: "/cloudflare", label: "Cloudflare", icon: Cloud },
+      { href: "/vms", labelKey: "vms", icon: Server },
+      { href: "/routes", labelKey: "routes", icon: Network },
+      { href: "/services", labelKey: "services", icon: Database },
+      { href: "/cloudflare", labelKey: "cloudflare", icon: Cloud },
     ],
   },
   {
-    label: "Configuración",
+    labelKey: "group_configuration",
     items: [
-      { href: "/settings", label: "Settings", icon: Settings },
-      { href: "/settings/users", label: "Users", icon: Users },
-      { href: "/settings/notifications", label: "Notificaciones", icon: Bell },
+      { href: "/settings", labelKey: "settings", icon: Settings },
+      { href: "/settings/users", labelKey: "users", icon: Users },
+      { href: "/settings/notifications", labelKey: "notifications", icon: Bell },
     ],
   },
 ];
@@ -87,11 +94,12 @@ export interface AppSidebarProps {
 
 export function AppSidebar({ onNavigate }: AppSidebarProps) {
   const pathname = usePathname();
+  const t = useTranslations("nav");
 
   // Por ahora hardcodeado — F11 lo conectará con la variable de entorno
   // ASPNETCORE_ENVIRONMENT o un endpoint /context que ya existe.
-  const envLabel =
-    process.env.NEXT_PUBLIC_ENV === "production" ? "Production" : "Development";
+  const isProd = process.env.NEXT_PUBLIC_ENV === "production";
+  const envLabel = isProd ? t("env_production") : t("env_development");
 
   return (
     <aside className="flex h-full w-full flex-col bg-card text-card-foreground">
@@ -107,9 +115,9 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
 
       <nav className="flex-1 overflow-y-auto px-3 pb-4">
         {navGroups.map((group) => (
-          <div key={group.label} className="mb-4 last:mb-0">
+          <div key={group.labelKey} className="mb-4 last:mb-0">
             <div className="px-3 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {group.label}
+              {t(group.labelKey)}
             </div>
             <ul className="flex flex-col gap-0.5">
               {group.items.map((item) => {
@@ -135,7 +143,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
                         )}
                         aria-hidden="true"
                       />
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate">{t(item.labelKey)}</span>
                     </Link>
                   </li>
                 );
@@ -150,7 +158,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
           <span
             className={cn(
               "size-1.5 rounded-full",
-              envLabel === "Production" ? "bg-emerald-500" : "bg-amber-500",
+              isProd ? "bg-emerald-500" : "bg-amber-500",
             )}
             aria-hidden="true"
           />

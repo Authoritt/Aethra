@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type LogoVariant = "mark" | "lockup";
@@ -6,7 +7,14 @@ interface LogoProps {
   variant?: LogoVariant;
   className?: string;
   size?: number;
+  /**
+   * Si `true`, muestra debajo del wordmark un subtítulo. El texto se controla
+   * con `subtitleText` (típicamente proveniente de `useTranslations("logo")`).
+   * Si no se pasa `subtitleText`, cae al default español (mantiene compat
+   * para llamadores que aún no han migrado a i18n).
+   */
   showSubtitle?: boolean;
+  subtitleText?: ReactNode;
 }
 
 /**
@@ -22,12 +30,17 @@ interface LogoProps {
  *
  * - `variant="mark"`: solo el símbolo (square, ideal para avatar y sidebar collapsado).
  * - `variant="lockup"`: símbolo + wordmark "Aethra" inline.
+ *
+ * El componente es server-compatible (no usa hooks). Para evitar atarlo a
+ * `next-intl` y forzar a sus callers server a convertirse en client, el
+ * subtítulo se recibe ya resuelto via `subtitleText`.
  */
 export function Logo({
   variant = "lockup",
   className,
   size = 24,
   showSubtitle = false,
+  subtitleText,
 }: LogoProps) {
   const mark = (
     <svg
@@ -70,7 +83,7 @@ export function Logo({
         <span className="font-semibold tracking-tight text-base">Aethra</span>
         {showSubtitle && (
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            plataforma unificada
+            {subtitleText ?? "plataforma unificada"}
           </span>
         )}
       </span>

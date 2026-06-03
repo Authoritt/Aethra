@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { CircleAlert, ArrowRight } from "lucide-react";
 import { serverFetch } from "@/lib/server-fetch";
 
@@ -37,6 +38,7 @@ interface Check {
  * `null` para no bloquear el dashboard. Preferimos silencio a falsos positivos.
  */
 export async function OnboardingBanner() {
+  const t = await getTranslations("onboarding");
   let domains: ReadonlyArray<DomainDto> = [];
   let environments: ReadonlyArray<EnvironmentDto> = [];
   let integrations: ReadonlyArray<IntegrationDto> = [];
@@ -62,25 +64,24 @@ export async function OnboardingBanner() {
   if (!hasActiveDomain) {
     checks.push({
       ok: false,
-      message: "No hay un dominio base activo configurado.",
-      ctaLabel: "Configurar dominios",
+      message: t("no_active_domain"),
+      ctaLabel: t("no_active_domain_cta"),
       ctaHref: "/settings/domains",
     });
   }
   if (environments.length === 0) {
     checks.push({
       ok: false,
-      message: "Aún no creaste ningún ambiente (Development/Production).",
-      ctaLabel: "Crear ambiente",
+      message: t("no_environment"),
+      ctaLabel: t("no_environment_cta"),
       ctaHref: "/settings/environments",
     });
   }
   if (integrations.length === 0) {
     checks.push({
       ok: false,
-      message:
-        "No registraste credenciales de integración (Git provider, registry, etc).",
-      ctaLabel: "Conectar integración",
+      message: t("no_integration"),
+      ctaLabel: t("no_integration_cta"),
       ctaHref: "/settings/integrations",
     });
   }
@@ -98,10 +99,8 @@ export async function OnboardingBanner() {
           aria-hidden="true"
         />
         <div className="flex-1">
-          <h3 className="text-sm font-semibold">Configuración pendiente</h3>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Completá estos pasos para dejar la plataforma 100% operativa.
-          </p>
+          <h3 className="text-sm font-semibold">{t("title")}</h3>
+          <p className="mt-0.5 text-sm text-muted-foreground">{t("intro")}</p>
           <ul className="mt-3 space-y-2">
             {checks.map((check) => (
               <li
