@@ -54,11 +54,10 @@ public sealed class NativeDeployRunner(
         {
             return Fail("El template no define servicios (Services).");
         }
+        // Hostname para (re)crear rutas + monitor. En un REDEPLOY (webhook) puede no haber: los
+        // contenedores tienen nombre estable {slug}-{service}, así que las rutas existentes siguen
+        // sirviendo y solo refrescamos contenedores (se omiten rutas/monitor).
         var hostname = hostnameOverride ?? instance.CustomDomain ?? instance.AutoHostname;
-        if (string.IsNullOrWhiteSpace(hostname))
-        {
-            return Fail("La instance no tiene hostname (CustomDomain/AutoHostname) ni override.");
-        }
 
         var baseEnv = await envResolver.ResolveRuntimeEnvAsync(
             new EnvironmentScopeChain(instance.ProjectId, instance.TemplateId, instance.ClientId, instance.InstanceId), ct)
@@ -149,21 +148,28 @@ public sealed class NativeDeployRunner(
         }
 
         var routes = new List<string>();
-        foreach (var svc in services)
+        if (!string.IsNullOrWhiteSpace(hostname))
         {
-            foreach (var prefix in svc.PathPrefixes)
+            foreach (var svc in services)
             {
-                var backend = $"http://{instance.Slug}-{svc.Name}:{svc.Port}";
-                var r = await mediator.Send(new CreateRouteCommand(hostname!, backend, false, prefix), ct).ConfigureAwait(false);
-                routes.Add(r.IsSuccess ? $"{prefix} → {backend}" : $"{prefix} (ya existía)");
+                foreach (var prefix in svc.PathPrefixes)
+                {
+                    var backend = $"http://{instance.Slug}-{svc.Name}:{svc.Port}";
+                    var r = await mediator.Send(new CreateRouteCommand(hostname!, backend, false, prefix), ct).ConfigureAwait(false);
+                    routes.Add(r.IsSuccess ? $"{prefix} → {backend}" : $"{prefix} (ya existía)");
+                }
             }
-        }
 
-        await mediator.Send(new CreateMonitorCommand(
-            Slug: instance.Slug, Name: instance.Slug, Url: $"https://{hostname}/",
-            HttpMethod: "GET", ExpectedStatusCodes: [200, 301, 302, 307, 308],
-            IntervalSec: 120, TimeoutMs: 15000, Headers: null, BodyTemplate: null,
-            InstanceId: instance.InstanceId, ProjectId: instance.ProjectId), ct).ConfigureAwait(false);
+            await mediator.Send(new CreateMonitorCommand(
+                Slug: instance.Slug, Name: instance.Slug, Url: $"https://{hostname}/",
+                HttpMethod: "GET", ExpectedStatusCodes: [200, 301, 302, 307, 308],
+                IntervalSec: 120, TimeoutMs: 15000, Headers: null, BodyTemplate: null,
+                InstanceId: instance.InstanceId, ProjectId: instance.ProjectId), ct).ConfigureAwait(false);
+        }
+        else
+        {
+            log.LogInformation("native-deploy {Inst}: sin hostname → redeploy de contenedores (rutas/monitor existentes intactos)", instance.Slug);
+        }
 
         log.LogInformation("native-deploy {Inst} OK (healthy={H}, {N} servicios)", instance.Slug, healthy, deployedServices.Count);
         return new NativeDeployResult(true, null, hostname, healthy, deployedServices, routes);

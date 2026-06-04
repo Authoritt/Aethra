@@ -65,11 +65,14 @@ internal sealed class EfInstanceLookup(ProjectsDbContext db) : IInstanceLookup
         ArgumentNullException.ThrowIfNull(templateId);
         ArgumentNullException.ThrowIfNull(gitRef);
 
-        var template = await db.Templates
+        // El Id se persiste con value converter → EF no traduce `t.Id.ToString() == arg`.
+        // Materializamos y filtramos en memoria (cardinalidad de Templates muy baja).
+        var allTemplates = await db.Templates
             .AsNoTracking()
             .Include(t => t.EnvironmentMapping)
-            .FirstOrDefaultAsync(t => t.Id.ToString() == templateId, ct)
+            .ToListAsync(ct)
             .ConfigureAwait(false);
+        var template = allTemplates.FirstOrDefault(t => t.Id.ToString() == templateId);
         if (template is null)
         {
             return Array.Empty<InstanceForDeployView>();
