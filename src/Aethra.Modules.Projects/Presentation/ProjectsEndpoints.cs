@@ -76,6 +76,15 @@ public static class ProjectsEndpoints
             var r = await m.Send(new SetPreviewConfigCommand(id, body.PreviewMaxConcurrent), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         }).RequireAuthorization(ScopeProjectsWrite).WithName("SetProjectPreviewConfig");
+
+        // Borra el proyecto en cascada (templates, clients, instancias, env vars, secrets).
+        // Si tiene instancias desplegadas requiere ?force=true (no detiene contenedores ni
+        // limpia rutas del proxy — eso se hace aparte).
+        group.MapDelete("/{id}", async (string id, bool? force, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new DeleteProjectCommand(id, force ?? false), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).RequireAuthorization(ScopeProjectsWrite).WithName("DeleteProject");
     }
 
     // -------------------------------------------------------------------------

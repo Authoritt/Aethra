@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { serverFetch } from "@/lib/server-fetch";
+import { DeleteProjectButton } from "./DeleteProjectButton";
 import type {
   ClientSummary,
   ProjectDetailV2,
@@ -72,12 +73,15 @@ export default async function ProjectDetailPage({
           </>
         }
         actions={
-          <Button asChild variant="outline">
-            <Link href={`/projects/${project.id}/notes`}>
-              <NotebookPen className="mr-2 h-4 w-4" />
-              {t("notes_action")}
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline">
+              <Link href={`/projects/${project.id}/notes`}>
+                <NotebookPen className="mr-2 h-4 w-4" />
+                {t("notes_action")}
+              </Link>
+            </Button>
+            <DeleteProjectButton projectId={project.id} projectName={project.name} />
+          </div>
         }
       />
 
