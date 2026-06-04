@@ -11,11 +11,13 @@ public sealed class CloudflareDbContext(DbContextOptions<CloudflareDbContext> op
 
     public DbSet<CloudflareZone> Zones => Set<CloudflareZone>();
     public DbSet<DnsRecord> DnsRecords => Set<DnsRecord>();
+    public DbSet<CloudflareTunnel> Tunnels => Set<CloudflareTunnel>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfiguration(new CloudflareZoneConfiguration());
         modelBuilder.ApplyConfiguration(new DnsRecordConfiguration());
+        modelBuilder.ApplyConfiguration(new CloudflareTunnelConfiguration());
     }
 }

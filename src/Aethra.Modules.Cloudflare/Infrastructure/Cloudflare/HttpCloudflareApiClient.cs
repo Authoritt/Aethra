@@ -159,6 +159,52 @@ public sealed class HttpCloudflareApiClient : ICloudflareApiClient
         _ = await SendAsync<DnsRecordDeleteResultJson>(request, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<TunnelIngressRule>> GetTunnelIngressAsync(
+        string accountId, string tunnelId, string apiToken, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tunnelId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(apiToken);
+
+        var uri = $"accounts/{Uri.EscapeDataString(accountId)}/cfd_tunnel/{Uri.EscapeDataString(tunnelId)}/configurations";
+        using var request = BuildRequest(HttpMethod.Get, uri, apiToken);
+        var envelope = await SendAsync<TunnelConfigJson>(request, cancellationToken).ConfigureAwait(false);
+        var ingress = envelope.Result?.Config?.Ingress;
+        if (ingress is null)
+        {
+            return [];
+        }
+        return ingress
+            .Select(r => new TunnelIngressRule(
+                string.IsNullOrWhiteSpace(r.Hostname) ? null : r.Hostname,
+                r.Service ?? string.Empty,
+                r.OriginRequest?.NoTlsVerify ?? false))
+            .ToList();
+    }
+
+    public async Task PutTunnelIngressAsync(
+        string accountId, string tunnelId, string apiToken,
+        IReadOnlyList<TunnelIngressRule> ingress, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tunnelId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(apiToken);
+        ArgumentNullException.ThrowIfNull(ingress);
+
+        var rules = ingress.Select(r => new IngressRuleJson
+        {
+            Hostname = r.Hostname,
+            Service = r.Service,
+            OriginRequest = r.NoTlsVerify ? new OriginRequestJson { NoTlsVerify = true } : null,
+        }).ToList();
+        var payload = new TunnelConfigWriteJson { Config = new TunnelConfigBodyJson { Ingress = rules } };
+
+        var uri = $"accounts/{Uri.EscapeDataString(accountId)}/cfd_tunnel/{Uri.EscapeDataString(tunnelId)}/configurations";
+        using var http = BuildRequest(HttpMethod.Put, uri, apiToken);
+        http.Content = JsonContent.Create(payload, options: JsonOptions);
+        _ = await SendAsync<TunnelConfigJson>(http, cancellationToken).ConfigureAwait(false);
+    }
+
     private static HttpRequestMessage BuildRequest(HttpMethod method, string relativeUri, string apiToken)
     {
         var request = new HttpRequestMessage(method, new Uri(relativeUri, UriKind.Relative));
@@ -266,6 +312,33 @@ public sealed class HttpCloudflareApiClient : ICloudflareApiClient
     private sealed class DnsRecordDeleteResultJson
     {
         [JsonPropertyName("id")] public string? Id { get; set; }
+    }
+
+    private sealed class TunnelConfigJson
+    {
+        [JsonPropertyName("config")] public TunnelConfigBodyJson? Config { get; set; }
+    }
+
+    private sealed class TunnelConfigBodyJson
+    {
+        [JsonPropertyName("ingress")] public List<IngressRuleJson>? Ingress { get; set; }
+    }
+
+    private sealed class IngressRuleJson
+    {
+        [JsonPropertyName("hostname")] public string? Hostname { get; set; }
+        [JsonPropertyName("service")] public string? Service { get; set; }
+        [JsonPropertyName("originRequest")] public OriginRequestJson? OriginRequest { get; set; }
+    }
+
+    private sealed class OriginRequestJson
+    {
+        [JsonPropertyName("noTLSVerify")] public bool NoTlsVerify { get; set; }
+    }
+
+    private sealed class TunnelConfigWriteJson
+    {
+        [JsonPropertyName("config")] public TunnelConfigBodyJson? Config { get; set; }
     }
 
     private sealed record DnsRecordWritePayload(

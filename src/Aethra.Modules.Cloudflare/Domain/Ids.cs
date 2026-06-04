@@ -21,3 +21,13 @@ public readonly record struct DnsRecordId(AethraId Value)
     public static DnsRecordId New() => new(AethraId.NewId("cfr"));
     public override string ToString() => Value.ToString();
 }
+
+/// <summary>
+/// Identificador interno de un Cloudflare Tunnel gestionado por Aethra. El id externo (UUID del
+/// túnel) queda en <c>CloudflareTunnel.TunnelId</c>.
+/// </summary>
+public readonly record struct CloudflareTunnelId(AethraId Value)
+{
+    public static CloudflareTunnelId New() => new(AethraId.NewId("cft"));
+    public override string ToString() => Value.ToString();
+}

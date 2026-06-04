@@ -1,5 +1,6 @@
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Queries;
+using Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands;
 using Aethra.Modules.Cloudflare.UseCases.Zones.Queries;
 using Aethra.Modules.Deployments.Infrastructure.Build;
 using Aethra.Modules.Monitoring.UseCases.Commands;
@@ -267,6 +268,25 @@ public sealed class NativeDeployRunner(
     /// </summary>
     private async Task EnsureDnsRecordAsync(string hostname, CancellationToken ct)
     {
+        // F13.9 — si hay un Tunnel gestionado remoto, asegura la regla de ingress del host (cero blip).
+        // No-op si no hay túnel registrado. Best-effort: no rompe el deploy.
+        try
+        {
+            var ing = await mediator.Send(new EnsureTunnelHostnameCommand(hostname), ct).ConfigureAwait(false);
+            if (ing.IsSuccess)
+            {
+                log.LogInformation("tunnel-ingress {Host}: regla asegurada (o ya existía).", hostname);
+            }
+            else
+            {
+                log.LogWarning("tunnel-ingress {Host}: {Err}", hostname, ing.Error.Message);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex, "tunnel-ingress {Host}: error (ignorado).", hostname);
+        }
+
         if (string.IsNullOrWhiteSpace(_tunnelCname))
         {
             return;

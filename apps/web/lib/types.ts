@@ -818,6 +818,28 @@ export interface TemplateServiceVolumeDef {
   readOnly: boolean;
 }
 
+/** F13.9 — Cloudflare Tunnel gestionado remotamente (ingress por API, cero blip). */
+export interface CloudflareTunnelDto {
+  id: string;
+  tunnelId: string;
+  name: string;
+  accountId: string;
+  aethraService: string;
+  fallbackService: string;
+  fallbackNoTlsVerify: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastSyncedAt: string | null;
+  ingress: TunnelIngressRuleDto[];
+}
+
+/** Una regla de ingress del túnel (hostname null = catch-all). */
+export interface TunnelIngressRuleDto {
+  hostname: string | null;
+  service: string;
+  noTlsVerify: boolean;
+}
+
 export interface CreateTemplateRequest {
   slug: string;
   name: string;

@@ -32,7 +32,20 @@ public interface ICloudflareApiClient
         string externalRecordId,
         string apiToken,
         CancellationToken cancellationToken);
+
+    /// <summary>F13.9 — lee la config de ingress REMOTA del túnel (cfd_tunnel/{id}/configurations).</summary>
+    Task<IReadOnlyList<TunnelIngressRule>> GetTunnelIngressAsync(
+        string accountId, string tunnelId, string apiToken, CancellationToken cancellationToken);
+
+    /// <summary>F13.9 — reemplaza la config de ingress remota del túnel (PUT). El último elemento debe ser
+    /// el catch-all (Hostname null). cloudflared la aplica sin reiniciar = cero blip.</summary>
+    Task PutTunnelIngressAsync(
+        string accountId, string tunnelId, string apiToken,
+        IReadOnlyList<TunnelIngressRule> ingress, CancellationToken cancellationToken);
 }
+
+/// <summary>Una regla de ingress de un Cloudflare Tunnel. <c>Hostname=null</c> ⇒ catch-all.</summary>
+public sealed record TunnelIngressRule(string? Hostname, string Service, bool NoTlsVerify = false);
 
 public sealed record CloudflareZoneInfo(string Id, string Name, string Status, string AccountId);
 

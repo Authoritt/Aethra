@@ -48,12 +48,20 @@ export default async function CloudflareZonesPage() {
         title={t("title")}
         description={t("description")}
         actions={
-          <Button asChild>
-            <Link href="/cloudflare/new">
-              <Plus className="mr-2 h-4 w-4" />
-              {t("register_zone")}
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline">
+              <Link href="/cloudflare/tunnel">
+                <Cloud className="mr-2 h-4 w-4" />
+                Túnel (ingress)
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/cloudflare/new">
+                <Plus className="mr-2 h-4 w-4" />
+                {t("register_zone")}
+              </Link>
+            </Button>
+          </div>
         }
       />
 

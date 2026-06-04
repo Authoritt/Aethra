@@ -1,5 +1,8 @@
+using Aethra.Modules.Cloudflare.Infrastructure.Cloudflare;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Queries;
+using Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands;
+using Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries;
 using Aethra.Modules.Cloudflare.UseCases.Zones.Commands;
 using Aethra.Modules.Cloudflare.UseCases.Zones.Queries;
 using Aethra.Shared.Kernel.Errors;
@@ -119,8 +122,62 @@ public static class CloudflareEndpoints
         .RequireAuthorization(ScopeWrite)
         .WithName("DeleteCloudflareDnsRecord");
 
+        // -----------------------------------------------------------------------------
+        // F13.9 — Tunnels gestionados remotamente (ingress vía API, cero blip).
+        // -----------------------------------------------------------------------------
+        var tunnels = app.MapGroup("/api/cloudflare/tunnel").WithTags("Cloudflare");
+
+        tunnels.MapGet("/", async (IMediator m, CancellationToken ct) =>
+            Results.Ok((await m.Send(new GetTunnelQuery(), ct)).Value))
+            .RequireAuthorization(ScopeRead)
+            .WithName("GetCloudflareTunnel");
+
+        tunnels.MapPost("/", async ([FromBody] RegisterTunnelRequest body, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new RegisterTunnelCommand(
+                body.AccountId, body.TunnelId, body.Name, body.ApiToken,
+                body.AethraService, body.FallbackService, body.FallbackNoTlsVerify ?? true), ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("RegisterCloudflareTunnel");
+
+        tunnels.MapPost("/ingress", async ([FromBody] SetTunnelIngressRequest body, IMediator m, CancellationToken ct) =>
+        {
+            var rules = (body.Ingress ?? [])
+                .Select(r => new TunnelIngressRule(string.IsNullOrWhiteSpace(r.Hostname) ? null : r.Hostname, r.Service, r.NoTlsVerify ?? false))
+                .ToList();
+            var r = await m.Send(new SetTunnelIngressCommand(rules), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("SetCloudflareTunnelIngress");
+
+        tunnels.MapPost("/ensure-hostname", async ([FromBody] TunnelHostnameRequest body, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new EnsureTunnelHostnameCommand(body.Hostname), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("EnsureCloudflareTunnelHostname");
+
+        tunnels.MapPost("/remove-hostname", async ([FromBody] TunnelHostnameRequest body, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new RemoveTunnelHostnameCommand(body.Hostname), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("RemoveCloudflareTunnelHostname");
+
         return app;
     }
+
+    public sealed record RegisterTunnelRequest(
+        string AccountId, string TunnelId, string Name, string ApiToken,
+        string? AethraService, string? FallbackService, bool? FallbackNoTlsVerify);
+    public sealed record SetTunnelIngressRequest(IReadOnlyList<TunnelIngressItem>? Ingress);
+    public sealed record TunnelIngressItem(string? Hostname, string Service, bool? NoTlsVerify);
+    public sealed record TunnelHostnameRequest(string Hostname);
 
     public sealed record RegisterZoneRequest(string ZoneId, string ApiToken);
     public sealed record RotateTokenRequest(string ApiToken);
