@@ -24,7 +24,8 @@ public sealed record RegisterTunnelCommand(
     string ApiToken,
     string? AethraService,
     string? FallbackService,
-    bool FallbackNoTlsVerify) : ICommand<CloudflareTunnelDto>;
+    bool FallbackNoTlsVerify,
+    string? TargetVmId = null) : ICommand<CloudflareTunnelDto>;
 
 public sealed class RegisterTunnelValidator : AbstractValidator<RegisterTunnelCommand>
 {
@@ -72,6 +73,7 @@ internal sealed class RegisterTunnelHandler(
         {
             existing.UpdateToken(cipher, now);
             existing.UpdateServices(request.AethraService, request.FallbackService, request.FallbackNoTlsVerify, now);
+            if (!string.IsNullOrWhiteSpace(request.TargetVmId)) { existing.SetTargetVm(request.TargetVmId, now); }
             existing.MarkSynced(now);
             tunnel = existing;
         }
@@ -80,6 +82,7 @@ internal sealed class RegisterTunnelHandler(
             tunnel = CloudflareTunnel.Create(
                 tunnelId, request.Name, accountId, cipher,
                 request.AethraService, request.FallbackService, request.FallbackNoTlsVerify, now);
+            tunnel.SetTargetVm(request.TargetVmId, now);
             tunnel.MarkSynced(now);
             db.Tunnels.Add(tunnel);
         }
@@ -92,5 +95,5 @@ internal sealed class RegisterTunnelHandler(
 
     internal static CloudflareTunnelDto ToDto(CloudflareTunnel t, IReadOnlyList<TunnelIngressRuleDto> ingress)
         => new(t.Id.ToString(), t.TunnelId, t.Name, t.AccountId, t.AethraService, t.FallbackService,
-            t.FallbackNoTlsVerify, t.CreatedAt, t.UpdatedAt, t.LastSyncedAt, ingress);
+            t.FallbackNoTlsVerify, t.TargetVmId, t.CreatedAt, t.UpdatedAt, t.LastSyncedAt, ingress);
 }

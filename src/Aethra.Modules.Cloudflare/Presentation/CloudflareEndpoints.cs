@@ -136,7 +136,7 @@ public static class CloudflareEndpoints
         {
             var r = await m.Send(new RegisterTunnelCommand(
                 body.AccountId, body.TunnelId, body.Name, body.ApiToken,
-                body.AethraService, body.FallbackService, body.FallbackNoTlsVerify ?? true), ct);
+                body.AethraService, body.FallbackService, body.FallbackNoTlsVerify ?? true, body.TargetVmId), ct);
             return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
         })
         .RequireAuthorization(ScopeWrite)
@@ -182,7 +182,7 @@ public static class CloudflareEndpoints
 
     public sealed record RegisterTunnelRequest(
         string AccountId, string TunnelId, string Name, string ApiToken,
-        string? AethraService, string? FallbackService, bool? FallbackNoTlsVerify);
+        string? AethraService, string? FallbackService, bool? FallbackNoTlsVerify, string? TargetVmId);
     public sealed record SetTunnelIngressRequest(IReadOnlyList<TunnelIngressItem>? Ingress);
     public sealed record TunnelIngressItem(string? Hostname, string Service, bool? NoTlsVerify);
     public sealed record TunnelHostnameRequest(string Hostname);

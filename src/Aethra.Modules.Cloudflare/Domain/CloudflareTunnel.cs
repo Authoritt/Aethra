@@ -34,6 +34,10 @@ public sealed class CloudflareTunnel : AggregateRoot<CloudflareTunnelId>
 
     public bool FallbackNoTlsVerify { get; private set; }
 
+    /// <summary>VM (satélite) donde corre el connector de este túnel. El connector DEBE co-ubicarse con
+    /// los servicios upstream (localhost). Null = no asignada (deploy de connector requiere fijarla).</summary>
+    public string? TargetVmId { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
     public DateTimeOffset? LastSyncedAt { get; private set; }
@@ -89,6 +93,12 @@ public sealed class CloudflareTunnel : AggregateRoot<CloudflareTunnelId>
         if (!string.IsNullOrWhiteSpace(aethraService)) { AethraService = aethraService.Trim(); }
         if (fallbackService is not null) { FallbackService = fallbackService.Trim(); }
         FallbackNoTlsVerify = fallbackNoTlsVerify;
+        UpdatedAt = now;
+    }
+
+    public void SetTargetVm(string? vmId, DateTimeOffset now)
+    {
+        TargetVmId = string.IsNullOrWhiteSpace(vmId) ? null : vmId.Trim();
         UpdatedAt = now;
     }
 

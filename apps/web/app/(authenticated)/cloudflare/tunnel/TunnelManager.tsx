@@ -34,6 +34,7 @@ export function TunnelManager({
     apiToken: "",
     aethraService: initial?.aethraService ?? "http://localhost:5080",
     fallbackService: initial?.fallbackService ?? "https://localhost:443",
+    targetVmId: initial?.targetVmId ?? "",
   });
 
   function set<K extends keyof typeof form>(k: K, v: string) {
@@ -92,6 +93,7 @@ export function TunnelManager({
           aethraService: form.aethraService.trim(),
           fallbackService: form.fallbackService.trim(),
           fallbackNoTlsVerify: true,
+          targetVmId: form.targetVmId.trim() || null,
         }),
       });
       toast.success("Túnel conectado · ingress ahora gestionado por Aethra");
@@ -255,6 +257,9 @@ export function TunnelManager({
           </Field>
           <Field label="Catch-all (apps legacy, ej. Traefik)">
             <Input value={form.fallbackService} onChange={(e) => set("fallbackService", e.target.value)} className="font-mono text-xs" />
+          </Field>
+          <Field label="VM del connector (vm_… donde corren los servicios)">
+            <Input value={form.targetVmId} onChange={(e) => set("targetVmId", e.target.value)} placeholder="vm_… (la VM con localhost:5080)" className="font-mono text-xs" />
           </Field>
           <div className="md:col-span-2 flex justify-end">
             <Button type="button" onClick={register} disabled={busy || !form.apiToken.trim()}>

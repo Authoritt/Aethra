@@ -25,14 +25,24 @@ public sealed class CloudflareConnectorDeployer(
 
     public async Task<ConnectorDeployResult> DeployAsync(string? vmId, CancellationToken ct)
     {
+        // El connector DEBE correr en la VM donde están los servicios upstream (localhost). Orden de
+        // resolución: vmId explícito → TargetVmId del túnel. NUNCA "cualquier VM conectada" (un satélite
+        // de otra VM no tiene los servicios en su localhost → 502 intermitente).
         var targetVm = vmId;
         if (string.IsNullOrWhiteSpace(targetVm))
         {
-            targetVm = registry.ConnectedVmIds.FirstOrDefault();
+            var tunnel = await mediator.Send(new GetTunnelQuery(), ct).ConfigureAwait(false);
+            targetVm = tunnel.Value?.TargetVmId;
         }
         if (string.IsNullOrWhiteSpace(targetVm))
         {
-            return new ConnectorDeployResult(false, "No hay ninguna VM con satélite conectado.", null, ContainerName);
+            return new ConnectorDeployResult(false,
+                "Falta el TargetVmId del túnel (la VM donde corre el connector). Regístralo al conectar el túnel o pásalo explícito.",
+                null, ContainerName);
+        }
+        if (!registry.IsConnected(targetVm))
+        {
+            return new ConnectorDeployResult(false, $"La VM '{targetVm}' no tiene satélite conectado.", targetVm, ContainerName);
         }
 
         var tokenResult = await mediator.Send(new GetConnectorTokenQuery(), ct).ConfigureAwait(false);

@@ -827,6 +827,7 @@ export interface CloudflareTunnelDto {
   aethraService: string;
   fallbackService: string;
   fallbackNoTlsVerify: boolean;
+  targetVmId: string | null;
   createdAt: string;
   updatedAt: string;
   lastSyncedAt: string | null;

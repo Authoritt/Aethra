@@ -37,6 +37,7 @@ internal sealed class CloudflareTunnelConfiguration : IEntityTypeConfiguration<C
         builder.Property(t => t.AethraService).HasColumnName("aethra_service").HasMaxLength(256).IsRequired();
         builder.Property(t => t.FallbackService).HasColumnName("fallback_service").HasMaxLength(256).IsRequired();
         builder.Property(t => t.FallbackNoTlsVerify).HasColumnName("fallback_no_tls_verify").IsRequired();
+        builder.Property(t => t.TargetVmId).HasColumnName("target_vm_id").HasMaxLength(64);
 
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(t => t.UpdatedAt).HasColumnName("updated_at").IsRequired();
