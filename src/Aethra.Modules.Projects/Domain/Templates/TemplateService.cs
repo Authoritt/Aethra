@@ -14,4 +14,10 @@ public sealed record TemplateService(
     string Image,
     int Port,
     IReadOnlyList<string> PathPrefixes,
-    IReadOnlyList<KeyValuePair<string, string>> Env);
+    IReadOnlyList<KeyValuePair<string, string>> Env,
+    // F13.1 — modo de build por servicio: "registry" (pull de Image prebuilt, modelo B) o
+    // "git" (Aethra clona y construye DockerfilePath en el satélite, modelo A). Default registry
+    // para compat con services existentes (jsonb sin el campo deserializa a este valor).
+    string BuildMode = "registry",
+    // Solo modo "git": ruta al Dockerfile del servicio dentro del repo (default "Dockerfile").
+    string? DockerfilePath = null);

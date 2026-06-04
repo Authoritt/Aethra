@@ -59,4 +59,6 @@ public sealed record TemplateServiceView(
     string Image,
     int Port,
     IReadOnlyList<string> PathPrefixes,
-    IReadOnlyList<KeyValuePair<string, string>> Env);
+    IReadOnlyList<KeyValuePair<string, string>> Env,
+    string BuildMode = "registry",
+    string? DockerfilePath = null);

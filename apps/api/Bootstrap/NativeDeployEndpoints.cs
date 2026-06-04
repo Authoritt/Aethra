@@ -1,3 +1,4 @@
+using Aethra.Modules.Deployments.Infrastructure.Build;
 using Aethra.Modules.Monitoring.UseCases.Commands;
 using Aethra.Modules.Proxy.UseCases.Routes.Commands;
 using Aethra.Shared.Contracts.Containers;
@@ -31,6 +32,7 @@ public static class NativeDeployEndpoints
             ITemplateLookup templateLookup,
             IEnvironmentResolver envResolver,
             ISatelliteRpcClient satellite,
+            IBuildContextBuilder buildContext,
             IMediator mediator,
             IConfiguration config,
             ILoggerFactory loggerFactory,
@@ -64,10 +66,48 @@ public static class NativeDeployEndpoints
             var baseEnv = await envResolver.ResolveRuntimeEnvAsync(
                 new EnvironmentScopeChain(instance.ProjectId, instance.TemplateId, instance.ClientId, instance.InstanceId), ct);
 
+            // F13.1 — si hay servicios en modo "git" (modelo A), clonamos el repo UNA vez (al
+            // branch que trackea la instancia, o el del template) y construimos cada imagen en el
+            // satélite. Modo "registry" (modelo B) usa la Image prebuilt tal cual.
+            BuildContextResult? gitCtx = null;
+            string? shortSha = null;
+            var anyGit = services.Any(s => string.Equals(s.BuildMode, "git", StringComparison.OrdinalIgnoreCase));
+            if (anyGit)
+            {
+                var branch = !string.IsNullOrWhiteSpace(instance.TrackedRef) ? instance.TrackedRef! : template.Branch;
+                gitCtx = await buildContext.BuildAsync(template.GitRepoUrl, branch, null, template.BaseDirectory ?? string.Empty, ct);
+                shortSha = gitCtx.ResolvedSha.Length >= 7 ? gitCtx.ResolvedSha[..7] : gitCtx.ResolvedSha;
+                log.LogInformation("deploy-native: contexto git {Repo}@{Branch} → sha {Sha}", template.GitRepoUrl, branch, shortSha);
+            }
+
             var results = new List<object>();
             foreach (var svc in services)
             {
                 var containerName = $"{instance.Slug}-{svc.Name}";
+
+                // Resolver la imagen del servicio según su modo de build.
+                string image;
+                if (string.Equals(svc.BuildMode, "git", StringComparison.OrdinalIgnoreCase))
+                {
+                    image = $"aethra/{instance.Slug}-{svc.Name}:{shortSha}";
+                    var buildSpec = new BuildSpec(
+                        ImageRef: image,
+                        BuildContextTarGz: gitCtx!.TarGz,
+                        DockerfilePath: string.IsNullOrWhiteSpace(svc.DockerfilePath) ? "Dockerfile" : svc.DockerfilePath!,
+                        BuildArgs: new Dictionary<string, string>(),
+                        BuildSecrets: null,
+                        Mode: Aethra.Shared.Contracts.Containers.BuildMode.Dockerfile);
+                    var br = await satellite.SendBuildAsync(instance.TargetVmId, buildSpec, pushTo: null, ct);
+                    if (!br.Success)
+                    {
+                        log.LogError("deploy-native: build git de {Svc} falló: {Err}", svc.Name, br.ErrorMessage);
+                        return Results.Problem($"Build (git) del servicio '{svc.Name}' falló: {br.ErrorMessage}");
+                    }
+                }
+                else
+                {
+                    image = svc.Image;
+                }
                 var env = new Dictionary<string, string>(baseEnv);
                 foreach (var kv in svc.Env)
                 {
@@ -87,7 +127,7 @@ public static class NativeDeployEndpoints
 
                 var spec = new RunSpec(
                     ContainerName: containerName,
-                    ImageRef: svc.Image,
+                    ImageRef: image,
                     Env: env,
                     Ports: [new PortBinding(svc.Port, null, "tcp")],
                     Volumes: [],
@@ -102,7 +142,7 @@ public static class NativeDeployEndpoints
                     log.LogError("deploy-native: servicio {Svc} falló: {Err}", svc.Name, run.ErrorMessage);
                     return Results.Problem($"Servicio '{svc.Name}' no arrancó: {run.ErrorMessage}");
                 }
-                results.Add(new { service = svc.Name, container = containerName, containerId = run.ContainerId, image = svc.Image });
+                results.Add(new { service = svc.Name, container = containerName, containerId = run.ContainerId, image, buildMode = svc.BuildMode });
             }
 
             // Healthcheck simple: esperar a que todos los contenedores estén "Up".

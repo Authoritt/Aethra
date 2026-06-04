@@ -21,7 +21,9 @@ public sealed record TemplateServiceInput(
     string Image,
     int Port,
     IReadOnlyList<string>? PathPrefixes,
-    IReadOnlyDictionary<string, string>? Env);
+    IReadOnlyDictionary<string, string>? Env,
+    string? BuildMode = null,
+    string? DockerfilePath = null);
 
 internal sealed class SetTemplateServicesHandler(ProjectsDbContext db, IClock clock)
     : ICommandHandler<SetTemplateServicesCommand>
@@ -48,7 +50,9 @@ internal sealed class SetTemplateServicesHandler(ProjectsDbContext db, IClock cl
                 Port: s.Port,
                 PathPrefixes: s.PathPrefixes?.ToList() ?? [],
                 Env: (s.Env ?? new Dictionary<string, string>())
-                    .Select(kv => new KeyValuePair<string, string>(kv.Key, kv.Value)).ToList()))
+                    .Select(kv => new KeyValuePair<string, string>(kv.Key, kv.Value)).ToList(),
+                BuildMode: string.IsNullOrWhiteSpace(s.BuildMode) ? "registry" : s.BuildMode.Trim().ToLowerInvariant(),
+                DockerfilePath: s.DockerfilePath?.Trim()))
             .ToList();
 
         template.ReplaceServices(services, clock.UtcNow);
