@@ -4,6 +4,7 @@ using Aethra.Modules.Cloudflare.UseCases.Zones.Queries;
 using Aethra.Modules.Deployments.Infrastructure.Build;
 using Aethra.Modules.Monitoring.UseCases.Commands;
 using Aethra.Modules.Proxy.UseCases.Routes.Commands;
+using Aethra.Modules.Proxy.UseCases.Routes.Queries;
 using Aethra.Shared.Contracts.Containers;
 using Aethra.Shared.Contracts.Projects;
 using MediatR;
@@ -166,24 +167,8 @@ public sealed class NativeDeployRunner(
         var routes = new List<string>();
         if (!string.IsNullOrWhiteSpace(hostname))
         {
-            // F13.5 — auto-DNS: crea el CNAME del hostname → túnel CF (best-effort, nunca falla el deploy).
-            await EnsureDnsRecordAsync(hostname!, ct).ConfigureAwait(false);
-
-            foreach (var svc in services)
-            {
-                foreach (var prefix in svc.PathPrefixes)
-                {
-                    var backend = $"http://{instance.Slug}-{svc.Name}:{svc.Port}";
-                    var r = await mediator.Send(new CreateRouteCommand(hostname!, backend, false, prefix), ct).ConfigureAwait(false);
-                    routes.Add(r.IsSuccess ? $"{prefix} → {backend}" : $"{prefix} (ya existía)");
-                }
-            }
-
-            await mediator.Send(new CreateMonitorCommand(
-                Slug: instance.Slug, Name: instance.Slug, Url: $"https://{hostname}/",
-                HttpMethod: "GET", ExpectedStatusCodes: [200, 301, 302, 307, 308],
-                IntervalSec: 120, TimeoutMs: 15000, Headers: null, BodyTemplate: null,
-                InstanceId: instance.InstanceId, ProjectId: instance.ProjectId), ct).ConfigureAwait(false);
+            routes = await ReconcileRoutingAsync(
+                instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname!, ct).ConfigureAwait(false);
         }
         else
         {
@@ -192,6 +177,87 @@ public sealed class NativeDeployRunner(
 
         log.LogInformation("native-deploy {Inst} OK (healthy={H}, {N} servicios)", instance.Slug, healthy, deployedServices.Count);
         return new NativeDeployResult(true, null, hostname, healthy, deployedServices, routes);
+    }
+
+    /// <summary>
+    /// F13.8 — reconcilia SOLO el routing de una Instance nativa hacia su hostname deseado actual
+    /// (<c>CustomDomain ?? AutoHostname</c>): crea rutas del host nuevo, borra las rutas viejas que
+    /// apuntaban a esta Instance bajo otro host, refresca CNAME y monitor. NO recrea contenedores.
+    /// La usa el handler de cambio de dominio para "personalizar la URL" dejando todo limpio.
+    /// </summary>
+    public async Task ReconcileRoutingForInstanceAsync(string instanceId, CancellationToken ct)
+    {
+        var instance = await instanceLookup.GetByIdAsync(instanceId, ct).ConfigureAwait(false);
+        if (instance is null)
+        {
+            return;
+        }
+        var template = await templateLookup.GetByIdAsync(instance.TemplateId, ct).ConfigureAwait(false);
+        var services = template?.Services ?? [];
+        if (services.Count == 0)
+        {
+            return; // solo aplica a instancias nativas multi-servicio
+        }
+        var hostname = instance.CustomDomain ?? instance.AutoHostname;
+        if (string.IsNullOrWhiteSpace(hostname))
+        {
+            return;
+        }
+        await ReconcileRoutingAsync(instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, ct)
+            .ConfigureAwait(false);
+        log.LogInformation("reconcile-routing {Inst}: rutas/CNAME/monitor sincronizados a {Host}", instance.Slug, hostname);
+    }
+
+    /// <summary>
+    /// Asegura las rutas del <paramref name="hostname"/> deseado (una por servicio×pathPrefix →
+    /// <c>{slug}-{svc}:{port}</c>), BORRA las rutas que apuntan a contenedores de esta Instance pero
+    /// bajo OTRO hostname (limpieza de URL anterior), y refresca CNAME + monitor. Crea-antes-de-borrar
+    /// para no dejar la URL caída en la transición.
+    /// </summary>
+    private async Task<List<string>> ReconcileRoutingAsync(
+        string slug, string instanceId, string projectId,
+        IReadOnlyList<TemplateServiceView> services, string hostname, CancellationToken ct)
+    {
+        // 1) CNAME del host deseado (best-effort).
+        await EnsureDnsRecordAsync(hostname, ct).ConfigureAwait(false);
+
+        // 2) Asegurar rutas del host deseado (idempotente).
+        var routes = new List<string>();
+        foreach (var svc in services)
+        {
+            foreach (var prefix in svc.PathPrefixes)
+            {
+                var backend = $"http://{slug}-{svc.Name}:{svc.Port}";
+                var r = await mediator.Send(new CreateRouteCommand(hostname, backend, false, prefix), ct).ConfigureAwait(false);
+                routes.Add(r.IsSuccess ? $"{prefix} → {backend}" : $"{prefix} (ya existía)");
+            }
+        }
+
+        // 3) Limpiar rutas viejas: las que apuntan a ESTA Instance ({slug}-{svc}:) pero bajo otro host.
+        var myBackends = services.Select(s => $"http://{slug}-{s.Name}:").ToList();
+        var all = await mediator.Send(new ListRoutesQuery(), ct).ConfigureAwait(false);
+        if (all.IsSuccess)
+        {
+            foreach (var rt in all.Value)
+            {
+                var isMine = myBackends.Any(b => rt.BackendUrl.StartsWith(b, StringComparison.Ordinal));
+                if (isMine && !string.Equals(rt.Hostname, hostname, StringComparison.OrdinalIgnoreCase))
+                {
+                    await mediator.Send(new DeleteRouteCommand(rt.Id), ct).ConfigureAwait(false);
+                    routes.Add($"− {rt.Hostname}{rt.PathPrefix} (URL anterior, borrada)");
+                    log.LogInformation("reconcile-routing {Slug}: ruta vieja borrada {Host}{Path}", slug, rt.Hostname, rt.PathPrefix);
+                }
+            }
+        }
+
+        // 4) Monitor del host deseado.
+        await mediator.Send(new CreateMonitorCommand(
+            Slug: slug, Name: slug, Url: $"https://{hostname}/",
+            HttpMethod: "GET", ExpectedStatusCodes: [200, 301, 302, 307, 308],
+            IntervalSec: 120, TimeoutMs: 15000, Headers: null, BodyTemplate: null,
+            InstanceId: instanceId, ProjectId: projectId), ct).ConfigureAwait(false);
+
+        return routes;
     }
 
     /// <summary>
