@@ -205,6 +205,24 @@ public sealed class HttpCloudflareApiClient : ICloudflareApiClient
         _ = await SendAsync<TunnelConfigJson>(http, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<string> GetTunnelConnectorTokenAsync(
+        string accountId, string tunnelId, string apiToken, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tunnelId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(apiToken);
+
+        var uri = $"accounts/{Uri.EscapeDataString(accountId)}/cfd_tunnel/{Uri.EscapeDataString(tunnelId)}/token";
+        using var request = BuildRequest(HttpMethod.Get, uri, apiToken);
+        var envelope = await SendAsync<string>(request, cancellationToken).ConfigureAwait(false);
+        var token = envelope.Result;
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new CloudflareApiException(200, 0, "Cloudflare devolvió token de connector vacío.");
+        }
+        return token;
+    }
+
     private static HttpRequestMessage BuildRequest(HttpMethod method, string relativeUri, string apiToken)
     {
         var request = new HttpRequestMessage(method, new Uri(relativeUri, UriKind.Relative));

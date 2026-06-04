@@ -57,6 +57,28 @@ export function TunnelManager({
     }
   }
 
+  async function deployConnector() {
+    setBusy(true);
+    try {
+      const r = await api<{ vmId: string; container: string }>(
+        "/api/cloudflare/tunnel/connector/deploy",
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      toast.success(`Connector gestionado desplegado · ${r.container} @ ${r.vmId.slice(0, 8)}`);
+      router.refresh();
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError
+          ? ((e.body as { detail?: string; message?: string } | undefined)?.detail ??
+            (e.body as { message?: string } | undefined)?.message ??
+            `Error ${e.status}`)
+          : "Error desplegando el connector",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function register() {
     setBusy(true);
     try {
@@ -187,11 +209,16 @@ export function TunnelManager({
                 connector la aplique al correr con token.
               </span>
             </div>
-            <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-muted-foreground">
-              <strong>Único paso en el host (1-vez):</strong> arrancar cloudflared con el connector token
-              en vez de <code className="font-mono">--config</code> local. Hoy es manual (toca el systemd
-              del host). Una vez hecho, todo el ingress se gestiona desde aquí, cero blip.
-            </p>
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 p-3">
+              <Button type="button" variant="outline" size="sm" onClick={deployConnector} disabled={busy}>
+                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plug className="mr-2 h-4 w-4" />}
+                Desplegar connector gestionado (contenedor)
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                Corre cloudflared con el connector token como contenedor en la VM (network host). Es
+                réplica HA del túnel — el flip a remoto queda 100% desde aquí, sin SSH ni tocar el systemd.
+              </span>
+            </div>
           </CardContent>
         </Card>
       ) : loadError ? (

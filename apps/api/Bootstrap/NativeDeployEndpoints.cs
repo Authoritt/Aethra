@@ -63,10 +63,28 @@ public static class NativeDeployEndpoints
         .WithName("SetInstanceEnvVars")
         .WithTags("Projects");
 
+        // F13.11 — despliega el connector cloudflared como contenedor gestionado (flip a túnel remoto
+        // desde la UI, sin tocar el systemd del host). Múltiples connectors --token son réplicas HA.
+        app.MapPost("/api/cloudflare/tunnel/connector/deploy", async (
+            [FromBody] DeployConnectorRequest? body,
+            CloudflareConnectorDeployer deployer,
+            CancellationToken ct) =>
+        {
+            var r = await deployer.DeployAsync(body?.VmId, ct);
+            return r.Success
+                ? Results.Ok(new { vmId = r.VmId, container = r.ContainerName })
+                : Results.Problem(r.Error);
+        })
+        .RequireAuthorization("scope:cloudflare:write")
+        .WithName("DeployCloudflareConnector")
+        .WithTags("Cloudflare");
+
         return app;
     }
 
     public sealed record DeployNativeRequest(string? Hostname);
+
+    public sealed record DeployConnectorRequest(string? VmId);
 
     public sealed record SetInstanceEnvVarsRequest(IReadOnlyList<InstanceEnvVarItem>? Vars);
 

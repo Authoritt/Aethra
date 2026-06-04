@@ -94,6 +94,8 @@ builder.Services.AddValidatorsFromAssemblies(moduleAssemblies);
 builder.Services.AddScoped<IIntegrationEventBus, InMemoryIntegrationEventBus>();
 // F13 — orquestador del deploy nativo multi-contenedor (endpoint manual + auto-trigger webhook).
 builder.Services.AddScoped<Aethra.Api.Bootstrap.NativeDeployRunner>();
+// F13.11 — despliega el connector cloudflared como contenedor gestionado (flip a túnel remoto desde UI).
+builder.Services.AddScoped<Aethra.Api.Bootstrap.CloudflareConnectorDeployer>();
 builder.Services.Configure<OutboxDispatcherOptions>(builder.Configuration.GetSection("Outbox"));
 
 // -----------------------------------------------------------------------------

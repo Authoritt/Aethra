@@ -42,6 +42,11 @@ public interface ICloudflareApiClient
     Task PutTunnelIngressAsync(
         string accountId, string tunnelId, string apiToken,
         IReadOnlyList<TunnelIngressRule> ingress, CancellationToken cancellationToken);
+
+    /// <summary>F13.11 — obtiene el connector token del túnel (para correr cloudflared con --token /
+    /// TUNNEL_TOKEN). Distinto del API token. <c>GET /cfd_tunnel/{id}/token</c>.</summary>
+    Task<string> GetTunnelConnectorTokenAsync(
+        string accountId, string tunnelId, string apiToken, CancellationToken cancellationToken);
 }
 
 /// <summary>Una regla de ingress de un Cloudflare Tunnel. <c>Hostname=null</c> ⇒ catch-all.</summary>
