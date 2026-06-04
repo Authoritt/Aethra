@@ -164,8 +164,10 @@ public static class WebhookEndpoints
             // ambientes cuyo branch coincide → "1 o 2 imágenes según a dónde se pusheó".
             if (tpl.Services is { Count: > 0 })
             {
+                // ResolveTrackedRef devuelve el ref completo (refs/heads/<branch>), así que
+                // matcheamos contra payload.Ref, no el branch corto.
                 var affected = await instanceLookup
-                    .FindByTrackedRefAsync(tpl.TemplateId, payload.Branch!, autoDeployOnly: false, ct)
+                    .FindByTrackedRefAsync(tpl.TemplateId, payload.Ref!, autoDeployOnly: false, ct)
                     .ConfigureAwait(false);
                 foreach (var inst in affected)
                 {
