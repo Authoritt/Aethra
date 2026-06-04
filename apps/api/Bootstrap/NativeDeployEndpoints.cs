@@ -74,8 +74,16 @@ public static class NativeDeployEndpoints
                     env[kv.Key] = kv.Value.Replace("{instance}", instance.Slug, StringComparison.Ordinal);
                 }
 
-                // Liberar nombre estable (redeploy) — best-effort.
-                await satellite.SendRemoveAsync(instance.TargetVmId, containerName, force: true, ct);
+                // Liberar nombre estable (redeploy) — best-effort: si no existe (primer deploy)
+                // el satélite responde NotFound y el RPC lanza; lo ignoramos.
+                try
+                {
+                    await satellite.SendRemoveAsync(instance.TargetVmId, containerName, force: true, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    log.LogDebug("deploy-native: remove previo de {Name} ignorado: {Msg}", containerName, ex.Message);
+                }
 
                 var spec = new RunSpec(
                     ContainerName: containerName,
