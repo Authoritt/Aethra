@@ -56,7 +56,7 @@ export default async function RouteDetailPage({
   }
 
   const route = data;
-  const scheme = route.tls_enabled ? "https" : "http";
+  const scheme = route.tlsEnabled ? "https" : "http";
   const url = `${scheme}://${route.hostname}`;
 
   return (
@@ -69,7 +69,7 @@ export default async function RouteDetailPage({
         title={route.hostname}
         description={
           <>
-            <span className="font-mono text-xs">{route.backend_url}</span>
+            <span className="font-mono text-xs">{route.backendUrl}</span>
           </>
         }
         actions={
@@ -86,7 +86,7 @@ export default async function RouteDetailPage({
       />
 
       <div className="mb-6 flex flex-wrap gap-2">
-        {route.tls_enabled ? (
+        {route.tlsEnabled ? (
           <Badge variant="success">
             <Lock className="mr-1 h-3 w-3" />
             {t("tls_enabled_badge")}
@@ -98,7 +98,7 @@ export default async function RouteDetailPage({
           </Badge>
         )}
         <CertStatusPill
-          status={route.tls_enabled ? route.cert_status : "none"}
+          status={route.tlsEnabled ? route.certStatus : "none"}
         />
       </div>
 
@@ -112,12 +112,13 @@ export default async function RouteDetailPage({
           <CardContent>
             <dl className="flex flex-col gap-3 text-sm">
               <Kv label={t("label_public_hostname")} value={route.hostname} mono />
-              <Kv label={t("label_backend")} value={route.backend_url} mono />
+              <Kv label="Path" value={route.pathPrefix ?? "/"} mono />
+              <Kv label={t("label_backend")} value={route.backendUrl} mono />
               <Kv label={t("label_scheme")} value={scheme.toUpperCase()} />
-              <Kv label={t("label_created")} value={formatDate(route.created_at)} />
+              <Kv label={t("label_created")} value={formatDate(route.createdAt)} />
               <Kv
                 label={t("label_updated")}
-                value={formatDate(route.updated_at)}
+                value={formatDate(route.updatedAt)}
               />
             </dl>
           </CardContent>
@@ -129,18 +130,18 @@ export default async function RouteDetailPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {route.tls_enabled ? (
+            {route.tlsEnabled ? (
               <dl className="flex flex-col gap-3 text-sm">
-                <Kv label={t("label_status")} value={route.cert_status} />
+                <Kv label={t("label_status")} value={route.certStatus} />
                 <Kv
                   label={t("label_expires")}
                   value={
-                    route.cert_expires_at
-                      ? formatDate(route.cert_expires_at)
+                    route.certExpiresAt
+                      ? formatDate(route.certExpiresAt)
                       : "—"
                   }
                 />
-                {route.cert_status === "failed" ? (
+                {route.certStatus === "failed" ? (
                   <p className="text-xs text-destructive">
                     {t("cert_failed_text")}
                   </p>

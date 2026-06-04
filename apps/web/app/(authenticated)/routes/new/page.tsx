@@ -45,8 +45,8 @@ export default function NewRoutePage() {
     try {
       const body: CreateRouteRequest = {
         hostname: hostname.trim(),
-        backend_url: backendUrl.trim(),
-        tls_enabled: tlsEnabled,
+        backendUrl: backendUrl.trim(),
+        tlsEnabled: tlsEnabled,
       };
       await api<RouteDto>("/api/proxy/routes", {
         method: "POST",

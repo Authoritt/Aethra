@@ -171,18 +171,20 @@ export type CertStatus =
 export interface RouteDto {
   id: string;
   hostname: string;
-  backend_url: string;
-  tls_enabled: boolean;
-  cert_status: CertStatus;
-  cert_expires_at: string | null;
-  created_at: string;
-  updated_at: string;
+  pathPrefix: string;
+  backendUrl: string;
+  tlsEnabled: boolean;
+  certStatus: CertStatus;
+  certExpiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateRouteRequest {
   hostname: string;
-  backend_url: string;
-  tls_enabled: boolean;
+  pathPrefix?: string;
+  backendUrl: string;
+  tlsEnabled: boolean;
 }
 
 /* -------------------------------------------------------------------------- */

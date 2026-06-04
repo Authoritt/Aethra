@@ -89,6 +89,7 @@ export default async function RoutesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>{t("col_hostname")}</TableHead>
+                <TableHead>Path</TableHead>
                 <TableHead>{t("col_backend")}</TableHead>
                 <TableHead>{t("col_tls")}</TableHead>
                 <TableHead>{t("col_expires")}</TableHead>
@@ -107,15 +108,22 @@ export default async function RoutesPage() {
                     </Link>
                   </TableCell>
                   <TableCell className="font-mono text-xs">
-                    {r.backend_url}
+                    {r.pathPrefix ?? "/"}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {r.backendUrl}
                   </TableCell>
                   <TableCell>
-                    <CertStatusPill
-                      status={r.tls_enabled ? r.cert_status : "none"}
-                    />
+                    {r.tlsEnabled ? (
+                      <CertStatusPill status={r.certStatus} />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        edge (Cloudflare)
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {formatExpires(r.cert_expires_at)}
+                    {formatExpires(r.certExpiresAt)}
                   </TableCell>
                   <TableCell className="text-right">
                     <DeleteRouteButton id={r.id} hostname={r.hostname} />
