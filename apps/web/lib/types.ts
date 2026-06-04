@@ -151,6 +151,8 @@ export interface VmMetricPoint {
   cpuPercent: number;
   memoryUsedBytes: number;
   memoryTotalBytes: number;
+  diskUsedBytes: number;
+  diskTotalBytes: number;
   netBytesReceived: number;
   netBytesSent: number;
 }

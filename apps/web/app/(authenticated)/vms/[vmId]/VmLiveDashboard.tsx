@@ -119,6 +119,10 @@ export default function VmLiveDashboard({
   const memoryTotal = latest?.memoryTotalBytes ?? totalMemoryBytes ?? 0;
   const memoryUsed = latest?.memoryUsedBytes ?? 0;
   const memoryPct = memoryTotal > 0 ? (memoryUsed / memoryTotal) * 100 : 0;
+  const diskTotal = latest?.diskTotalBytes ?? 0;
+  const diskUsed = latest?.diskUsedBytes ?? 0;
+  const diskFree = Math.max(0, diskTotal - diskUsed);
+  const diskPct = diskTotal > 0 ? (diskUsed / diskTotal) * 100 : 0;
   const cpuPct = latest?.cpuPercent ?? 0;
   const netRx = latest?.netBytesReceived ?? 0;
   const netTx = latest?.netBytesSent ?? 0;
@@ -128,6 +132,14 @@ export default function VmLiveDashboard({
       points.map((p) => ({
         timestamp: p.timestamp,
         cpu: round1(p.cpuPercent),
+        ram:
+          p.memoryTotalBytes > 0
+            ? round1((p.memoryUsedBytes / p.memoryTotalBytes) * 100)
+            : 0,
+        disk:
+          p.diskTotalBytes > 0
+            ? round1((p.diskUsedBytes / p.diskTotalBytes) * 100)
+            : 0,
       })),
     [points],
   );
@@ -141,7 +153,7 @@ export default function VmLiveDashboard({
         <ConnectionBadge phase={phase} status={status} />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <BigStat label="CPU" value={`${round1(cpuPct)}%`} bar={cpuPct} tone="info" />
         <BigStat
           label="RAM"
@@ -155,6 +167,17 @@ export default function VmLiveDashboard({
           tone="primary"
         />
         <BigStat
+          label="Disco"
+          value={`${round1(diskPct)}%`}
+          sub={
+            diskTotal > 0
+              ? `${formatBytes(diskFree)} libres de ${formatBytes(diskTotal)}`
+              : "—"
+          }
+          bar={diskPct}
+          tone={diskPct >= 90 ? "destructive" : diskPct >= 75 ? "warning" : "success"}
+        />
+        <BigStat
           label="Red"
           value={`${formatBytes(netRx)} ↓  ${formatBytes(netTx)} ↑`}
           sub="acumulado del satélite"
@@ -164,7 +187,7 @@ export default function VmLiveDashboard({
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-base">
-            CPU% — últimos {MAX_POINTS} puntos
+            CPU · RAM · Disco (%) — últimos {MAX_POINTS} puntos
           </CardTitle>
           <span className="text-xs text-muted-foreground">
             {points.length} muestras
@@ -178,7 +201,11 @@ export default function VmLiveDashboard({
           ) : (
             <MetricsChart
               data={chartData}
-              series={[{ dataKey: "cpu", label: "CPU", tone: "info" }]}
+              series={[
+                { dataKey: "cpu", label: "CPU", tone: "info" },
+                { dataKey: "ram", label: "RAM", tone: "primary" },
+                { dataKey: "disk", label: "Disco", tone: "warning" },
+              ]}
               variant="line"
               formatValue={(v) => `${v}%`}
               height={224}

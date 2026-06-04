@@ -53,8 +53,28 @@ internal sealed class DashboardForwarder(IHubContext<DashboardHub> hub, ILogger<
     public Task Handle(VmMetricsReportedEvent notification, CancellationToken cancellationToken)
     {
         logger.LogDebug("Forward VmMetrics to dashboard for {VmId}", notification.VmId);
+        var s = notification.Snapshot;
+        // Mismo shape plano que el DTO REST (GetLatestMetricsQuery.VmMetricPoint): disco agregado
+        // y red aplanada, para que la gráfica en vivo y la histórica consuman idéntica forma.
+        long diskUsed = 0, diskTotal = 0;
+        foreach (var d in s.Disks)
+        {
+            diskUsed += d.UsedBytes;
+            diskTotal += d.TotalBytes;
+        }
+        var point = new
+        {
+            timestamp = s.Timestamp,
+            cpuPercent = s.CpuPercent,
+            memoryUsedBytes = s.MemoryUsedBytes,
+            memoryTotalBytes = s.MemoryTotalBytes,
+            diskUsedBytes = diskUsed,
+            diskTotalBytes = diskTotal,
+            netBytesReceived = s.Network.BytesReceived,
+            netBytesSent = s.Network.BytesSent,
+        };
         return hub.Clients.Group(DashboardHub.VmGroup(notification.VmId))
-            .SendAsync("VmMetricsUpdated", notification.VmId, notification.Snapshot, cancellationToken);
+            .SendAsync("VmMetricsUpdated", notification.VmId, point, cancellationToken);
     }
 
     public Task Handle(ContainersReportedEvent notification, CancellationToken cancellationToken)
