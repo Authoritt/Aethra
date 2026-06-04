@@ -37,10 +37,21 @@ public sealed record TemplateDetail(
     DateTimeOffset createdAt,
     DateTimeOffset updatedAt,
     IReadOnlyList<TemplateEnvironmentMappingDto> environmentMapping,
-    bool autoPreviewPullRequests);
+    bool autoPreviewPullRequests,
+    IReadOnlyList<TemplateServiceDto> services);
 
 /// <summary>F12.3 — row de mapping Environment→Branch para la vista detalle.</summary>
 public sealed record TemplateEnvironmentMappingDto(string environment, string branch);
+
+/// <summary>F13 — servicio multi-contenedor del template para la vista detalle.</summary>
+public sealed record TemplateServiceDto(
+    string name,
+    string image,
+    int port,
+    IReadOnlyList<string> pathPrefixes,
+    IReadOnlyList<TemplateBuildArgDto> env,
+    string buildMode,
+    string? dockerfilePath);
 
 /// <summary>
 /// Respuesta del POST create: incluye el <c>webhookSecret</c> en plain — única oportunidad

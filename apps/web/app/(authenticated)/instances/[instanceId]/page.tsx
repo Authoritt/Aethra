@@ -34,6 +34,7 @@ import type {
 import { AutoDeployToggle } from "./AutoDeployToggle";
 import { CustomDomainForm } from "./CustomDomainForm";
 import { DeployBuildButton } from "./DeployBuildButton";
+import { DeployNativeButton } from "./DeployNativeButton";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +93,14 @@ export default async function InstanceDetailPage({
   const effectiveHost = instance.customDomain ?? instance.autoHostname;
   const openUrl = effectiveHost ? `https://${effectiveHost}` : null;
 
+  const template =
+    templateResult !== "unauthorized" &&
+    templateResult !== "notfound" &&
+    templateResult !== "error"
+      ? templateResult
+      : null;
+  const hasServices = (template?.services?.length ?? 0) > 0;
+
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
@@ -108,14 +117,19 @@ export default async function InstanceDetailPage({
           </>
         }
         actions={
-          openUrl ? (
-            <Button asChild variant="outline">
-              <a href={openUrl} target="_blank" rel="noreferrer noopener">
-                <ExternalLink className="mr-2 h-4 w-4" />
-                {t("open")}
-              </a>
-            </Button>
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            {hasServices ? (
+              <DeployNativeButton instanceId={instance.id} hostname={effectiveHost} />
+            ) : null}
+            {openUrl ? (
+              <Button asChild variant="outline">
+                <a href={openUrl} target="_blank" rel="noreferrer noopener">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  {t("open")}
+                </a>
+              </Button>
+            ) : null}
+          </div>
         }
       />
 

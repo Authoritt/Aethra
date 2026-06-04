@@ -789,9 +789,23 @@ export interface TemplateDetail extends TemplateSummary {
   environmentMapping: TemplateEnvironmentMapping[];
   /** F12.3 — opt-in al auto-create de Instances ephemerals al recibir pull_request.opened. */
   autoPreviewPullRequests: boolean;
+  /** F13 — servicios multi-contenedor (deploy nativo). Vacío = template single-build. */
+  services: TemplateServiceDef[];
   webhookSecret?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** F13 — un servicio multi-contenedor del template (deploy nativo). */
+export interface TemplateServiceDef {
+  name: string;
+  image: string;
+  port: number;
+  pathPrefixes: string[];
+  env: TemplateBuildArg[];
+  /** "registry" (imagen prebuilt) o "git" (Aethra clona y construye). */
+  buildMode: string;
+  dockerfilePath: string | null;
 }
 
 export interface CreateTemplateRequest {

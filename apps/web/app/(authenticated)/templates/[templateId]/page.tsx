@@ -29,6 +29,7 @@ import type {
   TemplateDetail,
 } from "@/lib/types";
 import { RotateWebhookSecretButton } from "./RotateWebhookSecretButton";
+import { ServicesEditor } from "./ServicesEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +127,9 @@ export default async function TemplateDetailPage({
           </TabsTrigger>
           <TabsTrigger value="builds">
             {t("tab_builds", { count: builds.length })}
+          </TabsTrigger>
+          <TabsTrigger value="services">
+            Servicios ({template.services?.length ?? 0})
           </TabsTrigger>
         </TabsList>
 
@@ -366,6 +370,19 @@ export default async function TemplateDetailPage({
               </Table>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="services" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                Servicios (deploy nativo multi-contenedor)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ServicesEditor templateId={template.id} initial={template.services ?? []} />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

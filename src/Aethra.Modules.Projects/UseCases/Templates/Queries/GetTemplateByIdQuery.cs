@@ -43,6 +43,11 @@ internal sealed class GetTemplateByIdHandler(ProjectsDbContext db)
             [.. t.Build.BuildArgs.Select(a => new TemplateBuildArgDto(a.Key, a.Value))];
         IReadOnlyList<TemplateEnvironmentMappingDto> mappings =
             [.. t.EnvironmentMapping.Select(m => new TemplateEnvironmentMappingDto(m.Environment, m.Branch))];
+        IReadOnlyList<TemplateServiceDto> services =
+            [.. t.Services.Select(s => new TemplateServiceDto(
+                s.Name, s.Image, s.Port, s.PathPrefixes,
+                [.. s.Env.Select(e => new TemplateBuildArgDto(e.Key, e.Value))],
+                s.BuildMode, s.DockerfilePath))];
 
         return new TemplateDetail(
             id: t.Id.ToString(),
@@ -62,6 +67,7 @@ internal sealed class GetTemplateByIdHandler(ProjectsDbContext db)
             createdAt: t.CreatedAt,
             updatedAt: t.UpdatedAt,
             environmentMapping: mappings,
-            autoPreviewPullRequests: t.AutoPreviewPullRequests);
+            autoPreviewPullRequests: t.AutoPreviewPullRequests,
+            services: services);
     }
 }
