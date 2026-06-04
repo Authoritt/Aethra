@@ -153,6 +153,14 @@ public static class CloudflareEndpoints
         .RequireAuthorization(ScopeWrite)
         .WithName("SetCloudflareTunnelIngress");
 
+        tunnels.MapPost("/promote-remote", async (IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new PromoteTunnelRemoteCommand(), ct);
+            return r.IsSuccess ? Results.Ok(new { rules = r.Value, source = "cloudflare" }) : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("PromoteCloudflareTunnelRemote");
+
         tunnels.MapPost("/ensure-hostname", async ([FromBody] TunnelHostnameRequest body, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new EnsureTunnelHostnameCommand(body.Hostname), ct);

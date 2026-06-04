@@ -40,6 +40,23 @@ export function TunnelManager({
     setForm((f) => ({ ...f, [k]: v }));
   }
 
+  async function promote() {
+    setBusy(true);
+    try {
+      const r = await api<{ rules: number }>("/api/cloudflare/tunnel/promote-remote", { method: "POST" });
+      toast.success(`Config promovida a remota (source=cloudflare) · ${r.rules} reglas`);
+      router.refresh();
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError
+          ? ((e.body as { message?: string } | undefined)?.message ?? `Error ${e.status}`)
+          : "Error promoviendo el túnel",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function register() {
     setBusy(true);
     try {
@@ -159,6 +176,21 @@ export function TunnelManager({
             <p className="text-xs text-muted-foreground">
               A partir de ahora, cada deploy o cambio de URL agrega/quita su regla aquí
               automáticamente — sin reiniciar el túnel.
+            </p>
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 p-3">
+              <Button type="button" variant="outline" size="sm" onClick={promote} disabled={busy}>
+                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                Promover config a remota (source=cloudflare)
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                Re-publica la config de ingress por API (idempotente). Necesario una vez para que el
+                connector la aplique al correr con token.
+              </span>
+            </div>
+            <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-muted-foreground">
+              <strong>Único paso en el host (1-vez):</strong> arrancar cloudflared con el connector token
+              en vez de <code className="font-mono">--config</code> local. Hoy es manual (toca el systemd
+              del host). Una vez hecho, todo el ingress se gestiona desde aquí, cero blip.
             </p>
           </CardContent>
         </Card>
