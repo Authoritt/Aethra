@@ -11,15 +11,23 @@ namespace Aethra.Modules.Proxy.Domain;
 public sealed class Route : AggregateRoot<RouteId>
 {
     public Hostname Hostname { get; private set; }
+
+    /// <summary>
+    /// Prefijo de path para el split por ruta. <c>"/"</c> = catch-all (todo el host).
+    /// <c>"/api"</c> = solo paths bajo <c>/api</c>. Permite back+front en el mismo host
+    /// (ej. Acme: <c>/api</c> → backend, <c>/</c> → frontend). El más específico gana.
+    /// </summary>
+    public string PathPrefix { get; private set; } = "/";
     public string BackendUrl { get; private set; }
     public bool TlsEnabled { get; private set; }
     public CertificateId? CertificateId { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
-    private Route(RouteId id, Hostname hostname, string backendUrl, bool tlsEnabled, DateTimeOffset now) : base(id)
+    private Route(RouteId id, Hostname hostname, string pathPrefix, string backendUrl, bool tlsEnabled, DateTimeOffset now) : base(id)
     {
         Hostname = hostname;
+        PathPrefix = pathPrefix;
         BackendUrl = backendUrl;
         TlsEnabled = tlsEnabled;
         CreatedAt = now;
@@ -27,6 +35,9 @@ public sealed class Route : AggregateRoot<RouteId>
     }
 
     public static Route Create(Hostname hostname, string backendUrl, bool tlsEnabled, DateTimeOffset now)
+        => Create(hostname, "/", backendUrl, tlsEnabled, now);
+
+    public static Route Create(Hostname hostname, string? pathPrefix, string backendUrl, bool tlsEnabled, DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(backendUrl))
         {
@@ -37,9 +48,27 @@ public sealed class Route : AggregateRoot<RouteId>
             throw new ArgumentException("backend_url debe ser una URL absoluta http(s)://...", nameof(backendUrl));
         }
 
-        var route = new Route(RouteId.New(), hostname, backendUrl.Trim(), tlsEnabled, now);
+        var route = new Route(RouteId.New(), hostname, NormalizePathPrefix(pathPrefix), backendUrl.Trim(), tlsEnabled, now);
         route.Raise(new RouteAddedEvent(route.Id, hostname.Value, route.BackendUrl, tlsEnabled));
         return route;
+    }
+
+    /// <summary>
+    /// Normaliza el prefijo: vacío/"/" → <c>"/"</c> (catch-all); si no, garantiza barra inicial
+    /// y quita la barra final. Ej.: <c>"api"</c>→<c>"/api"</c>, <c>"/api/"</c>→<c>"/api"</c>.
+    /// </summary>
+    public static string NormalizePathPrefix(string? pathPrefix)
+    {
+        var p = pathPrefix?.Trim();
+        if (string.IsNullOrEmpty(p) || p == "/")
+        {
+            return "/";
+        }
+        if (!p.StartsWith('/'))
+        {
+            p = "/" + p;
+        }
+        return p.Length > 1 ? p.TrimEnd('/') : p;
     }
 
     public void UpdateBackend(string backendUrl, DateTimeOffset now)

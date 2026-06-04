@@ -8,6 +8,7 @@ internal static class RouteMapper
     public static RouteDto ToDto(Route r, string certStatus, DateTimeOffset? certExpiresAt) => new(
         Id: r.Id.ToString(),
         Hostname: r.Hostname.Value,
+        PathPrefix: r.PathPrefix,
         BackendUrl: r.BackendUrl,
         TlsEnabled: r.TlsEnabled,
         CertStatus: certStatus,

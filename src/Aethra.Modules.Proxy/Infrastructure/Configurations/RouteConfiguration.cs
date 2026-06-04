@@ -29,7 +29,14 @@ internal sealed class RouteConfiguration : IEntityTypeConfiguration<Route>
             .HasMaxLength(253)
             .IsRequired();
 
-        builder.HasIndex(r => r.Hostname).IsUnique().HasDatabaseName("ux_routes_hostname");
+        builder.Property(r => r.PathPrefix)
+            .HasColumnName("path_prefix")
+            .HasMaxLength(256)
+            .HasDefaultValue("/")
+            .IsRequired();
+
+        // Unicidad por (host, path): permite back+front en el mismo host con distinto prefijo.
+        builder.HasIndex(r => new { r.Hostname, r.PathPrefix }).IsUnique().HasDatabaseName("ux_routes_hostname_path");
 
         builder.Property(r => r.BackendUrl).HasColumnName("backend_url").HasMaxLength(512).IsRequired();
         builder.Property(r => r.TlsEnabled).HasColumnName("tls_enabled").IsRequired();

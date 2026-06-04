@@ -63,14 +63,21 @@ public sealed class DatabaseProxyConfigProvider : IProxyConfigProvider
         foreach (var r in routes)
         {
             var clusterId = $"cluster:{r.Id}";
+            var prefix = string.IsNullOrEmpty(r.PathPrefix) ? "/" : r.PathPrefix;
+            // "/" → catch-all del host. "/api" → matchea /api/**. El más específico (prefijo
+            // más largo) gana: Order menor = mayor prioridad en YARP.
+            var (pathPattern, order) = prefix == "/"
+                ? ("/{**catch-all}", 0)
+                : ($"{prefix}/{{**catch-all}}", -prefix.Length);
             yarpRoutes.Add(new RouteConfig
             {
                 RouteId = r.Id.ToString(),
                 ClusterId = clusterId,
+                Order = order,
                 Match = new RouteMatch
                 {
                     Hosts = [r.Hostname.Value],
-                    Path = "/{**catch-all}",
+                    Path = pathPattern,
                 },
             });
             yarpClusters.Add(new ClusterConfig

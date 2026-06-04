@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aethra.Modules.Proxy.UseCases.Routes.Commands;
 
-public sealed record CreateRouteCommand(string Hostname, string BackendUrl, bool TlsEnabled) : ICommand<RouteDto>;
+public sealed record CreateRouteCommand(string Hostname, string BackendUrl, bool TlsEnabled, string? PathPrefix = null) : ICommand<RouteDto>;
 
 public sealed class CreateRouteValidator : AbstractValidator<CreateRouteCommand>
 {
@@ -34,16 +34,17 @@ internal sealed class CreateRouteHandler(ProxyDbContext db, IClock clock, IProxy
             return hostnameResult.Error;
         }
         var hostname = hostnameResult.Value;
+        var pathPrefix = Route.NormalizePathPrefix(request.PathPrefix);
 
-        if (await db.Routes.AnyAsync(r => r.Hostname == hostname, cancellationToken))
+        if (await db.Routes.AnyAsync(r => r.Hostname == hostname && r.PathPrefix == pathPrefix, cancellationToken))
         {
-            return Error.Conflict("route.hostname_taken", $"Ya existe una ruta para '{hostname}'.");
+            return Error.Conflict("route.hostname_taken", $"Ya existe una ruta para '{hostname}' con path '{pathPrefix}'.");
         }
 
         Route route;
         try
         {
-            route = Route.Create(hostname, request.BackendUrl, request.TlsEnabled, clock.UtcNow);
+            route = Route.Create(hostname, pathPrefix, request.BackendUrl, request.TlsEnabled, clock.UtcNow);
         }
         catch (ArgumentException ex)
         {
