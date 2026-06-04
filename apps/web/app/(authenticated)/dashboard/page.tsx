@@ -128,7 +128,7 @@ export default async function Dashboard() {
       <PageHeader
         title={t("title")}
         description={t.rich("description_with_email", {
-          email: () => <span className="text-foreground">{me.email}</span>,
+          email: <span className="text-foreground">{me.email}</span>,
         })}
       />
 
