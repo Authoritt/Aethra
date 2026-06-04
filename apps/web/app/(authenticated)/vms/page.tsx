@@ -98,21 +98,21 @@ export default async function VmsPage() {
 
                     <dl className="grid grid-cols-2 gap-2 pt-2 text-xs">
                       <Stat
-                        label={t("label_public_ip")}
-                        value={vm.public_ip ?? "—"}
+                        label={t("label_publicIp")}
+                        value={vm.publicIp ?? "—"}
                         mono
                       />
                       <Stat
                         label={t("label_cpu")}
-                        value={vm.cpu_cores ? `${vm.cpu_cores} cores` : "—"}
+                        value={vm.cpuCores ? `${vm.cpuCores} cores` : "—"}
                       />
                       <Stat
                         label={t("label_ram")}
-                        value={formatGb(vm.total_memory_bytes)}
+                        value={formatGb(vm.totalMemoryBytes)}
                       />
                       <Stat
                         label={t("label_agent")}
-                        value={vm.agent_version ?? "—"}
+                        value={vm.agentVersion ?? "—"}
                         mono
                       />
                     </dl>

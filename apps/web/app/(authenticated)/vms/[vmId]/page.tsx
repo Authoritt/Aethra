@@ -72,8 +72,8 @@ export default async function VmDetailPage({
   const vm = data;
   const initialMetrics = await fetchLatestMetrics(vmId);
 
-  const totalGb = vm.total_memory_bytes
-    ? (vm.total_memory_bytes / 1024 / 1024 / 1024).toFixed(1)
+  const totalGb = vm.totalMemoryBytes
+    ? (vm.totalMemoryBytes / 1024 / 1024 / 1024).toFixed(1)
     : null;
 
   return (
@@ -96,21 +96,21 @@ export default async function VmDetailPage({
       />
 
       <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Info label={t("label_public_ip")} value={vm.public_ip ?? "—"} mono />
-        <Info label={t("label_private_ip")} value={vm.private_ip ?? "—"} mono />
+        <Info label={t("label_publicIp")} value={vm.publicIp ?? "—"} mono />
+        <Info label={t("label_privateIp")} value={vm.privateIp ?? "—"} mono />
         <Info label={t("label_hostname")} value={vm.hostname ?? "—"} mono />
-        <Info label={t("label_kernel")} value={vm.kernel_version ?? "—"} mono truncate />
-        <Info label={t("label_cpu")} value={vm.cpu_model ?? "—"} truncate />
-        <Info label={t("label_cores")} value={vm.cpu_cores ? `${vm.cpu_cores}` : "—"} />
+        <Info label={t("label_kernel")} value={vm.kernelVersion ?? "—"} mono truncate />
+        <Info label={t("label_cpu")} value={vm.cpuModel ?? "—"} truncate />
+        <Info label={t("label_cores")} value={vm.cpuCores ? `${vm.cpuCores}` : "—"} />
         <Info label={t("label_ram_total")} value={totalGb ? `${totalGb} GB` : "—"} />
-        <Info label={t("label_agent")} value={vm.agent_version ?? "—"} mono />
+        <Info label={t("label_agent")} value={vm.agentVersion ?? "—"} mono />
       </section>
 
       <VmLiveDashboard
         vmId={vm.id}
         initialStatus={vm.status}
         initialMetrics={initialMetrics}
-        totalMemoryBytes={vm.total_memory_bytes}
+        totalMemoryBytes={vm.totalMemoryBytes}
       />
     </div>
   );

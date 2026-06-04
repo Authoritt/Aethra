@@ -116,18 +116,18 @@ export default function VmLiveDashboard({
   }, [vmId]);
 
   const latest = points.length > 0 ? points[points.length - 1] : null;
-  const memoryTotal = latest?.memory_total_bytes ?? totalMemoryBytes ?? 0;
-  const memoryUsed = latest?.memory_used_bytes ?? 0;
+  const memoryTotal = latest?.memoryTotalBytes ?? totalMemoryBytes ?? 0;
+  const memoryUsed = latest?.memoryUsedBytes ?? 0;
   const memoryPct = memoryTotal > 0 ? (memoryUsed / memoryTotal) * 100 : 0;
-  const cpuPct = latest?.cpu_percent ?? 0;
-  const netRx = latest?.net_bytes_received ?? 0;
-  const netTx = latest?.net_bytes_sent ?? 0;
+  const cpuPct = latest?.cpuPercent ?? 0;
+  const netRx = latest?.netBytesReceived ?? 0;
+  const netTx = latest?.netBytesSent ?? 0;
 
   const chartData = useMemo(
     () =>
       points.map((p) => ({
         timestamp: p.timestamp,
-        cpu: round1(p.cpu_percent),
+        cpu: round1(p.cpuPercent),
       })),
     [points],
   );

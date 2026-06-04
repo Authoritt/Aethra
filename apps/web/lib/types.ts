@@ -48,8 +48,8 @@ export interface VmDto {
   id: string;
   slug: string;
   name: string;
-  public_ip: string | null;
-  private_ip: string | null;
+  publicIp: string | null;
+  privateIp: string | null;
   description: string | null;
   status: VmStatus;
   created_at: string;
@@ -57,11 +57,11 @@ export interface VmDto {
   last_connected_at: string | null;
   last_disconnected_at: string | null;
   hostname: string | null;
-  kernel_version: string | null;
-  cpu_model: string | null;
-  cpu_cores: number | null;
-  total_memory_bytes: number | null;
-  agent_version: string | null;
+  kernelVersion: string | null;
+  cpuModel: string | null;
+  cpuCores: number | null;
+  totalMemoryBytes: number | null;
+  agentVersion: string | null;
   /** F12.3 — opt-in al pool de previews. Default true. Serializa como camelCase. */
   acceptsPreviews?: boolean;
 }
@@ -69,8 +69,8 @@ export interface VmDto {
 export interface RegisterVmRequest {
   name: string;
   slug?: string;
-  public_ip?: string;
-  private_ip?: string;
+  publicIp?: string;
+  privateIp?: string;
   description?: string;
 }
 
@@ -148,11 +148,11 @@ export interface VmInstallStatusChangedPayload {
 
 export interface VmMetricPoint {
   timestamp: string;
-  cpu_percent: number;
-  memory_used_bytes: number;
-  memory_total_bytes: number;
-  net_bytes_received: number;
-  net_bytes_sent: number;
+  cpuPercent: number;
+  memoryUsedBytes: number;
+  memoryTotalBytes: number;
+  netBytesReceived: number;
+  netBytesSent: number;
 }
 
 /* -------------------------------------------------------------------------- */
