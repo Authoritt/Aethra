@@ -138,7 +138,7 @@ public static class ProjectsEndpoints
             var cmd = new SetTemplateServicesCommand(
                 id,
                 (body.Services ?? [])
-                    .Select(s => new TemplateServiceInput(s.Name, s.Image, s.Port, s.PathPrefixes, s.Env))
+                    .Select(s => new TemplateServiceInput(s.Name, s.Image, s.Port, s.PathPrefixes, s.Env, s.BuildMode, s.DockerfilePath))
                     .ToList());
             var r = await m.Send(cmd, ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
