@@ -774,18 +774,13 @@ export interface TemplateEnvironmentMapping {
 
 export interface TemplateDetail extends TemplateSummary {
   description: string | null;
-  source: {
-    gitRepoUrl: string;
-    branch: string;
-    baseDirectory: string;
-    watchPaths: string[];
-  };
-  build: {
-    buildType: BuildType;
-    dockerfilePath: string | null;
-    composeFilePath: string | null;
-    buildArgs: TemplateBuildArg[];
-  };
+  // El API serializa estos campos PLANOS (no anidados bajo source/build).
+  baseDirectory: string;
+  watchPaths: string[];
+  accessTokenCredentialName: string | null;
+  dockerfilePath: string | null;
+  composeFilePath: string | null;
+  buildArgs: TemplateBuildArg[];
   /** F12.3 — mapping branch-per-environment. Default vacio. */
   environmentMapping: TemplateEnvironmentMapping[];
   /** F12.3 — opt-in al auto-create de Instances ephemerals al recibir pull_request.opened. */

@@ -101,14 +101,14 @@ export default async function TemplateDetailPage({
 
       <div className="mb-6 flex flex-wrap gap-2">
         <Badge variant="outline">
-          {t("build_badge", { type: template.build.buildType })}
+          {t("build_badge", { type: template.buildType })}
         </Badge>
         <Badge variant="outline">
           {t("instances_badge", { count: template.instanceCount ?? 0 })}
         </Badge>
         <Badge variant="outline">
           <GitBranch className="mr-1 h-3 w-3" />
-          {template.source.branch}
+          {template.branch}
         </Badge>
         {template.autoPreviewPullRequests ? (
           <Badge variant="warning">PR previews on</Badge>
@@ -145,7 +145,7 @@ export default async function TemplateDetailPage({
                       Default branch
                     </dt>
                     <dd className="mt-0.5 font-mono text-xs text-foreground">
-                      {template.source.branch}
+                      {template.branch}
                     </dd>
                   </div>
                   <div>
@@ -198,11 +198,11 @@ export default async function TemplateDetailPage({
               </CardHeader>
               <CardContent>
                 <dl className="flex flex-col gap-3 text-sm">
-                  <Kv label={t("git_repo")} value={template.source.gitRepoUrl} mono />
-                  <Kv label={t("branch")} value={template.source.branch} mono />
+                  <Kv label={t("git_repo")} value={template.gitRepoUrl} mono />
+                  <Kv label={t("branch")} value={template.branch} mono />
                   <Kv
                     label={t("base_directory")}
-                    value={template.source.baseDirectory}
+                    value={template.baseDirectory}
                     mono
                   />
                   <div>
@@ -210,7 +210,7 @@ export default async function TemplateDetailPage({
                       {t("watch_paths")}
                     </dt>
                     <dd className="mt-1 flex flex-wrap gap-1">
-                      {template.source.watchPaths.map((p) => (
+                      {template.watchPaths.map((p) => (
                         <span
                           key={p}
                           className="rounded border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-foreground"
@@ -232,18 +232,18 @@ export default async function TemplateDetailPage({
               </CardHeader>
               <CardContent>
                 <dl className="flex flex-col gap-3 text-sm">
-                  <Kv label={t("type_label")} value={template.build.buildType} />
-                  {template.build.dockerfilePath ? (
+                  <Kv label={t("type_label")} value={template.buildType} />
+                  {template.dockerfilePath ? (
                     <Kv
                       label={t("dockerfile")}
-                      value={template.build.dockerfilePath}
+                      value={template.dockerfilePath}
                       mono
                     />
                   ) : null}
-                  {template.build.composeFilePath ? (
+                  {template.composeFilePath ? (
                     <Kv
                       label={t("compose_file")}
-                      value={template.build.composeFilePath}
+                      value={template.composeFilePath}
                       mono
                     />
                   ) : null}
@@ -252,13 +252,13 @@ export default async function TemplateDetailPage({
                       {t("build_args")}
                     </dt>
                     <dd className="mt-1">
-                      {template.build.buildArgs.length === 0 ? (
+                      {template.buildArgs.length === 0 ? (
                         <span className="text-xs text-muted-foreground">
                           {t("no_args")}
                         </span>
                       ) : (
                         <ul className="flex flex-col gap-1 font-mono text-[11px]">
-                          {template.build.buildArgs.map((a) => (
+                          {template.buildArgs.map((a) => (
                             <li
                               key={a.key}
                               className="rounded border border-border bg-muted px-2 py-1"
