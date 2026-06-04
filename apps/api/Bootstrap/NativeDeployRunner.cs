@@ -1,3 +1,6 @@
+using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
+using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Queries;
+using Aethra.Modules.Cloudflare.UseCases.Zones.Queries;
 using Aethra.Modules.Deployments.Infrastructure.Build;
 using Aethra.Modules.Monitoring.UseCases.Commands;
 using Aethra.Modules.Proxy.UseCases.Routes.Commands;
@@ -36,6 +39,10 @@ public sealed class NativeDeployRunner(
 {
     private readonly string _appNetwork =
         config["Deployments:AppNetwork"] is { Length: > 0 } n ? n : "aethra-net";
+
+    // F13.5 — target del CNAME del túnel CF (ej. "<uuid>.cfargotunnel.com"). Si está configurado,
+    // el deploy crea automáticamente el DNS record del hostname (best-effort). Null = no auto-DNS.
+    private readonly string? _tunnelCname = config["NativeDeploy:TunnelCname"];
 
     public async Task<NativeDeployResult> DeployAsync(string instanceId, string? hostnameOverride, CancellationToken ct)
     {
@@ -159,6 +166,9 @@ public sealed class NativeDeployRunner(
         var routes = new List<string>();
         if (!string.IsNullOrWhiteSpace(hostname))
         {
+            // F13.5 — auto-DNS: crea el CNAME del hostname → túnel CF (best-effort, nunca falla el deploy).
+            await EnsureDnsRecordAsync(hostname!, ct).ConfigureAwait(false);
+
             foreach (var svc in services)
             {
                 foreach (var prefix in svc.PathPrefixes)
@@ -182,6 +192,63 @@ public sealed class NativeDeployRunner(
 
         log.LogInformation("native-deploy {Inst} OK (healthy={H}, {N} servicios)", instance.Slug, healthy, deployedServices.Count);
         return new NativeDeployResult(true, null, hostname, healthy, deployedServices, routes);
+    }
+
+    /// <summary>
+    /// F13.5 — crea el DNS record (CNAME proxied → túnel CF) del hostname si hay <c>NativeDeploy:TunnelCname</c>
+    /// configurado y una zona registrada que lo cubra. Best-effort: cualquier fallo se loguea y se ignora
+    /// (el deploy no depende de esto; el ingress de cloudflared sigue siendo manual).
+    /// </summary>
+    private async Task EnsureDnsRecordAsync(string hostname, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_tunnelCname))
+        {
+            return;
+        }
+        try
+        {
+            var zones = await mediator.Send(new ListZonesQuery(), ct).ConfigureAwait(false);
+            if (zones.IsFailure)
+            {
+                log.LogDebug("auto-dns {Host}: no se pudieron listar zonas: {Err}", hostname, zones.Error.Message);
+                return;
+            }
+            // Zona cuyo Name es sufijo del hostname (longest-match), ej. "example.com".
+            var zone = zones.Value
+                .Where(z => hostname.Equals(z.Name, StringComparison.OrdinalIgnoreCase)
+                    || hostname.EndsWith("." + z.Name, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(z => z.Name.Length)
+                .FirstOrDefault();
+            if (zone is null)
+            {
+                log.LogInformation("auto-dns {Host}: ninguna zona CF registrada lo cubre; omitido.", hostname);
+                return;
+            }
+
+            var existing = await mediator.Send(new ListDnsRecordsQuery(zone.Id), ct).ConfigureAwait(false);
+            if (existing.IsSuccess
+                && existing.Value.Any(r => string.Equals(r.Name, hostname, StringComparison.OrdinalIgnoreCase)))
+            {
+                log.LogDebug("auto-dns {Host}: ya existe un record; omitido.", hostname);
+                return;
+            }
+
+            var created = await mediator.Send(new CreateDnsRecordCommand(
+                ZoneId: zone.Id, Type: "CNAME", Name: hostname, Content: _tunnelCname!,
+                Ttl: 1, Proxied: true, Comment: "aethra native-deploy auto-dns"), ct).ConfigureAwait(false);
+            if (created.IsSuccess)
+            {
+                log.LogInformation("auto-dns {Host}: CNAME → {Target} creado.", hostname, _tunnelCname);
+            }
+            else
+            {
+                log.LogWarning("auto-dns {Host}: no se pudo crear el CNAME: {Err}", hostname, created.Error.Message);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex, "auto-dns {Host}: error inesperado (ignorado).", hostname);
+        }
     }
 
     private static NativeDeployResult Fail(string error, string? hostname = null)
