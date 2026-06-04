@@ -1,3 +1,4 @@
+using Aethra.Shared.Contracts.Projects;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -37,8 +38,37 @@ public static class NativeDeployEndpoints
         .WithName("DeployInstanceNative")
         .WithTags("Deployments");
 
+        // F13.6 — upsert de env vars runtime a nivel Instance. Permite sacar los valores por-ambiente
+        // (BD, host público, Cors) del svc.Env del template (compartido) y ponerlos por instancia, de
+        // modo que cada Instance del mismo template apunta a su propia BD/host sin clonar el template.
+        app.MapPut("/api/instances/{instanceId}/env-vars", async (
+            string instanceId,
+            [FromBody] SetInstanceEnvVarsRequest body,
+            IEnvVarWriter writer,
+            CancellationToken ct) =>
+        {
+            var items = body?.Vars ?? [];
+            if (items.Count == 0)
+            {
+                return Results.BadRequest(new { message = "vars no puede estar vacío." });
+            }
+            var upserts = items
+                .Where(v => !string.IsNullOrWhiteSpace(v.Key))
+                .Select(v => new EnvVarUpsert(v.Key.Trim(), v.Value ?? string.Empty, v.IsBuildTime, v.IsRuntime ?? true))
+                .ToList();
+            await writer.UpsertManyAsync(EnvVarScope.Instance, instanceId, "manual:api", upserts, ct);
+            return Results.Ok(new { instanceId, count = upserts.Count, source = "manual:api" });
+        })
+        .RequireAuthorization("scope:projects:write")
+        .WithName("SetInstanceEnvVars")
+        .WithTags("Projects");
+
         return app;
     }
 
     public sealed record DeployNativeRequest(string? Hostname);
+
+    public sealed record SetInstanceEnvVarsRequest(IReadOnlyList<InstanceEnvVarItem>? Vars);
+
+    public sealed record InstanceEnvVarItem(string Key, string? Value, bool IsBuildTime = false, bool? IsRuntime = true);
 }
