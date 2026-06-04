@@ -48,4 +48,15 @@ public sealed record TemplateForBuildView(
     string BuildType,
     string DockerfilePath,
     string? ComposeFilePath = null,
-    bool AutoPreviewPullRequests = false);
+    bool AutoPreviewPullRequests = false,
+    IReadOnlyList<TemplateServiceView>? Services = null);
+
+/// <summary>
+/// F13 — proyección de un servicio multi-contenedor del Template (deploy nativo).
+/// </summary>
+public sealed record TemplateServiceView(
+    string Name,
+    string Image,
+    int Port,
+    IReadOnlyList<string> PathPrefixes,
+    IReadOnlyList<KeyValuePair<string, string>> Env);

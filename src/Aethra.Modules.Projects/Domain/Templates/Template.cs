@@ -29,6 +29,14 @@ public sealed class Template : AggregateRoot<TemplateId>
     /// </summary>
     public byte[] WebhookSecretCipher { get; private set; }
 
+    /// <summary>
+    /// F13 — servicios del template multi-contenedor. Vacío = template de un solo build/contenedor
+    /// (comportamiento clásico). Si tiene servicios, la Instance se despliega con el orquestador
+    /// nativo multi-servicio (un contenedor por servicio + rutas por <see cref="TemplateService.PathPrefixes"/>).
+    /// Persistido como jsonb (private set para que EF lo escriba vía el value converter).
+    /// </summary>
+    public IReadOnlyList<TemplateService> Services { get; private set; } = [];
+
     private readonly List<TemplateEnvironmentMapping> _environmentMapping = [];
     /// <summary>
     /// F12.3 — mapping <c>Environment → Branch</c> heredado por las <c>Instance</c>s que no
@@ -130,6 +138,16 @@ public sealed class Template : AggregateRoot<TemplateId>
         }
         _environmentMapping.Clear();
         _environmentMapping.AddRange(dedup.Values);
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// F13 — Reemplaza el set de servicios multi-contenedor. Vacío vuelve al modo single-build.
+    /// </summary>
+    public void ReplaceServices(IEnumerable<TemplateService> services, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        Services = services.ToList();
         UpdatedAt = now;
     }
 

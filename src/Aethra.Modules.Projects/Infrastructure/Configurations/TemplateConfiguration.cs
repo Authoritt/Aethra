@@ -165,8 +165,54 @@ internal sealed class TemplateConfiguration : IEntityTypeConfiguration<Template>
                     v => CloneBuildArgs(v)));
         });
 
+        // F13 — servicios multi-contenedor serializados a jsonb en la misma tabla.
+        builder.Property(t => t.Services)
+            .HasColumnName("services")
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql("'[]'::jsonb")
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, JsonOptions),
+                v => DeserializeServices(v))
+            .Metadata.SetValueComparer(new ValueComparer<IReadOnlyList<TemplateService>>(
+                (a, b) => ServicesEqual(a, b),
+                v => v == null ? 0 : v.Count,
+                v => CloneServices(v)));
+
         builder.Ignore(t => t.DomainEvents);
     }
+
+    private static List<TemplateService> DeserializeServices(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return new List<TemplateService>();
+        }
+        try
+        {
+            return JsonSerializer.Deserialize<List<TemplateService>>(raw, JsonOptions)
+                ?? new List<TemplateService>();
+        }
+        catch (JsonException)
+        {
+            return new List<TemplateService>();
+        }
+    }
+
+    private static bool ServicesEqual(IReadOnlyList<TemplateService>? a, IReadOnlyList<TemplateService>? b)
+    {
+        if (ReferenceEquals(a, b))
+        {
+            return true;
+        }
+        if (a is null || b is null)
+        {
+            return false;
+        }
+        return JsonSerializer.Serialize(a, JsonOptions) == JsonSerializer.Serialize(b, JsonOptions);
+    }
+
+    private static List<TemplateService> CloneServices(IReadOnlyList<TemplateService>? source)
+        => source is null ? new List<TemplateService>() : new List<TemplateService>(source);
 
     private static TemplateId ParseTemplateId(string s)
         => AethraId.TryParse(s, out var parsed) ? new TemplateId(parsed.Value) : default;

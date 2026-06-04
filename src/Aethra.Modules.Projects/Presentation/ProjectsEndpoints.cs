@@ -128,6 +128,22 @@ public static class ProjectsEndpoints
                 ToResult(await m.Send(new GetTemplateByIdQuery(id), ct)))
             .WithTags("Templates").RequireAuthorization(ScopeProjectsRead).WithName("GetTemplate");
 
+        // F13 — define la topología de servicios multi-contenedor del template (deploy nativo).
+        app.MapPut("/api/templates/{id}/services", async (
+            string id,
+            [FromBody] SetTemplateServicesRequest body,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            var cmd = new SetTemplateServicesCommand(
+                id,
+                (body.Services ?? [])
+                    .Select(s => new TemplateServiceInput(s.Name, s.Image, s.Port, s.PathPrefixes, s.Env))
+                    .ToList());
+            var r = await m.Send(cmd, ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Templates").RequireAuthorization(ScopeProjectsWrite).WithName("SetTemplateServices");
+
         // F12.3 — Branch-per-Instance: reemplazar mapping Environment→Branch del Template.
         app.MapPatch("/api/templates/{id}/environment-mapping", async (
             string id,
@@ -318,6 +334,15 @@ public static class ProjectsEndpoints
         string? ComposeFilePath,
         IReadOnlyList<TemplateBuildArgDto>? BuildArgs,
         string? WebhookSecret);
+
+    public sealed record SetTemplateServicesRequest(IReadOnlyList<SetTemplateServiceItem>? Services);
+
+    public sealed record SetTemplateServiceItem(
+        string Name,
+        string Image,
+        int Port,
+        IReadOnlyList<string>? PathPrefixes,
+        IReadOnlyDictionary<string, string>? Env);
 
     public sealed record CreateClientRequest(
         string Slug,
