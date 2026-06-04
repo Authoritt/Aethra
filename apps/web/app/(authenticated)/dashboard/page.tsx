@@ -127,9 +127,7 @@ export default async function Dashboard() {
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         title={t("title")}
-        description={t.rich("description_with_email", {
-          email: <span className="text-foreground">{me.email}</span>,
-        })}
+        description={t("description_with_email", { email: me.email })}
       />
 
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
