@@ -2,6 +2,7 @@ using System.Text.Json;
 using Aethra.Modules.Deployments.Domain.Build;
 using Aethra.Modules.Deployments.UseCases.Build.Commands;
 using Aethra.Modules.Deployments.Webhooks;
+using Aethra.Shared.Contracts.Deployments;
 using Aethra.Shared.Contracts.Identity;
 using Aethra.Shared.Contracts.Projects;
 using MediatR;
@@ -50,6 +51,7 @@ public static class WebhookEndpoints
     private static async Task<IResult> HandleAsync(
         HttpContext http,
         ITemplateLookup lookup,
+        IInstanceLookup instanceLookup,
         IMediator mediator,
         IGitHubUserResolver gitHubUsers,
         IPreviewInstanceCoordinator previewCoordinator,
@@ -73,7 +75,7 @@ public static class WebhookEndpoints
 
         return eventName switch
         {
-            "push" => await HandlePushAsync(http, body, lookup, mediator, logger, ct).ConfigureAwait(false),
+            "push" => await HandlePushAsync(http, body, lookup, instanceLookup, mediator, logger, ct).ConfigureAwait(false),
             "pull_request" => await HandlePullRequestAsync(
                 http, body, lookup, mediator, gitHubUsers, previewCoordinator, logger, ct).ConfigureAwait(false),
             _ => Results.Ok(new { event_name = eventName, handled = false }),
@@ -84,6 +86,7 @@ public static class WebhookEndpoints
         HttpContext http,
         byte[] body,
         ITemplateLookup lookup,
+        IInstanceLookup instanceLookup,
         IMediator mediator,
         ILogger logger,
         CancellationToken ct)
@@ -146,11 +149,32 @@ public static class WebhookEndpoints
         var triggered = new List<string>();
         var skipped = new List<string>();
 
+        var nativeRedeploys = new List<string>();
         foreach (var tpl in matchingTemplates)
         {
             if (!WatchPathMatcher.AnyMatches(affectedPaths, tpl.WatchPaths))
             {
                 skipped.Add(tpl.TemplateId);
+                continue;
+            }
+
+            // F13.1 — Template multi-servicio (Services): en vez del build single-container,
+            // resolvemos las Instances que trackean esta rama y disparamos el deploy NATIVO
+            // (build-from-git/registry por servicio). Una push genera deploy SOLO de los
+            // ambientes cuyo branch coincide → "1 o 2 imágenes según a dónde se pusheó".
+            if (tpl.Services is { Count: > 0 })
+            {
+                var affected = await instanceLookup
+                    .FindByTrackedRefAsync(tpl.TemplateId, payload.Branch!, autoDeployOnly: false, ct)
+                    .ConfigureAwait(false);
+                foreach (var inst in affected)
+                {
+                    await mediator.Publish(
+                        new NativeRedeployRequestedIntegrationEvent(inst.InstanceId, $"push {payload.Branch}@{headSha[..Math.Min(7, headSha.Length)]}"),
+                        ct).ConfigureAwait(false);
+                    nativeRedeploys.Add(inst.InstanceId);
+                }
+                triggered.Add(tpl.TemplateId);
                 continue;
             }
 
@@ -178,6 +202,7 @@ public static class WebhookEndpoints
             matched_templates = matchingTemplates.Count,
             triggered_template_ids = triggered,
             skipped_template_ids = skipped,
+            native_redeploy_instance_ids = nativeRedeploys,
             head_sha = headSha,
         });
     }

@@ -92,6 +92,8 @@ builder.Services.AddValidatorsFromAssemblies(moduleAssemblies);
 // Scoped: resuelve IMediator del scope del dispatcher del módulo, no del root.
 // Sin esto, MediatR no puede resolver handlers cross-module que dependen de DbContexts scoped.
 builder.Services.AddScoped<IIntegrationEventBus, InMemoryIntegrationEventBus>();
+// F13 — orquestador del deploy nativo multi-contenedor (endpoint manual + auto-trigger webhook).
+builder.Services.AddScoped<Aethra.Api.Bootstrap.NativeDeployRunner>();
 builder.Services.Configure<OutboxDispatcherOptions>(builder.Configuration.GetSection("Outbox"));
 
 // -----------------------------------------------------------------------------
