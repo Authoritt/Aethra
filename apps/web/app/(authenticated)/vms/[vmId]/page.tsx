@@ -96,8 +96,8 @@ export default async function VmDetailPage({
       />
 
       <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Info label={t("label_publicIp")} value={vm.publicIp ?? "—"} mono />
-        <Info label={t("label_privateIp")} value={vm.privateIp ?? "—"} mono />
+        <Info label={t("label_public_ip")} value={vm.publicIp ?? "—"} mono />
+        <Info label={t("label_private_ip")} value={vm.privateIp ?? "—"} mono />
         <Info label={t("label_hostname")} value={vm.hostname ?? "—"} mono />
         <Info label={t("label_kernel")} value={vm.kernelVersion ?? "—"} mono truncate />
         <Info label={t("label_cpu")} value={vm.cpuModel ?? "—"} truncate />
