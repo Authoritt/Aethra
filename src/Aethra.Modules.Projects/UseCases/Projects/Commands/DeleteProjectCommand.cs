@@ -60,16 +60,22 @@ internal sealed class DeleteProjectHandler(ProjectsDbContext db)
         scopeIds.AddRange(cliIds.Select(c => c.ToString()));
         scopeIds.AddRange(instances.Select(i => i.Id.ToString()));
 
-        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await db.EnvironmentVariables.Where(e => scopeIds.Contains(e.ScopeId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-        await db.Secrets.Where(s => scopeIds.Contains(s.ScopeId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        // El DbContext usa NpgsqlRetryingExecutionStrategy, que exige que las transacciones
+        // manuales se ejecuten dentro de la estrategia (unidad reintentable).
+        var strategy = db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await db.EnvironmentVariables.Where(e => scopeIds.Contains(e.ScopeId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.Secrets.Where(s => scopeIds.Contains(s.ScopeId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 
-        db.Instances.RemoveRange(instances);
-        db.Templates.RemoveRange(templates);
-        db.Clients.RemoveRange(clients);
-        db.Projects.Remove(project);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            db.Instances.RemoveRange(instances);
+            db.Templates.RemoveRange(templates);
+            db.Clients.RemoveRange(clients);
+            db.Projects.Remove(project);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         return Result.Success();
     }
