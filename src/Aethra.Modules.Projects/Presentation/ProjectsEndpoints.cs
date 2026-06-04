@@ -342,7 +342,9 @@ public static class ProjectsEndpoints
         string Image,
         int Port,
         IReadOnlyList<string>? PathPrefixes,
-        IReadOnlyDictionary<string, string>? Env);
+        IReadOnlyDictionary<string, string>? Env,
+        string? BuildMode = null,
+        string? DockerfilePath = null);
 
     public sealed record CreateClientRequest(
         string Slug,
