@@ -19,6 +19,7 @@ interface Row {
   port: string;
   pathPrefixes: string;
   envText: string;
+  volumesText: string;
 }
 
 function toRow(s: TemplateServiceDef): Row {
@@ -30,11 +31,30 @@ function toRow(s: TemplateServiceDef): Row {
     port: String(s.port ?? ""),
     pathPrefixes: (s.pathPrefixes ?? []).join(", "),
     envText: (s.env ?? []).map((e) => `${e.key}=${e.value}`).join("\n"),
+    volumesText: (s.volumes ?? [])
+      .map((v) => `${v.name}:${v.containerPath}${v.readOnly ? ":ro" : ""}`)
+      .join("\n"),
   };
 }
 
 function emptyRow(): Row {
-  return { name: "", buildMode: "registry", image: "", dockerfilePath: "", port: "", pathPrefixes: "", envText: "" };
+  return { name: "", buildMode: "registry", image: "", dockerfilePath: "", port: "", pathPrefixes: "", envText: "", volumesText: "" };
+}
+
+/** Parsea "nombre:/ruta[:ro]" por línea → {name, containerPath, readOnly}. */
+function parseVolumes(text: string) {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const parts = l.split(":");
+      const name = (parts[0] ?? "").trim();
+      const containerPath = (parts[1] ?? "").trim();
+      const readOnly = (parts[2] ?? "").trim().toLowerCase() === "ro";
+      return { name, containerPath, readOnly };
+    })
+    .filter((v) => v.name && v.containerPath);
 }
 
 export function ServicesEditor({
@@ -79,6 +99,7 @@ export function ServicesEditor({
           ),
           buildMode: r.buildMode,
           dockerfilePath: r.buildMode === "git" ? r.dockerfilePath.trim() || "Dockerfile" : null,
+          volumes: parseVolumes(r.volumesText),
         }));
       await api(`/api/templates/${encodeURIComponent(templateId)}/services`, {
         method: "PUT",
@@ -144,6 +165,15 @@ export function ServicesEditor({
                 onChange={(e) => update(i, { envText: e.target.value })}
                 rows={3}
                 placeholder={"API_BASE_URL=http://{instance}-backend:5006"}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
+              />
+            </Field>
+            <Field label="Volúmenes (nombre:/ruta[:ro] por línea)">
+              <textarea
+                value={r.volumesText}
+                onChange={(e) => update(i, { volumesText: e.target.value })}
+                rows={2}
+                placeholder={"{instance}-dpkeys:/app/dp-keys"}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
               />
             </Field>

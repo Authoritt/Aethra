@@ -51,7 +51,14 @@ public sealed record TemplateServiceDto(
     IReadOnlyList<string> pathPrefixes,
     IReadOnlyList<TemplateBuildArgDto> env,
     string buildMode,
-    string? dockerfilePath);
+    string? dockerfilePath,
+    IReadOnlyList<TemplateServiceVolumeDto> volumes);
+
+/// <summary>F13.3 — volumen persistente de un servicio para la vista detalle.</summary>
+public sealed record TemplateServiceVolumeDto(
+    string name,
+    string containerPath,
+    bool readOnly);
 
 /// <summary>
 /// Respuesta del POST create: incluye el <c>webhookSecret</c> en plain — única oportunidad

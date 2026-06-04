@@ -20,4 +20,17 @@ public sealed record TemplateService(
     // para compat con services existentes (jsonb sin el campo deserializa a este valor).
     string BuildMode = "registry",
     // Solo modo "git": ruta al Dockerfile del servicio dentro del repo (default "Dockerfile").
-    string? DockerfilePath = null);
+    string? DockerfilePath = null,
+    // F13.3 — volúmenes persistentes del servicio (ej. DataProtection keys). Null = sin volúmenes
+    // (jsonb sin el campo deserializa a este valor). Se montan al desplegar cada Instance.
+    IReadOnlyList<ServiceVolume>? Volumes = null);
+
+/// <summary>
+/// F13.3 — un volumen persistente montado en un servicio del deploy nativo. El token
+/// <c>{instance}</c> en <see cref="Name"/> se interpola al slug de la Instance al desplegar, de
+/// modo que cada Instance del template tiene su propio named volume (ej. <c>{instance}-dpkeys</c>).
+/// </summary>
+public sealed record ServiceVolume(
+    string Name,
+    string ContainerPath,
+    bool ReadOnly = false);

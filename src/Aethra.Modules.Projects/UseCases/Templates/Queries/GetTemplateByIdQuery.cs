@@ -47,7 +47,8 @@ internal sealed class GetTemplateByIdHandler(ProjectsDbContext db)
             [.. t.Services.Select(s => new TemplateServiceDto(
                 s.Name, s.Image, s.Port, s.PathPrefixes,
                 [.. s.Env.Select(e => new TemplateBuildArgDto(e.Key, e.Value))],
-                s.BuildMode, s.DockerfilePath))];
+                s.BuildMode, s.DockerfilePath,
+                [.. (s.Volumes ?? []).Select(v => new TemplateServiceVolumeDto(v.Name, v.ContainerPath, v.ReadOnly))]))];
 
         return new TemplateDetail(
             id: t.Id.ToString(),

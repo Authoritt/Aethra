@@ -28,7 +28,17 @@ public sealed class NativeDeployTools(IMediator mediator, IMcpCallerContext call
         [property: Description("Modo de build: 'registry' (pull de Image) o 'git' (Aethra clona+construye DockerfilePath). Default 'registry'.")]
         string? BuildMode,
         [property: Description("Solo modo 'git': ruta al Dockerfile del servicio dentro del repo. Default 'Dockerfile'.")]
-        string? DockerfilePath);
+        string? DockerfilePath,
+        [property: Description("Volúmenes persistentes del servicio (ej. DataProtection keys). El token {instance} en el nombre se interpola al slug.")]
+        IReadOnlyList<McpServiceVolume>? Volumes);
+
+    public sealed record McpServiceVolume(
+        [property: Description("Nombre del named volume. Admite {instance} → slug (ej. '{instance}-dpkeys').")]
+        string Name,
+        [property: Description("Ruta de montaje dentro del contenedor (ej. '/app/dp-keys').")]
+        string ContainerPath,
+        [property: Description("Montar de solo lectura.")]
+        bool ReadOnly);
 
     [McpServerTool(Name = "aethra_set_template_services", Destructive = true, Idempotent = true, OpenWorld = false)]
     [Description("Define la topología de servicios multi-contenedor de un Template (reemplaza el set). Cada servicio puede construirse desde git o usar una imagen prebuilt de registry.")]
@@ -42,7 +52,9 @@ public sealed class NativeDeployTools(IMediator mediator, IMcpCallerContext call
             return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
         }
         var mapped = (services ?? [])
-            .Select(s => new TemplateServiceInput(s.Name, s.Image, s.Port, s.PathPrefixes, s.Env, s.BuildMode, s.DockerfilePath))
+            .Select(s => new TemplateServiceInput(
+                s.Name, s.Image, s.Port, s.PathPrefixes, s.Env, s.BuildMode, s.DockerfilePath,
+                s.Volumes?.Select(v => new TemplateVolumeInput(v.Name, v.ContainerPath, v.ReadOnly)).ToList()))
             .ToList();
         var result = await mediator.Send(new SetTemplateServicesCommand(templateId, mapped), ct).ConfigureAwait(false);
         return result.IsSuccess

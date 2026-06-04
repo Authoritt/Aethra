@@ -806,6 +806,16 @@ export interface TemplateServiceDef {
   /** "registry" (imagen prebuilt) o "git" (Aethra clona y construye). */
   buildMode: string;
   dockerfilePath: string | null;
+  /** F13.3 — volúmenes persistentes del servicio (ej. DataProtection keys). */
+  volumes: TemplateServiceVolumeDef[];
+}
+
+/** F13.3 — un volumen persistente montado en un servicio del deploy nativo. */
+export interface TemplateServiceVolumeDef {
+  /** Nombre del named volume. Admite {instance} → slug. */
+  name: string;
+  containerPath: string;
+  readOnly: boolean;
 }
 
 export interface CreateTemplateRequest {

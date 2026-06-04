@@ -138,7 +138,9 @@ public static class ProjectsEndpoints
             var cmd = new SetTemplateServicesCommand(
                 id,
                 (body.Services ?? [])
-                    .Select(s => new TemplateServiceInput(s.Name, s.Image, s.Port, s.PathPrefixes, s.Env, s.BuildMode, s.DockerfilePath))
+                    .Select(s => new TemplateServiceInput(
+                        s.Name, s.Image, s.Port, s.PathPrefixes, s.Env, s.BuildMode, s.DockerfilePath,
+                        s.Volumes?.Select(v => new TemplateVolumeInput(v.Name, v.ContainerPath, v.ReadOnly)).ToList()))
                     .ToList());
             var r = await m.Send(cmd, ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
@@ -344,7 +346,13 @@ public static class ProjectsEndpoints
         IReadOnlyList<string>? PathPrefixes,
         IReadOnlyDictionary<string, string>? Env,
         string? BuildMode = null,
-        string? DockerfilePath = null);
+        string? DockerfilePath = null,
+        IReadOnlyList<SetTemplateVolumeItem>? Volumes = null);
+
+    public sealed record SetTemplateVolumeItem(
+        string Name,
+        string ContainerPath,
+        bool ReadOnly = false);
 
     public sealed record CreateClientRequest(
         string Slug,

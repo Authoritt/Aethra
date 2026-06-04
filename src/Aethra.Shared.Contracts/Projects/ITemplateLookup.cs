@@ -61,4 +61,14 @@ public sealed record TemplateServiceView(
     IReadOnlyList<string> PathPrefixes,
     IReadOnlyList<KeyValuePair<string, string>> Env,
     string BuildMode = "registry",
-    string? DockerfilePath = null);
+    string? DockerfilePath = null,
+    IReadOnlyList<ServiceVolumeView>? Volumes = null);
+
+/// <summary>
+/// F13.3 — proyección de un volumen persistente de un servicio. <c>Name</c> admite el token
+/// <c>{instance}</c> que el orquestador nativo interpola al slug de la Instance al desplegar.
+/// </summary>
+public sealed record ServiceVolumeView(
+    string Name,
+    string ContainerPath,
+    bool ReadOnly = false);

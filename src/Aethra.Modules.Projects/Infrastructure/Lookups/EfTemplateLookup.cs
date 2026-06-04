@@ -80,6 +80,8 @@ internal sealed class EfTemplateLookup(ProjectsDbContext db, IWebhookSecretCodec
             ComposeFilePath: t.Build.ComposeFilePath,
             AutoPreviewPullRequests: t.AutoPreviewPullRequests,
             Services: t.Services
-                .Select(s => new TemplateServiceView(s.Name, s.Image, s.Port, s.PathPrefixes, s.Env, s.BuildMode, s.DockerfilePath))
+                .Select(s => new TemplateServiceView(
+                    s.Name, s.Image, s.Port, s.PathPrefixes, s.Env, s.BuildMode, s.DockerfilePath,
+                    s.Volumes?.Select(v => new ServiceVolumeView(v.Name, v.ContainerPath, v.ReadOnly)).ToList()))
                 .ToList());
 }

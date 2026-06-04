@@ -116,12 +116,21 @@ public sealed class NativeDeployRunner(
                 log.LogDebug("native-deploy: remove previo de {Name} ignorado: {Msg}", containerName, ex.Message);
             }
 
+            // F13.3 — volúmenes persistentes (ej. DataProtection keys). El nombre admite {instance}
+            // → slug, de modo que cada Instance del template tiene su propio named volume.
+            var volumes = (svc.Volumes ?? [])
+                .Select(v => new VolumeBinding(
+                    v.Name.Replace("{instance}", instance.Slug, StringComparison.Ordinal),
+                    v.ContainerPath,
+                    v.ReadOnly))
+                .ToList();
+
             var spec = new RunSpec(
                 ContainerName: containerName,
                 ImageRef: image,
                 Env: env,
                 Ports: [new PortBinding(svc.Port, null, "tcp")],
-                Volumes: [],
+                Volumes: volumes,
                 Command: null,
                 Healthcheck: null,
                 NetworkName: _appNetwork,

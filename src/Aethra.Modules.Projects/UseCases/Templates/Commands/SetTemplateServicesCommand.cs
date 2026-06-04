@@ -23,7 +23,13 @@ public sealed record TemplateServiceInput(
     IReadOnlyList<string>? PathPrefixes,
     IReadOnlyDictionary<string, string>? Env,
     string? BuildMode = null,
-    string? DockerfilePath = null);
+    string? DockerfilePath = null,
+    IReadOnlyList<TemplateVolumeInput>? Volumes = null);
+
+public sealed record TemplateVolumeInput(
+    string Name,
+    string ContainerPath,
+    bool ReadOnly = false);
 
 internal sealed class SetTemplateServicesHandler(ProjectsDbContext db, IClock clock)
     : ICommandHandler<SetTemplateServicesCommand>
@@ -52,7 +58,11 @@ internal sealed class SetTemplateServicesHandler(ProjectsDbContext db, IClock cl
                 Env: (s.Env ?? new Dictionary<string, string>())
                     .Select(kv => new KeyValuePair<string, string>(kv.Key, kv.Value)).ToList(),
                 BuildMode: string.IsNullOrWhiteSpace(s.BuildMode) ? "registry" : s.BuildMode.Trim().ToLowerInvariant(),
-                DockerfilePath: s.DockerfilePath?.Trim()))
+                DockerfilePath: s.DockerfilePath?.Trim(),
+                Volumes: (s.Volumes ?? [])
+                    .Where(v => !string.IsNullOrWhiteSpace(v.Name) && !string.IsNullOrWhiteSpace(v.ContainerPath))
+                    .Select(v => new ServiceVolume(v.Name.Trim(), v.ContainerPath.Trim(), v.ReadOnly))
+                    .ToList()))
             .ToList();
 
         template.ReplaceServices(services, clock.UtcNow);
