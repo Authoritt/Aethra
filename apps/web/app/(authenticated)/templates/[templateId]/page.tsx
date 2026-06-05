@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { GitBranch, Plus, Rocket } from "lucide-react";
+import { GitBranch, Pencil, Plus, Rocket } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,7 @@ import type {
 } from "@/lib/types";
 import { RotateWebhookSecretButton } from "./RotateWebhookSecretButton";
 import { ServicesEditor } from "./ServicesEditor";
+import { EnvironmentMappingEditor, AutoPreviewToggle, DeleteTemplateButton } from "./TemplateConfigEditors";
 
 export const dynamic = "force-dynamic";
 
@@ -88,15 +89,22 @@ export default async function TemplateDetailPage({
           </>
         }
         actions={
-          <>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/templates/${template.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar
+              </Link>
+            </Button>
             <RotateWebhookSecretButton templateId={template.id} />
+            <DeleteTemplateButton templateId={template.id} name={template.name} />
             <Button asChild>
               <Link href={`/templates/${template.id}/instances/new`}>
                 <Plus className="mr-2 h-4 w-4" />
                 {t("create_instance")}
               </Link>
             </Button>
-          </>
+          </div>
         }
       />
 
@@ -134,6 +142,21 @@ export default async function TemplateDetailPage({
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
+          <Card className="mb-4">
+            <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+              <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                Rama por ambiente & previews
+              </CardTitle>
+              <AutoPreviewToggle templateId={template.id} initial={template.autoPreviewPullRequests} />
+            </CardHeader>
+            <CardContent>
+              <EnvironmentMappingEditor
+                templateId={template.id}
+                initial={template.environmentMapping ?? []}
+                defaultBranch={template.branch}
+              />
+            </CardContent>
+          </Card>
           {/* F12.3 — Branch-per-Instance mapping table + PR preview opt-in. */}
           {(template.environmentMapping?.length > 0 || template.autoPreviewPullRequests) ? (
             <Card className="mb-4">
@@ -314,6 +337,12 @@ export default async function TemplateDetailPage({
                     <p className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
                       {inst.customDomain ?? inst.autoHostname ?? tCommon("no_hostname")}
                     </p>
+                    {inst.effectiveTrackedRef ? (
+                      <p className="mt-1 flex items-center gap-1 truncate font-mono text-[10px] text-muted-foreground">
+                        <GitBranch className="h-3 w-3" />
+                        {inst.effectiveTrackedRef}
+                      </p>
+                    ) : null}
                   </Link>
                 </li>
               ))}

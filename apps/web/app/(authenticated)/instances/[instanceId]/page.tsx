@@ -35,6 +35,7 @@ import { AutoDeployToggle } from "./AutoDeployToggle";
 import { CustomDomainForm } from "./CustomDomainForm";
 import { DeployBuildButton } from "./DeployBuildButton";
 import { DeployNativeButton } from "./DeployNativeButton";
+import { TrackedRefEditor, DeleteInstanceButton } from "./InstanceAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,7 @@ export default async function InstanceDetailPage({
                 </a>
               </Button>
             ) : null}
+            <DeleteInstanceButton instanceId={instance.id} slug={instance.slug} />
           </div>
         }
       />
@@ -185,6 +187,19 @@ export default async function InstanceDetailPage({
                 <AutoDeployToggle
                   instanceId={instance.id}
                   initial={instance.autoDeployOnNewBuild}
+                />
+              </CardContent>
+            </Card>
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-base">Rama (tracked-ref)</CardTitle>
+                <CardDescription>Qué rama del repo despliega esta instancia.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TrackedRefEditor
+                  instanceId={instance.id}
+                  trackedRef={instance.trackedRef ?? null}
+                  effectiveTrackedRef={instance.effectiveTrackedRef ?? null}
                 />
               </CardContent>
             </Card>
