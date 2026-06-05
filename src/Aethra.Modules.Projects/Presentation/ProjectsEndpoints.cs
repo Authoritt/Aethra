@@ -215,6 +215,11 @@ public static class ProjectsEndpoints
         app.MapGet("/api/clients/{id}", async (string id, IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new GetClientByIdQuery(id), ct)))
             .WithTags("Clients").RequireAuthorization(ScopeProjectsRead).WithName("GetClient");
+
+        // Instancias asociadas a un Client (lo usa el detalle del cliente).
+        app.MapGet("/api/clients/{id}/instances", async (string id, IMediator m, CancellationToken ct) =>
+                ToResult(await m.Send(new ListInstancesQuery(ClientId: id), ct)))
+            .WithTags("Clients").RequireAuthorization(ScopeProjectsRead).WithName("ListClientInstances");
     }
 
     // -------------------------------------------------------------------------

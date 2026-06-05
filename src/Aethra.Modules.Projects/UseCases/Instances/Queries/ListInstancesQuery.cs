@@ -19,7 +19,8 @@ public sealed record ListInstancesQuery(
     string? TemplateId = null,
     string? ProjectId = null,
     string? OwnerUserId = null,
-    bool? IsEphemeral = null) : IQuery<IReadOnlyList<InstanceSummary>>;
+    bool? IsEphemeral = null,
+    string? ClientId = null) : IQuery<IReadOnlyList<InstanceSummary>>;
 
 internal sealed class ListInstancesHandler(ProjectsDbContext db)
     : IQueryHandler<ListInstancesQuery, IReadOnlyList<InstanceSummary>>
@@ -79,6 +80,15 @@ internal sealed class ListInstancesHandler(ProjectsDbContext db)
         {
             var owner = request.OwnerUserId;
             query = query.Where(i => i.CreatedByUserId == owner);
+        }
+        if (!string.IsNullOrWhiteSpace(request.ClientId))
+        {
+            if (!AethraId.TryParse(request.ClientId, out var parsedClient) || parsedClient.Value.Prefix != "cli")
+            {
+                return Error.Validation("instance.invalid_client_id", "ID de cliente inválido.");
+            }
+            var typedClientId = new ClientId(parsedClient.Value);
+            query = query.Where(i => i.ClientId == typedClientId);
         }
 
         var rows = await query

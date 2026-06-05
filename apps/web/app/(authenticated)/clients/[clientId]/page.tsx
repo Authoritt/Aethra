@@ -81,7 +81,7 @@ export default async function ClientDetailPage({
             {client.billingTag}
           </Badge>
         ) : null}
-        <Badge variant="outline">{t("instances_count", { count: client.instanceCount ?? 0 })}</Badge>
+        <Badge variant="outline">{t("instances_count", { count: instances.length })}</Badge>
       </div>
 
       <Tabs defaultValue="overview">
@@ -101,7 +101,7 @@ export default async function ClientDetailPage({
                 value={client.billingTag ?? "—"}
                 mono={Boolean(client.billingTag)}
               />
-              <Kv label={t("instances")} value={String(client.instanceCount ?? 0)} />
+              <Kv label={t("instances")} value={String(instances.length)} />
             </CardContent>
           </Card>
         </TabsContent>
