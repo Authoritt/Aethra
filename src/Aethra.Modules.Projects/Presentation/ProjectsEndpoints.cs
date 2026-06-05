@@ -128,6 +128,31 @@ public static class ProjectsEndpoints
                 ToResult(await m.Send(new GetTemplateByIdQuery(id), ct)))
             .WithTags("Templates").RequireAuthorization(ScopeProjectsRead).WithName("GetTemplate");
 
+        // Editar plantilla (name/desc/source/build). El slug no cambia.
+        app.MapPatch("/api/templates/{id}", async (
+            string id, [FromBody] UpdateTemplateRequest body, IMediator m, CancellationToken ct) =>
+        {
+            var cmd = new UpdateTemplateCommand(
+                id, body.Name, body.Description, body.GitRepoUrl, body.Branch, body.BaseDirectory,
+                body.WatchPaths, body.AccessTokenCredentialName, body.BuildType, body.DockerfilePath,
+                body.ComposeFilePath, body.BuildArgs);
+            var r = await m.Send(cmd, ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Templates").RequireAuthorization(ScopeProjectsWrite).WithName("UpdateTemplate");
+
+        // Borrar plantilla (force = cascada de instancias).
+        app.MapDelete("/api/templates/{id}", async (
+            string id, [FromQuery] bool force, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new DeleteTemplateCommand(id, force), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Templates").RequireAuthorization(ScopeProjectsWrite).WithName("DeleteTemplate");
+
+        // Rotar webhook secret (devuelve el nuevo en plain una vez).
+        app.MapPost("/api/templates/{id}/rotate-webhook-secret", async (string id, IMediator m, CancellationToken ct) =>
+            ToResult(await m.Send(new RotateWebhookSecretCommand(id), ct)))
+            .WithTags("Templates").RequireAuthorization(ScopeProjectsWrite).WithName("RotateTemplateWebhookSecret");
+
         // F13 — define la topología de servicios multi-contenedor del template (deploy nativo).
         app.MapPut("/api/templates/{id}/services", async (
             string id,
@@ -313,6 +338,28 @@ public static class ProjectsEndpoints
             var r = await m.Send(new DeleteInstanceCommand(id, force ?? false), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("DeleteInstance");
+
+        // Reconfigurar runtime de una Instance (ports/volumes/healthcheck/targetVm/autoDeploy).
+        app.MapPatch("/api/instances/{id}", async (
+            string id, [FromBody] ReconfigureInstanceRequest body, IMediator m, CancellationToken ct) =>
+        {
+            var cmd = new ReconfigureInstanceCommand(id, body.TargetVmId, body.Ports, body.Volumes, body.Healthcheck, body.AutoDeployOnNewBuild);
+            var r = await m.Send(cmd, ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("ReconfigureInstance");
+
+        // Toggle auto-deploy on new build (consumido por el AutoDeployToggle de la UI).
+        app.MapPost("/api/instances/{id}/auto-deploy/enable", async (string id, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new SetAutoDeployCommand(id, true), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("EnableInstanceAutoDeploy");
+
+        app.MapPost("/api/instances/{id}/auto-deploy/disable", async (string id, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new SetAutoDeployCommand(id, false), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("DisableInstanceAutoDeploy");
     }
 
     // -------------------------------------------------------------------------
@@ -341,6 +388,26 @@ public static class ProjectsEndpoints
         string? ComposeFilePath,
         IReadOnlyList<TemplateBuildArgDto>? BuildArgs,
         string? WebhookSecret);
+
+    public sealed record UpdateTemplateRequest(
+        string Name,
+        string? Description,
+        string GitRepoUrl,
+        string Branch,
+        string? BaseDirectory,
+        IReadOnlyList<string>? WatchPaths,
+        string? AccessTokenCredentialName,
+        string BuildType,
+        string? DockerfilePath,
+        string? ComposeFilePath,
+        IReadOnlyList<TemplateBuildArgDto>? BuildArgs);
+
+    public sealed record ReconfigureInstanceRequest(
+        string? TargetVmId,
+        IReadOnlyList<CreateInstancePortDto>? Ports,
+        IReadOnlyList<CreateInstanceVolumeDto>? Volumes,
+        CreateInstanceHealthcheckDto? Healthcheck,
+        bool? AutoDeployOnNewBuild);
 
     public sealed record SetTemplateServicesRequest(IReadOnlyList<SetTemplateServiceItem>? Services);
 
