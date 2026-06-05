@@ -23,6 +23,7 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { BuildStatusPill } from "@/components/aethra/build-status-pill";
 import { DeploymentStatusPill } from "@/components/aethra/deployment-status-pill";
+import { ScopedEnvVarsPanel } from "@/components/aethra/ScopedEnvVarsPanel";
 import { AutoHostnameInfo } from "@/app/_components/AutoHostnameInfo";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
@@ -264,6 +265,9 @@ export default async function InstanceDetailPage({
                 )}
               </CardContent>
             </Card>
+          </div>
+          <div className="mt-4">
+            <ScopedEnvVarsPanel scopeType="instance" scopeId={instance.id} />
           </div>
         </TabsContent>
 

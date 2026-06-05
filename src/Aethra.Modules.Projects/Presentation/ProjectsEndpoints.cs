@@ -1,13 +1,18 @@
 using Aethra.Modules.Projects.UseCases.Clients.Commands;
 using Aethra.Modules.Projects.UseCases.Clients.Queries;
+using Aethra.Modules.Projects.UseCases.EnvVars.Commands;
+using Aethra.Modules.Projects.UseCases.EnvVars.Queries;
 using Aethra.Modules.Projects.UseCases.Instances.Commands;
 using Aethra.Modules.Projects.UseCases.Instances.Dtos;
 using Aethra.Modules.Projects.UseCases.Instances.Queries;
 using Aethra.Modules.Projects.UseCases.Projects.Commands;
 using Aethra.Modules.Projects.UseCases.Projects.Queries;
+using Aethra.Modules.Projects.UseCases.Secrets.Commands;
+using Aethra.Modules.Projects.UseCases.Secrets.Queries;
 using Aethra.Modules.Projects.UseCases.Templates.Commands;
 using Aethra.Modules.Projects.UseCases.Templates.Dtos;
 using Aethra.Modules.Projects.UseCases.Templates.Queries;
+using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Results;
 using MediatR;
@@ -30,6 +35,7 @@ public static class ProjectsEndpoints
         MapTemplates(app);
         MapClients(app);
         MapInstances(app);
+        MapEnvVarsAndSecrets(app);
         return app;
     }
 
@@ -387,6 +393,136 @@ public static class ProjectsEndpoints
     }
 
     // -------------------------------------------------------------------------
+    // Env vars & Secrets (scope-genérico: project|template|client|instance).
+    // El scope se direcciona por query-string (?scopeType=&scopeId=), igual semántica que el
+    // writer cross-module y el endpoint instance-only PUT /api/instances/{id}/env-vars.
+    // -------------------------------------------------------------------------
+    private static void MapEnvVarsAndSecrets(IEndpointRouteBuilder app)
+    {
+        // ---- Env vars ----
+        app.MapGet("/api/env-vars", async (
+                [FromQuery] string scopeType,
+                [FromQuery] string scopeId,
+                IMediator m,
+                CancellationToken ct) =>
+            ToResult(await m.Send(new ListEnvVarsQuery(scopeType, scopeId), ct)))
+            .WithTags("EnvVars").RequireAuthorization(ScopeProjectsRead).WithName("ListEnvVars");
+
+        app.MapPut("/api/env-vars", async (
+            [FromQuery] string scopeType,
+            [FromQuery] string scopeId,
+            [FromBody] SetEnvVarsRequest body,
+            IEnvVarWriter writer,
+            CancellationToken ct) =>
+        {
+            if (!TryParseEnvScope(scopeType, out var scope))
+            {
+                return MapError(InvalidScopeError(scopeType));
+            }
+            if (string.IsNullOrWhiteSpace(scopeId))
+            {
+                return MapError(Error.Validation("env_scope.missing_id", "scopeId es obligatorio."));
+            }
+            var items = body?.Vars ?? [];
+            var upserts = items
+                .Where(v => !string.IsNullOrWhiteSpace(v.Key))
+                .Select(v => new EnvVarUpsert(v.Key.Trim(), v.Value ?? string.Empty, v.IsBuildTime, v.IsRuntime ?? true))
+                .ToList();
+            if (upserts.Count == 0)
+            {
+                return MapError(Error.Validation("env_vars.empty", "vars no puede estar vacío."));
+            }
+            try
+            {
+                await writer.UpsertManyAsync(scope, scopeId, "manual:api", upserts, ct);
+            }
+            catch (ArgumentException ex)
+            {
+                return MapError(Error.Validation("env_vars.invalid", ex.Message));
+            }
+            return Results.Ok(new { scopeType = scope.ToString(), scopeId, count = upserts.Count, source = "manual:api" });
+        }).WithTags("EnvVars").RequireAuthorization(ScopeProjectsWrite).WithName("SetScopedEnvVars");
+
+        app.MapDelete("/api/env-vars", async (
+            [FromQuery] string scopeType,
+            [FromQuery] string scopeId,
+            [FromQuery] string key,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            var r = await m.Send(new DeleteEnvVarCommand(scopeType, scopeId, key), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("EnvVars").RequireAuthorization(ScopeProjectsWrite).WithName("DeleteScopedEnvVar");
+
+        // ---- Secrets ----
+        // GET nunca devuelve valores ni ciphers (solo metadata + hasValue).
+        app.MapGet("/api/secrets", async (
+                [FromQuery] string scopeType,
+                [FromQuery] string scopeId,
+                IMediator m,
+                CancellationToken ct) =>
+            ToResult(await m.Send(new ListSecretsQuery(scopeType, scopeId), ct)))
+            .WithTags("Secrets").RequireAuthorization(ScopeProjectsRead).WithName("ListSecrets");
+
+        app.MapPut("/api/secrets", async (
+            [FromQuery] string scopeType,
+            [FromQuery] string scopeId,
+            [FromBody] SetSecretsRequest body,
+            ISecretWriter writer,
+            CancellationToken ct) =>
+        {
+            if (!TryParseEnvScope(scopeType, out var scope))
+            {
+                return MapError(InvalidScopeError(scopeType));
+            }
+            if (string.IsNullOrWhiteSpace(scopeId))
+            {
+                return MapError(Error.Validation("env_scope.missing_id", "scopeId es obligatorio."));
+            }
+            var items = body?.Secrets ?? [];
+            var upserts = items
+                .Where(s => !string.IsNullOrWhiteSpace(s.Key))
+                .Select(s => new SecretUpsert(s.Key.Trim(), s.Value ?? string.Empty))
+                .ToList();
+            if (upserts.Count == 0)
+            {
+                return MapError(Error.Validation("secrets.empty", "secrets no puede estar vacío."));
+            }
+            try
+            {
+                await writer.UpsertManyAsync(scope, scopeId, "manual:api", upserts, ct);
+            }
+            catch (ArgumentException ex)
+            {
+                return MapError(Error.Validation("secrets.invalid", ex.Message));
+            }
+            return Results.Ok(new { scopeType = scope.ToString(), scopeId, count = upserts.Count, source = "manual:api" });
+        }).WithTags("Secrets").RequireAuthorization(ScopeProjectsWrite).WithName("SetScopedSecrets");
+
+        app.MapDelete("/api/secrets", async (
+            [FromQuery] string scopeType,
+            [FromQuery] string scopeId,
+            [FromQuery] string key,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            var r = await m.Send(new DeleteSecretCommand(scopeType, scopeId, key), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Secrets").RequireAuthorization(ScopeProjectsWrite).WithName("DeleteScopedSecret");
+    }
+
+    /// <summary>
+    /// Traduce el discriminador textual de scope (<c>project|template|client|instance</c>) al enum
+    /// cross-module <see cref="EnvVarScope"/> que consumen los writers.
+    /// </summary>
+    private static bool TryParseEnvScope(string? scopeType, out EnvVarScope scope)
+        => Enum.TryParse(scopeType, ignoreCase: true, out scope) && Enum.IsDefined(scope);
+
+    private static Error InvalidScopeError(string? scopeType)
+        => Error.Validation("env_scope.invalid",
+            $"scopeType='{scopeType}' inválido. Use project, template, client o instance.");
+
+    // -------------------------------------------------------------------------
     // Request DTOs (camelCase ya en los DTOs internos; ASP.NET hace case-insensitive bind
     // por defecto, así que aceptamos PascalCase en el wire también).
     // -------------------------------------------------------------------------
@@ -499,6 +635,20 @@ public static class ProjectsEndpoints
 
     /// <summary>F12.3 — Body para <c>PATCH /api/instances/{id}/tracked-ref</c>.</summary>
     public sealed record SetTrackedRefRequest(string? TrackedRef);
+
+    /// <summary>Body para <c>PUT /api/env-vars</c> (upsert idempotente por scope).</summary>
+    public sealed record SetEnvVarsRequest(IReadOnlyList<SetEnvVarItem>? Vars);
+
+    public sealed record SetEnvVarItem(
+        string Key,
+        string? Value,
+        bool IsBuildTime = false,
+        bool? IsRuntime = true);
+
+    /// <summary>Body para <c>PUT /api/secrets</c>. El valor se cifra antes de persistir.</summary>
+    public sealed record SetSecretsRequest(IReadOnlyList<SetSecretItem>? Secrets);
+
+    public sealed record SetSecretItem(string Key, string? Value);
 
     // -------------------------------------------------------------------------
     // Helpers

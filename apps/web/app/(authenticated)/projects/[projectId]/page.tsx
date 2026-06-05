@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { ScopedEnvVarsPanel } from "@/components/aethra/ScopedEnvVarsPanel";
 import { serverFetch } from "@/lib/server-fetch";
 import { DeleteProjectButton } from "./DeleteProjectButton";
 import type {
@@ -226,6 +227,10 @@ export default async function ProjectDetailPage({
             </CardContent>
           </Card>
         </section>
+      </div>
+
+      <div className="mt-6">
+        <ScopedEnvVarsPanel scopeType="project" scopeId={project.id} />
       </div>
     </div>
   );

@@ -1123,6 +1123,36 @@ export interface BackupPolicyDto {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Scoped env vars & secrets                                                  */
+/* -------------------------------------------------------------------------- */
+/* Convencion: PascalCase en C# -> camelCase en JSON. El scope se direcciona   */
+/* por query string (scopeType ∈ project|template|client|instance).            */
+
+export type EnvScopeType = "project" | "template" | "client" | "instance";
+
+export interface ScopedEnvVarDto {
+  key: string;
+  value: string;
+  isBuildTime: boolean;
+  isRuntime: boolean;
+  source: string;
+  scopeType: EnvScopeType;
+  scopeId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScopedSecretDto {
+  key: string;
+  hasValue: boolean;
+  source: string;
+  scopeType: EnvScopeType;
+  scopeId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Scheduled jobs (F12.1A)                                                    */
 /* -------------------------------------------------------------------------- */
 

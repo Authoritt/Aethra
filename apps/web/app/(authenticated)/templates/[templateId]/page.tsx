@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/layout/page-header";
 import { BuildStatusPill } from "@/components/aethra/build-status-pill";
+import { ScopedEnvVarsPanel } from "@/components/aethra/ScopedEnvVarsPanel";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   BuildSummary,
@@ -302,6 +303,9 @@ export default async function TemplateDetailPage({
                 </dl>
               </CardContent>
             </Card>
+          </div>
+          <div className="mt-4">
+            <ScopedEnvVarsPanel scopeType="template" scopeId={template.id} />
           </div>
         </TabsContent>
 

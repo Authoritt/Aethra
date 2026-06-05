@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/layout/page-header";
 import { AutoHostnameInfo } from "@/app/_components/AutoHostnameInfo";
+import { ScopedEnvVarsPanel } from "@/components/aethra/ScopedEnvVarsPanel";
 import { serverFetch } from "@/lib/server-fetch";
 import type { ClientDetail, InstanceSummary } from "@/lib/types";
 import { DeleteClientButton } from "./DeleteClientButton";
@@ -117,6 +118,9 @@ export default async function ClientDetailPage({
               <Kv label={t("instances")} value={String(instances.length)} />
             </CardContent>
           </Card>
+          <div className="mt-4">
+            <ScopedEnvVarsPanel scopeType="client" scopeId={client.id} />
+          </div>
         </TabsContent>
 
         <TabsContent value="instances" className="mt-6">
