@@ -121,14 +121,14 @@ export default async function ServicesPage() {
                   </TableCell>
                   <TableCell className="font-mono text-xs">{s.version}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">
-                    {s.target_vm_id.slice(0, 8)}
+                    {s.targetVmId.slice(0, 8)}
                   </TableCell>
                   <TableCell>
                     <ServiceStatusPill status={s.status} />
                   </TableCell>
                   <TableCell className="text-right">
                     <Badge variant="outline" className="font-mono text-xs">
-                      {s.bindings_count}
+                      {s.bindingsCount}
                     </Badge>
                   </TableCell>
                 </TableRow>

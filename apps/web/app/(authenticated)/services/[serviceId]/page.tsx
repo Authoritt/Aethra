@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { Plug2, Plus } from "lucide-react";
+import { Pencil, Plug2, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,7 +80,7 @@ export default async function ServiceDetailPage({
 
   const service = data;
   const bindings = await fetchBindings(serviceId);
-  const activeBindings = bindings.filter((b) => b.revoked_at === null);
+  const activeBindings = bindings.filter((b) => b.revokedAt === null);
 
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
@@ -102,6 +102,12 @@ export default async function ServiceDetailPage({
         actions={
           <>
             <ServiceStatusPill status={service.status} />
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/services/${service.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar
+              </Link>
+            </Button>
             <DeleteServiceButton
               serviceId={service.id}
               slug={service.slug}
@@ -111,16 +117,16 @@ export default async function ServiceDetailPage({
         }
       />
 
-      {service.error_code ? (
+      {service.errorCode ? (
         <Card className="mb-6 border-destructive/30 bg-destructive/5">
           <CardContent className="p-4">
             <div className="text-sm font-medium text-destructive">
               {t("error_prefix")}
-              <span className="font-mono">{service.error_code}</span>
+              <span className="font-mono">{service.errorCode}</span>
             </div>
-            {service.error_message ? (
+            {service.errorMessage ? (
               <p className="mt-1 text-sm text-destructive/90">
-                {service.error_message}
+                {service.errorMessage}
               </p>
             ) : null}
           </CardContent>
@@ -140,18 +146,18 @@ export default async function ServiceDetailPage({
             <KV
               label={t("label_internal_port")}
               mono
-              value={String(service.internal_port)}
+              value={String(service.internalPort)}
             />
-            <KV label={t("label_network")} mono value={service.network_name} />
-            <KV label={t("label_container")} mono value={service.container_name} />
-            <KV label={t("label_vm_target")} mono value={service.target_vm_id} />
+            <KV label={t("label_network")} mono value={service.networkName} />
+            <KV label={t("label_container")} mono value={service.containerName} />
+            <KV label={t("label_vm_target")} mono value={service.targetVmId} />
             <KV
               label={t("label_exposed")}
-              value={service.exposed_externally ? t("exposed_yes") : t("exposed_no")}
+              value={service.exposedExternally ? t("exposed_yes") : t("exposed_no")}
             />
             <KV
               label={t("label_provisioned")}
-              value={formatDateTime(service.provisioned_at)}
+              value={formatDateTime(service.provisionedAt)}
             />
           </div>
         </CardContent>
@@ -227,7 +233,7 @@ function BindingCard({
   };
 }) {
   const appLabel =
-    binding.application_slug ?? binding.application_id.slice(0, 8);
+    binding.instanceSlug ?? binding.instanceId.slice(0, 8);
   return (
     <li>
       <Card>
@@ -239,24 +245,24 @@ function BindingCard({
                   {appLabel}
                 </h3>
                 <PermissionsChip permissions={binding.permissions} />
-                {binding.has_migrations_hook ? (
+                {binding.hasMigrationsHook ? (
                   <Badge variant="info">{labels.migrations_hook}</Badge>
                 ) : null}
               </div>
               <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-                <KVInline label={labels.resource} value={binding.resource_name} mono />
+                <KVInline label={labels.resource} value={binding.resourceName} mono />
                 <KVInline
                   label={labels.env_prefix}
-                  value={binding.env_var_prefix || "—"}
+                  value={binding.envVarPrefix || "—"}
                   mono
                 />
                 <KVInline
                   label={labels.provisioned}
-                  value={formatDateTime(binding.provisioned_at)}
+                  value={formatDateTime(binding.provisionedAt)}
                 />
                 <KVInline
                   label={labels.app_id}
-                  value={binding.application_id}
+                  value={binding.instanceId}
                   mono
                 />
               </dl>

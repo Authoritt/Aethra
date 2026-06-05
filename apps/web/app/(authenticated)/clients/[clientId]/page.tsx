@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { Boxes } from "lucide-react";
+import { Boxes, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -15,6 +16,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { AutoHostnameInfo } from "@/app/_components/AutoHostnameInfo";
 import { serverFetch } from "@/lib/server-fetch";
 import type { ClientDetail, InstanceSummary } from "@/lib/types";
+import { DeleteClientButton } from "./DeleteClientButton";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +71,17 @@ export default async function ClientDetailPage({
               </>
             ) : null}
           </>
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/clients/${client.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar
+              </Link>
+            </Button>
+            <DeleteClientButton clientId={client.id} displayName={client.displayName} />
+          </div>
         }
       />
 

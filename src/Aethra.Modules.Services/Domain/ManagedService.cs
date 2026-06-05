@@ -107,6 +107,22 @@ public sealed class ManagedService : AggregateRoot<ManagedServiceId>
         UpdatedAt = now;
     }
 
+    /// <summary>
+    /// Actualiza metadata editable del servicio: nombre display y si se expone externamente.
+    /// El <see cref="Slug"/>, <see cref="Image"/>, <see cref="InternalPort"/> y <see cref="TargetVmId"/>
+    /// NO se pueden cambiar (rompería el contenedor y los bindings ya provisionados).
+    /// </summary>
+    public void UpdateInfo(string name, bool exposedExternally, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("El nombre no puede estar vacío.", nameof(name));
+        }
+        Name = name.Trim();
+        ExposedExternally = exposedExternally;
+        UpdatedAt = now;
+    }
+
     public void UpdateAdminCredentials(byte[] cipher, DateTimeOffset now)
     {
         AdminCredentialsCipher = cipher;

@@ -77,6 +77,14 @@ public static class ProjectsEndpoints
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         }).RequireAuthorization(ScopeProjectsWrite).WithName("SetProjectPreviewConfig");
 
+        // Editar nombre y apariencia del proyecto (el slug no cambia).
+        group.MapPatch("/{id}", async (
+            string id, [FromBody] UpdateProjectRequest body, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new UpdateProjectCommand(id, body.Name, body.Description, body.Color, body.Icon), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).RequireAuthorization(ScopeProjectsWrite).WithName("UpdateProject");
+
         // Borra el proyecto en cascada (templates, clients, instancias, env vars, secrets).
         // Si tiene instancias desplegadas requiere ?force=true (no detiene contenedores ni
         // limpia rutas del proxy — eso se hace aparte).
@@ -245,6 +253,22 @@ public static class ProjectsEndpoints
         app.MapGet("/api/clients/{id}/instances", async (string id, IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new ListInstancesQuery(ClientId: id), ct)))
             .WithTags("Clients").RequireAuthorization(ScopeProjectsRead).WithName("ListClientInstances");
+
+        // Editar info administrativa del client (display name/desc/email/billing). El slug no cambia.
+        app.MapPatch("/api/clients/{id}", async (
+            string id, [FromBody] UpdateClientRequest body, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new UpdateClientCommand(id, body.DisplayName, body.Description, body.ContactEmail, body.BillingTag), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Clients").RequireAuthorization(ScopeProjectsWrite).WithName("UpdateClient");
+
+        // Borrar client (force = cascada de instancias asociadas).
+        app.MapDelete("/api/clients/{id}", async (
+            string id, [FromQuery] bool force, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new DeleteClientCommand(id, force), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Clients").RequireAuthorization(ScopeProjectsWrite).WithName("DeleteClient");
     }
 
     // -------------------------------------------------------------------------
@@ -432,6 +456,20 @@ public static class ProjectsEndpoints
         string? Description,
         string? ContactEmail,
         string? BillingTag);
+
+    /// <summary>Body para <c>PATCH /api/clients/{id}</c> (el slug no cambia).</summary>
+    public sealed record UpdateClientRequest(
+        string DisplayName,
+        string? Description,
+        string? ContactEmail,
+        string? BillingTag);
+
+    /// <summary>Body para <c>PATCH /api/projects/{id}</c> (el slug no cambia).</summary>
+    public sealed record UpdateProjectRequest(
+        string Name,
+        string? Description,
+        string? Color,
+        string? Icon);
 
     public sealed record CreateInstanceRequest(
         string ClientId,

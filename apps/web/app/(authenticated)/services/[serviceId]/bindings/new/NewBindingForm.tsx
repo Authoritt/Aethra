@@ -93,17 +93,22 @@ export function NewBindingForm({
     setLoading(true);
     try {
       const body: CreateBindingRequest = {
-        application_id: applicationId,
+        instanceId: applicationId,
         permissions,
       };
-      if (resourceName.trim()) body.resource_name = resourceName.trim();
-      if (envVarPrefix.trim()) body.env_var_prefix = envVarPrefix.trim();
+      if (resourceName.trim()) body.resourceName = resourceName.trim();
+      if (envVarPrefix.trim()) body.envVarPrefix = envVarPrefix.trim();
       if (hookEnabled) {
-        body.migrations_hook = {
+        const runOnMap = {
+          binding_create: "FirstDeployOnly",
+          deploy: "EachDeploy",
+          manual: "ManualTrigger",
+        } as const;
+        body.migrationsHook = {
           command: hookCommand.trim(),
-          timeout_seconds: Number.isFinite(hookTimeout) ? hookTimeout : 120,
-          fail_on_error: hookFailOnError,
-          run_on: hookRunOn,
+          timeoutSeconds: Number.isFinite(hookTimeout) ? hookTimeout : 120,
+          failDeployOnError: hookFailOnError,
+          runOn: runOnMap[hookRunOn],
         };
       }
       await api<ServiceBindingDto>(`/api/services/${serviceId}/bindings`, {

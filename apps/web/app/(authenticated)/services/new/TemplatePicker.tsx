@@ -103,7 +103,7 @@ export function TemplatePicker({
       }
       if (q.length === 0) return true;
       const haystack = [
-        tpl.display_name,
+        tpl.displayName,
         tpl.type,
         tpl.category ?? "",
         tpl.description ?? "",
@@ -123,7 +123,7 @@ export function TemplatePicker({
 
   function pickTemplate(tpl: ServiceTemplateDto) {
     setSelected(tpl);
-    if (!name) setName(tpl.display_name);
+    if (!name) setName(tpl.displayName);
     if (!slug) setSlug(suggestSlug(tpl));
   }
 
@@ -146,11 +146,11 @@ export function TemplatePicker({
     setLoading(true);
     try {
       const body: CreateServiceRequest = {
-        template_id: selected.id,
+        templateId: selected.id,
         slug: slug.trim(),
         name: name.trim(),
-        target_vm_id: targetVmId,
-        exposed_externally: exposedExternally,
+        targetVmId: targetVmId,
+        exposedExternally: exposedExternally,
       };
       const created = await api<ManagedServiceDetailDto>("/api/services", {
         method: "POST",
@@ -269,14 +269,14 @@ export function TemplatePicker({
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-foreground">
-                {selected.display_name}
+                {selected.displayName}
               </span>
               <Badge variant="outline" className="font-mono text-[10px]">
                 v{selected.version}
               </Badge>
             </div>
             <div className="mt-1 font-mono text-[11px] text-muted-foreground">
-              {selected.image}:{selected.internal_port}
+              {selected.image}:{selected.internalPort}
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => setSelected(null)}>
@@ -294,7 +294,7 @@ export function TemplatePicker({
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={selected.display_name}
+                placeholder={selected.displayName}
                 required
                 autoFocus
               />
@@ -435,11 +435,11 @@ function TemplateCard({
         <CardContent className="flex h-full flex-col gap-3 p-5">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/40">
-              {tpl.icon_url ? (
+              {tpl.iconUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
-                  src={tpl.icon_url}
-                  alt={`${tpl.display_name} logo`}
+                  src={tpl.iconUrl}
+                  alt={`${tpl.displayName} logo`}
                   width={28}
                   height={28}
                   loading="lazy"
@@ -452,7 +452,7 @@ function TemplateCard({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 <h3 className="truncate text-sm font-semibold text-foreground">
-                  {tpl.display_name}
+                  {tpl.displayName}
                 </h3>
                 <Badge variant="outline" className="font-mono text-[10px]">
                   v{tpl.version}
@@ -487,12 +487,12 @@ function TemplateCard({
             ) : null}
 
             <div className="flex flex-wrap items-center gap-1">
-              {tpl.binding_supported ? (
+              {tpl.bindingSupported ? (
                 <Badge variant="info" className="text-[10px]">
                   {t("binding_supported_badge")}
                 </Badge>
               ) : null}
-              {tpl.multi_container ? (
+              {tpl.multiContainer ? (
                 <Badge variant="warning" className="text-[10px]">
                   {t("multi_container_badge")}
                 </Badge>

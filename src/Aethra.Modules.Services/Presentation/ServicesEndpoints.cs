@@ -55,6 +55,15 @@ public static class ServicesEndpoints
         .RequireAuthorization(ScopeWrite)
         .WithName("CreateServiceFromTemplate");
 
+        services.MapPatch("/{serviceId}", async (string serviceId, [FromBody] UpdateServiceRequest body,
+            IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new UpdateServiceCommand(serviceId, body.Name, body.ExposedExternally), ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("UpdateService");
+
         services.MapDelete("/{serviceId}", async (string serviceId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new DeleteServiceCommand(serviceId), ct);
@@ -247,6 +256,7 @@ public static class ServicesEndpoints
     public sealed record SetBackupPolicyRequest(string? CronExpression, int? RetentionCount, string? Destination);
 
     public sealed record CreateServiceRequest(string TemplateId, string Slug, string Name, string TargetVmId, bool? ExposedExternally);
+    public sealed record UpdateServiceRequest(string Name, bool ExposedExternally);
     public sealed record CreateBindingRequest(
         string InstanceId,
         string? ResourceName,

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { FileCode, NotebookPen, Plus, Users } from "lucide-react";
+import { FileCode, NotebookPen, Pencil, Plus, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -74,6 +74,12 @@ export default async function ProjectDetailPage({
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline">
+              <Link href={`/projects/${project.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar
+              </Link>
+            </Button>
             <Button asChild variant="outline">
               <Link href={`/projects/${project.id}/notes`}>
                 <NotebookPen className="mr-2 h-4 w-4" />

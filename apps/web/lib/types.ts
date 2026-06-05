@@ -206,72 +206,75 @@ export interface ManagedServiceSummaryDto {
   type: ManagedServiceType;
   version: string;
   status: ManagedServiceStatus;
-  target_vm_id: string;
-  container_name: string;
-  bindings_count: number;
+  targetVmId: string;
+  containerName: string;
+  bindingsCount: number;
 }
 
 export interface ManagedServiceDetailDto extends ManagedServiceSummaryDto {
   image: string;
-  internal_port: number;
-  network_name: string;
-  exposed_externally: boolean;
-  provisioned_at: string | null;
-  error_code: string | null;
-  error_message: string | null;
-  created_at: string;
+  internalPort: number;
+  networkName: string;
+  exposedExternally: boolean;
+  createdAt: string;
+  updatedAt: string;
+  provisionedAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
 }
 
 export interface ServiceTemplateDto {
   id: string;
-  display_name: string;
+  displayName: string;
   type: ManagedServiceType;
   version: string;
   image: string;
-  internal_port: number;
+  internalPort: number;
   notes: string;
   category: string;
   description?: string | null;
   tags: string[];
-  icon_url?: string | null;
-  binding_supported: boolean;
+  iconUrl?: string | null;
+  bindingSupported: boolean;
   dependencies: string[];
-  multi_container: boolean;
+  multiContainer: boolean;
 }
 
 export type BindingPermissions = "Owner" | "ReadWrite" | "ReadOnly";
 
 export interface ServiceBindingDto {
   id: string;
-  service_id: string;
-  application_id: string;
-  application_slug?: string;
-  resource_name: string;
+  serviceId: string;
+  instanceId: string;
+  instanceSlug?: string;
+  resourceName: string;
   permissions: BindingPermissions;
-  env_var_prefix: string;
-  has_migrations_hook: boolean;
-  provisioned_at: string | null;
-  revoked_at: string | null;
+  envVarPrefix: string;
+  hasMigrationsHook: boolean;
+  createdAt: string;
+  provisionedAt: string | null;
+  revokedAt: string | null;
+  lastRotatedAt: string | null;
 }
 
 export interface CreateServiceRequest {
-  template_id: string;
+  templateId: string;
   slug: string;
   name: string;
-  target_vm_id: string;
-  exposed_externally?: boolean;
+  targetVmId: string;
+  exposedExternally?: boolean;
 }
 
 export interface CreateBindingRequest {
-  application_id: string;
-  resource_name?: string;
+  instanceId: string;
+  resourceName?: string;
   permissions: BindingPermissions;
-  env_var_prefix?: string;
-  migrations_hook?: {
+  envVarPrefix?: string;
+  migrationsHook?: {
     command: string;
-    timeout_seconds: number;
-    fail_on_error: boolean;
-    run_on: "binding_create" | "deploy" | "manual";
+    timeoutSeconds: number;
+    failDeployOnError: boolean;
+    runOn: "EachDeploy" | "FirstDeployOnly" | "ManualTrigger";
   };
 }
 
