@@ -7,9 +7,9 @@ export function deriveStatus(
   key: ApiKeySummary,
   now: Date = new Date(),
 ): ApiKeyStatus {
-  if (key.revoked_at) return "revoked";
-  if (key.expires_at) {
-    const expires = new Date(key.expires_at);
+  if (key.revokedAt) return "revoked";
+  if (key.expiresAt) {
+    const expires = new Date(key.expiresAt);
     if (
       !Number.isNaN(expires.getTime()) &&
       expires.getTime() <= now.getTime()

@@ -99,7 +99,7 @@ export default async function CloudflareZonesPage() {
                       {zone.name}
                     </Link>
                     <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {zone.external_zone_id}
+                      {zone.externalZoneId}
                     </p>
                   </div>
                   <ZoneStatusPill status={zone.status} />
@@ -111,7 +111,7 @@ export default async function CloudflareZonesPage() {
                         {t("label_records")}
                       </div>
                       <div className="mt-0.5 font-mono">
-                        {zone.records_count}
+                        {zone.recordsCount}
                       </div>
                     </div>
                     <div>
@@ -119,7 +119,7 @@ export default async function CloudflareZonesPage() {
                         {t("label_last_sync")}
                       </div>
                       <div className="mt-0.5">
-                        {formatRelative(zone.last_synced_at, t, tCommon)}
+                        {formatRelative(zone.lastSyncedAt, t, tCommon)}
                       </div>
                     </div>
                   </div>

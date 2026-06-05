@@ -58,7 +58,7 @@ export default function NewVmPage() {
         actions={
           registered ? (
             <Button asChild variant="outline" size="sm">
-              <Link href={`/vms/${registered.vm_id}`}>
+              <Link href={`/vms/${registered.vmId}`}>
                 {tCommon("details")} <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -111,7 +111,7 @@ export default function NewVmPage() {
         <TabsContent value="auto" className="mt-4">
           {registered ? (
             <AutoInstallForm
-              vmId={registered.vm_id}
+              vmId={registered.vmId}
               onFallbackManual={() => setTab("manual")}
             />
           ) : null}
@@ -120,8 +120,8 @@ export default function NewVmPage() {
         <TabsContent value="manual" className="mt-4">
           {registered ? (
             <ManualScriptTab
-              vmId={registered.vm_id}
-              initialToken={registered.token_plaintext}
+              vmId={registered.vmId}
+              initialToken={registered.tokenPlaintext}
             />
           ) : null}
         </TabsContent>
@@ -141,7 +141,7 @@ function TokenReminder({ result }: { result: RegisterVmResponse }) {
           Si vas a usar la auto-instalación, Aethra lo enviará a la VM por SSH.
           Si vas a usar comando manual, copialo aquí o desde la tab 3.
         </p>
-        <CopyableValue label="Token" value={result.token_plaintext} oneLine />
+        <CopyableValue label="Token" value={result.tokenPlaintext} oneLine />
       </CardContent>
     </Card>
   );

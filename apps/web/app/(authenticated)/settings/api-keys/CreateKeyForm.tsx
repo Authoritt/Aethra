@@ -141,7 +141,7 @@ export function CreateKeyForm() {
       const body: CreateApiKeyRequest = {
         name: values.name.trim(),
         scopes,
-        expires_at: presetToIso(values.preset, values.customDate ?? ""),
+        expiresAt: presetToIso(values.preset, values.customDate ?? ""),
       };
       const created = await api<CreateApiKeyResult>(
         "/api/identity/api-keys",

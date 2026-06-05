@@ -34,7 +34,7 @@ export function RotateTokenButton({ zoneId }: { zoneId: string }) {
     }
     setLoading(true);
     try {
-      const body: RotateCloudflareTokenRequest = { api_token: token.trim() };
+      const body: RotateCloudflareTokenRequest = { apiToken: token.trim() };
       await api(`/api/cloudflare/zones/${zoneId}/rotate-token`, {
         method: "POST",
         body: JSON.stringify(body),

@@ -10,8 +10,8 @@ export interface ProjectSummary {
   description: string | null;
   color: string | null;
   icon: string | null;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ProjectDetail {
@@ -21,8 +21,8 @@ export interface ProjectDetail {
   description: string | null;
   color: string | null;
   icon: string | null;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateProjectRequest {
@@ -52,10 +52,10 @@ export interface VmDto {
   privateIp: string | null;
   description: string | null;
   status: VmStatus;
-  created_at: string;
-  updated_at: string;
-  last_connected_at: string | null;
-  last_disconnected_at: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastConnectedAt: string | null;
+  lastDisconnectedAt: string | null;
   hostname: string | null;
   kernelVersion: string | null;
   cpuModel: string | null;
@@ -75,11 +75,11 @@ export interface RegisterVmRequest {
 }
 
 export interface RegisterVmResponse {
-  vm_id: string;
+  vmId: string;
   slug: string;
   name: string;
-  token_plaintext: string;
-  install_script: string;
+  tokenPlaintext: string;
+  installScript: string;
 }
 
 /* --- F11.4 auto-install via SSH --- */
@@ -292,51 +292,51 @@ export type DnsRecordType = "A" | "AAAA" | "CNAME" | "TXT" | "MX";
 
 export interface CloudflareZoneDto {
   id: string;
-  external_zone_id: string;
+  externalZoneId: string;
   name: string;
   status: CloudflareZoneStatus;
-  account_id: string;
-  records_count: number;
-  created_at: string;
-  updated_at: string;
-  last_synced_at: string | null;
+  accountId: string;
+  recordsCount: number;
+  createdAt: string;
+  updatedAt: string;
+  lastSyncedAt: string | null;
 }
 
 export interface DnsRecordDto {
   id: string;
-  zone_id: string;
-  external_record_id: string | null;
+  zoneId: string;
+  externalRecordId: string | null;
   type: DnsRecordType;
   name: string;
   content: string;
   ttl: number;
   proxied: boolean;
   comment: string | null;
-  created_at: string;
-  updated_at: string;
-  synced_at: string | null;
-  last_error: string | null;
+  createdAt: string;
+  updatedAt: string;
+  syncedAt: string | null;
+  lastError: string | null;
 }
 
 export interface CloudflareZoneDetailDto {
   id: string;
-  external_zone_id: string;
+  externalZoneId: string;
   name: string;
   status: CloudflareZoneStatus;
-  account_id: string;
-  created_at: string;
-  updated_at: string;
-  last_synced_at: string | null;
+  accountId: string;
+  createdAt: string;
+  updatedAt: string;
+  lastSyncedAt: string | null;
   records: DnsRecordDto[];
 }
 
 export interface RegisterCloudflareZoneRequest {
-  zone_id: string;
-  api_token: string;
+  zoneId: string;
+  apiToken: string;
 }
 
 export interface RotateCloudflareTokenRequest {
-  api_token: string;
+  apiToken: string;
 }
 
 export interface CreateDnsRecordRequest {
@@ -543,12 +543,12 @@ export interface UpsertPinnedFactRequest {
 export interface ApiKeySummary {
   id: string;
   name: string;
-  key_prefix: string;
+  keyPrefix: string;
   scopes: string[];
-  created_at: string;
-  last_used_at?: string | null;
-  expires_at?: string | null;
-  revoked_at?: string | null;
+  createdAt: string;
+  lastUsedAt?: string | null;
+  expiresAt?: string | null;
+  revokedAt?: string | null;
 }
 
 export interface CreateApiKeyResult extends ApiKeySummary {
@@ -558,7 +558,7 @@ export interface CreateApiKeyResult extends ApiKeySummary {
 export interface CreateApiKeyRequest {
   name: string;
   scopes: string[];
-  expires_at?: string | null;
+  expiresAt?: string | null;
 }
 
 /* -------------------------------------------------------------------------- */

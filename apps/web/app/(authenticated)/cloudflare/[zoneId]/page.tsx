@@ -82,9 +82,9 @@ export default async function ZoneDetailPage({
         title={zone.name}
         description={
           <span className="font-mono text-xs">
-            {t("zone_label", { id: zone.external_zone_id })}
+            {t("zone_label", { id: zone.externalZoneId })}
             <span className="mx-2 text-muted-foreground/50">·</span>
-            {t("account_label", { id: zone.account_id })}
+            {t("account_label", { id: zone.accountId })}
           </span>
         }
         actions={

@@ -46,8 +46,8 @@ export default function NewCloudflareZonePage() {
     setLoading(true);
     try {
       const body: RegisterCloudflareZoneRequest = {
-        zone_id: zoneId.trim().toLowerCase(),
-        api_token: apiToken.trim(),
+        zoneId: zoneId.trim().toLowerCase(),
+        apiToken: apiToken.trim(),
       };
       const created = await api<CloudflareZoneDto>("/api/cloudflare/zones/", {
         method: "POST",

@@ -123,7 +123,7 @@ export default async function ApiKeysPage() {
                         variant="outline"
                         className="font-mono text-[11px]"
                       >
-                        {key.key_prefix}…
+                        {key.keyPrefix}…
                       </Badge>
                     </TableCell>
                     <TableCell className="align-top">
@@ -134,10 +134,10 @@ export default async function ApiKeysPage() {
                       />
                     </TableCell>
                     <TableCell className="align-top text-xs text-muted-foreground">
-                      {formatDate(key.created_at)}
+                      {formatDate(key.createdAt)}
                     </TableCell>
                     <TableCell className="align-top text-xs text-muted-foreground">
-                      {formatRelative(key.last_used_at, {
+                      {formatRelative(key.lastUsedAt, {
                         never: t("relative_never"),
                         seconds: t("relative_seconds_ago"),
                         minutes: (m) => t("relative_minutes_ago", { minutes: m }),
@@ -146,7 +146,7 @@ export default async function ApiKeysPage() {
                       })}
                     </TableCell>
                     <TableCell className="align-top text-xs text-muted-foreground">
-                      {formatExpires(key.expires_at, t("relative_never"))}
+                      {formatExpires(key.expiresAt, t("relative_never"))}
                     </TableCell>
                     <TableCell className="align-top">
                       <ApiKeyStatusPill status={status} />
