@@ -1382,6 +1382,9 @@
       "empty_card_description_prefix": "Create the first one below. The convention is",
       "drag_aria": "Drag to reorder",
       "delete_button": "Delete",
+      "rename_button": "Edit",
+      "rename_save": "Save",
+      "rename_toast": "Environment \"{slug}\" renamed",
       "reorder_toast": "Order updated",
       "delete_dialog_title": "Delete environment \"{slug}\"",
       "delete_dialog_description": "If any project references it, those referers will point to an invalid slug. This cannot be undone.",
@@ -1637,6 +1640,8 @@
       "cancel": "Cancel",
       "submit": "Create role",
       "toast_created": "Role \"{name}\" created",
+      "rename_toast": "Role \"{name}\" updated",
+      "list_action_edit": "Edit",
       "error_unknown": "Unknown error",
       "new": {
         "validation_required": "Required",

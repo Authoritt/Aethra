@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -136,6 +136,7 @@ export default async function ZoneDetailPage({
                 {zone.records.map((r) => (
                   <RecordRow
                     key={r.id}
+                    zoneId={zone.id}
                     record={r}
                     labels={{
                       ttl_auto: t("ttl_auto"),
@@ -154,9 +155,11 @@ export default async function ZoneDetailPage({
 }
 
 function RecordRow({
+  zoneId,
   record,
   labels,
 }: {
+  zoneId: string;
   record: DnsRecordDto;
   labels: { ttl_auto: string; proxied: string; dns_only: string };
 }) {
@@ -185,7 +188,15 @@ function RecordRow({
         )}
       </TableCell>
       <TableCell className="text-right">
-        <DeleteRecordButton recordId={record.id} name={record.name} />
+        <div className="flex items-center justify-end gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/cloudflare/${zoneId}/records/${record.id}/edit`}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
+            </Link>
+          </Button>
+          <DeleteRecordButton recordId={record.id} name={record.name} />
+        </div>
       </TableCell>
     </TableRow>
   );

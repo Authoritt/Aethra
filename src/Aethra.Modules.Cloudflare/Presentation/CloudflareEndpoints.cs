@@ -132,6 +132,14 @@ public static class CloudflareEndpoints
             .RequireAuthorization(ScopeRead)
             .WithName("GetCloudflareTunnel");
 
+        tunnels.MapDelete("/", async (IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new DeleteTunnelCommand(), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("DeleteCloudflareTunnel");
+
         tunnels.MapPost("/", async ([FromBody] RegisterTunnelRequest body, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new RegisterTunnelCommand(

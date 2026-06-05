@@ -33,6 +33,14 @@ public static class RoutesEndpoints
         .RequireAuthorization(ScopeWrite)
         .WithName("CreateRoute");
 
+        group.MapPatch("/{routeId}", async (string routeId, [FromBody] UpdateRouteRequest body, IMediator mediator, CancellationToken ct) =>
+        {
+            var r = await mediator.Send(new UpdateRouteCommand(routeId, body.BackendUrl, body.TlsEnabled), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("UpdateRoute");
+
         group.MapDelete("/{routeId}", async (string routeId, IMediator mediator, CancellationToken ct) =>
         {
             var r = await mediator.Send(new DeleteRouteCommand(routeId), ct);
@@ -45,6 +53,8 @@ public static class RoutesEndpoints
     }
 
     public sealed record CreateRouteRequest(string Hostname, string BackendUrl, bool TlsEnabled, string? PathPrefix = null);
+
+    public sealed record UpdateRouteRequest(string BackendUrl, bool TlsEnabled);
 
     private static IResult ToResult<T>(Result<T> r)
         => r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);

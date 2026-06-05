@@ -1382,6 +1382,9 @@
       "empty_card_description_prefix": "Creá el primero abajo. La convención es",
       "drag_aria": "Arrastrar para reordenar",
       "delete_button": "Borrar",
+      "rename_button": "Editar",
+      "rename_save": "Guardar",
+      "rename_toast": "Ambiente \"{slug}\" renombrado",
       "reorder_toast": "Orden actualizado",
       "delete_dialog_title": "Borrar ambiente \"{slug}\"",
       "delete_dialog_description": "Si algún proyecto lo referencia, esos referers quedarán apuntando a un slug inválido. Esta acción no se puede deshacer.",
@@ -1637,6 +1640,8 @@
       "cancel": "Cancelar",
       "submit": "Crear rol",
       "toast_created": "Rol \"{name}\" creado",
+      "rename_toast": "Rol \"{name}\" actualizado",
+      "list_action_edit": "Editar",
       "error_unknown": "Error desconocido",
       "new": {
         "validation_required": "Requerido",

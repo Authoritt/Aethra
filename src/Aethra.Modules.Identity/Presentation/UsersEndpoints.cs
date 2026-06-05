@@ -86,6 +86,15 @@ public static class UsersEndpoints
             .WithName("CreateRole")
             .RequireAuthorization("scope:users:write");
 
+        roles.MapPatch("/{roleId}", async (string roleId, [FromBody] UpdateRoleRequest body, IMediator m, CancellationToken ct) =>
+            {
+                var cmd = new UpdateRoleCommand(roleId, body.DisplayName, body.Scopes);
+                var r = await m.Send(cmd, ct);
+                return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+            })
+            .WithName("UpdateRole")
+            .RequireAuthorization("scope:users:write");
+
         roles.MapDelete("/{roleId}", async (string roleId, IMediator m, CancellationToken ct) =>
             {
                 var r = await m.Send(new DeleteRoleCommand(roleId), ct);
@@ -113,6 +122,10 @@ public static class UsersEndpoints
 
     public sealed record CreateRoleRequest(
         string Slug,
+        string DisplayName,
+        IReadOnlyList<string> Scopes);
+
+    public sealed record UpdateRoleRequest(
         string DisplayName,
         IReadOnlyList<string> Scopes);
 

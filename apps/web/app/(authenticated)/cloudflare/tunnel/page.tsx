@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { API_URL } from "@/lib/api";
 import type { CloudflareTunnelDto } from "@/lib/types";
 import { TunnelManager } from "./TunnelManager";
+import { DeleteTunnelButton } from "./DeleteTunnelButton";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function CloudflareTunnelPage() {
         breadcrumbs={[{ label: "Cloudflare", href: "/cloudflare" }, { label: "Túnel" }]}
         title="Túnel gestionado (ingress automático)"
         description="Conecta el túnel de Cloudflare para que Aethra agregue/quite el ingress de cada hostname por API — sin reiniciar el túnel (cero corte)."
+        actions={tunnel ? <DeleteTunnelButton name={tunnel.name} /> : undefined}
       />
       <TunnelManager initial={tunnel} loadError={data === "error"} />
     </div>

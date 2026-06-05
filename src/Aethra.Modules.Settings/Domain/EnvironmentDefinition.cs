@@ -70,6 +70,24 @@ public sealed class EnvironmentDefinition : Entity<EnvironmentDefinitionId>
     }
 
     /// <summary>
+    /// Actualiza la metadata editable (displayName). El slug es inmutable (identifica el ambiente)
+    /// y el orden se gestiona aparte via <see cref="SetOrder"/> / bulk reorder.
+    /// </summary>
+    public void UpdateInfo(string displayName, DateTimeOffset now)
+    {
+        _ = now;
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            throw new ArgumentException("displayName no puede estar vacío.", nameof(displayName));
+        }
+        if (displayName.Trim().Length > 100)
+        {
+            throw new ArgumentException("displayName no puede exceder 100 caracteres.", nameof(displayName));
+        }
+        DisplayName = displayName.Trim();
+    }
+
+    /// <summary>
     /// Actualiza el orden sin disparar eventos. Lo usa el bulk reorder.
     /// </summary>
     public void SetOrder(int newOrder)

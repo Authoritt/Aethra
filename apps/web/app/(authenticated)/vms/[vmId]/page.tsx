@@ -1,12 +1,16 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { VmStatusPill } from "@/components/aethra/vm-status-pill";
 import { API_URL } from "@/lib/api";
 import type { VmDto, VmMetricPoint } from "@/lib/types";
 import VmLiveDashboard from "./VmLiveDashboard";
+import { DeleteVmButton } from "./DeleteVmButton";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +96,18 @@ export default async function VmDetailPage({
             ) : null}
           </>
         }
-        actions={<VmStatusPill status={vm.status} />}
+        actions={
+          <>
+            <VmStatusPill status={vm.status} />
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/vms/${vm.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar
+              </Link>
+            </Button>
+            <DeleteVmButton vmId={vm.id} name={vm.name} />
+          </>
+        }
       />
 
       <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">

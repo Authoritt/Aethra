@@ -23,7 +23,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Loader2, Trash2 } from "lucide-react";
+import { GripVertical, Loader2, Pencil, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -182,6 +182,7 @@ export function EnvironmentsManager({
                   env={env}
                   busy={pending === env.id || pending === "reorder"}
                   onDelete={() => setDeleteTarget(env)}
+                  onRenamed={() => router.refresh()}
                 />
               ))}
             </ul>
@@ -236,12 +237,17 @@ function EnvironmentRow({
   env,
   busy,
   onDelete,
+  onRenamed,
 }: {
   env: EnvironmentDefinitionDto;
   busy: boolean;
   onDelete: () => void;
+  onRenamed: () => void;
 }) {
   const t = useTranslations("pages.settings_environments");
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(env.displayName);
+  const [saving, setSaving] = useState(false);
   const {
     attributes,
     listeners,
@@ -256,6 +262,38 @@ function EnvironmentRow({
     transition,
   };
 
+  async function saveRename() {
+    const next = draft.trim();
+    if (!next || next === env.displayName) {
+      setEditing(false);
+      setDraft(env.displayName);
+      return;
+    }
+    setSaving(true);
+    try {
+      await api(`/api/settings/environments/${encodeURIComponent(env.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ displayName: next }),
+      });
+      toast.success(t("rename_toast", { slug: env.slug }));
+      setEditing(false);
+      onRenamed();
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string; detail?: string } | undefined)
+              ?.message ??
+            (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : t("error_unknown");
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <li ref={setNodeRef} style={style} className="list-none">
       <Card
@@ -269,7 +307,7 @@ function EnvironmentRow({
             type="button"
             className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground active:cursor-grabbing"
             aria-label={t("drag_aria")}
-            disabled={busy}
+            disabled={busy || editing}
             {...attributes}
             {...listeners}
           >
@@ -279,17 +317,76 @@ function EnvironmentRow({
             <span className="rounded border border-border bg-muted px-2 py-0.5 font-mono text-[11px] text-foreground">
               {env.slug}
             </span>
-            <span className="text-sm text-foreground">{env.displayName}</span>
+            {editing ? (
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void saveRename();
+                  if (e.key === "Escape") {
+                    setEditing(false);
+                    setDraft(env.displayName);
+                  }
+                }}
+                maxLength={100}
+                autoFocus
+                disabled={saving}
+                className="h-8 max-w-xs"
+              />
+            ) : (
+              <span className="text-sm text-foreground">{env.displayName}</span>
+            )}
             <span className="ml-auto hidden font-mono text-[10px] text-muted-foreground md:inline">
               {env.id}
             </span>
           </div>
+          {editing ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void saveRename()}
+                disabled={saving}
+              >
+                {saving ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Save className="mr-1 h-3.5 w-3.5" />
+                )}
+                {t("rename_save")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditing(false);
+                  setDraft(env.displayName);
+                }}
+                disabled={saving}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditing(true)}
+              disabled={busy}
+            >
+              <Pencil className="mr-1 h-3.5 w-3.5" />
+              {t("rename_button")}
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
             size="sm"
             onClick={onDelete}
-            disabled={busy}
+            disabled={busy || editing}
             className="text-destructive hover:bg-destructive/10 hover:text-destructive"
           >
             <Trash2 className="mr-1 h-3.5 w-3.5" />

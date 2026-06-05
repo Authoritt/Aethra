@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { ExternalLink, Lock, Unlock } from "lucide-react";
+import { ExternalLink, Lock, Pencil, Unlock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,6 +80,12 @@ export default async function RouteDetailPage({
                 <ExternalLink className="mr-2 h-4 w-4" />
                 {t("open")}
               </a>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/routes/${route.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar
+              </Link>
             </Button>
             <DeleteRouteButton id={route.id} hostname={route.hostname} />
           </>

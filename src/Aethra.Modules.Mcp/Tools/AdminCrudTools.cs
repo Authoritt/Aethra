@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands;
+using Aethra.Modules.Identity.UseCases.Commands;
 using Aethra.Modules.Mcp.Security;
 using Aethra.Modules.Projects.UseCases.Clients.Commands;
 using Aethra.Modules.Projects.UseCases.Instances.Commands;
@@ -6,6 +8,7 @@ using Aethra.Modules.Projects.UseCases.Projects.Commands;
 using Aethra.Modules.Projects.UseCases.Templates.Commands;
 using Aethra.Modules.Projects.UseCases.Templates.Dtos;
 using Aethra.Modules.Services.UseCases.Commands;
+using Aethra.Modules.Vms.UseCases.Vms.Commands;
 using MediatR;
 using ModelContextProtocol.Server;
 
@@ -226,5 +229,83 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
         }
         var r = await mediator.Send(new UpdateServiceCommand(serviceId, name, exposedExternally), ct).ConfigureAwait(false);
         return r.IsSuccess ? McpResponses.Ok(r.Value) : McpResponses.FromError(r.Error);
+    }
+
+    // ---------------------------------------------------------------- Cloudflare Tunnel
+    [McpServerTool(Name = "aethra_delete_tunnel", Destructive = true, Idempotent = true, OpenWorld = false)]
+    [Description("Borra el túnel Cloudflare gestionado del registro de Aethra. NO toca la config remota en " +
+        "Cloudflare (el túnel sigue existiendo allá); solo desvincula a Aethra de su gestión.")]
+    public async Task<object> DeleteTunnelAsync(
+        [Description("Si true, NO ejecuta — devuelve plan.")] bool dryRun,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.CloudflareWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.CloudflareWrite);
+        }
+        if (dryRun)
+        {
+            return McpResponses.DryRun("DELETE /api/cloudflare/tunnel", new { });
+        }
+        var r = await mediator.Send(new DeleteTunnelCommand(), ct).ConfigureAwait(false);
+        return r.IsSuccess ? McpResponses.Ok(new { tunnel = "deleted" }) : McpResponses.FromError(r.Error);
+    }
+
+    // ---------------------------------------------------------------- Vms
+    [McpServerTool(Name = "aethra_update_vm", Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Actualiza metadata editable de una VM (nombre, IPs pública/privada, descripción). El slug es inmutable.")]
+    public async Task<object> UpdateVmAsync(
+        [Description("ID de la VM (formato 'vm_...').")] string vmId,
+        [Description("Nombre display.")] string name,
+        [Description("IP pública (opcional).")] string? publicIp,
+        [Description("IP privada (opcional).")] string? privateIp,
+        [Description("Descripción (opcional).")] string? description,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.VmsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.VmsWrite);
+        }
+        var r = await mediator.Send(new UpdateVmCommand(vmId, name, publicIp, privateIp, description), ct).ConfigureAwait(false);
+        return r.IsSuccess ? McpResponses.Ok(new { vm_id = vmId, updated = true }) : McpResponses.FromError(r.Error);
+    }
+
+    [McpServerTool(Name = "aethra_delete_vm", Destructive = true, Idempotent = true, OpenWorld = false)]
+    [Description("Borra una VM del registro de Aethra (junto con su satélite/token). force=true por simetría; " +
+        "la limpieza de instancias/contenedores que apuntaban a la VM es responsabilidad del caller.")]
+    public async Task<object> DeleteVmAsync(
+        [Description("ID de la VM.")] string vmId,
+        [Description("true = fuerza el borrado (simetría de API).")] bool force,
+        [Description("Si true, NO ejecuta — devuelve plan.")] bool dryRun,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.VmsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.VmsWrite);
+        }
+        if (dryRun)
+        {
+            return McpResponses.DryRun($"DELETE /api/vms/{vmId}?force={force}", new { vmId, force });
+        }
+        var r = await mediator.Send(new DeleteVmCommand(vmId, force), ct).ConfigureAwait(false);
+        return r.IsSuccess ? McpResponses.Ok(new { vm_id = vmId, deleted = true }) : McpResponses.FromError(r.Error);
+    }
+
+    // ---------------------------------------------------------------- Identity Roles
+    [McpServerTool(Name = "aethra_update_role", Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Edita un rol custom (displayName + scopes). Los roles del sistema no se pueden modificar. " +
+        "Reemplaza la lista de scopes completa — pasa los scopes actuales que quieras conservar.")]
+    public async Task<object> UpdateRoleAsync(
+        [Description("ID del Role (formato 'rol_...').")] string roleId,
+        [Description("Nombre display.")] string displayName,
+        [Description("Lista completa de scopes del rol.")] IReadOnlyList<string> scopes,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.UsersWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.UsersWrite);
+        }
+        var r = await mediator.Send(new UpdateRoleCommand(roleId, displayName, scopes), ct).ConfigureAwait(false);
+        return r.IsSuccess ? McpResponses.Ok(new { role_id = roleId, updated = true }) : McpResponses.FromError(r.Error);
     }
 }

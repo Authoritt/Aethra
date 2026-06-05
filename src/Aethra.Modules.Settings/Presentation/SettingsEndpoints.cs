@@ -153,6 +153,14 @@ public static class SettingsEndpoints
         .RequireAuthorization(ScopeSettingsWrite)
         .WithName("CreateEnvironmentDefinition");
 
+        group.MapPatch("/{environmentId}", async (string environmentId, [FromBody] UpdateEnvironmentRequest body, IMediator m, CancellationToken ct) =>
+        {
+            var r = await m.Send(new UpdateEnvironmentDefinitionCommand(environmentId, body.DisplayName), ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeSettingsWrite)
+        .WithName("UpdateEnvironmentDefinition");
+
         group.MapDelete("/{environmentId}", async (string environmentId, IMediator m, CancellationToken ct) =>
         {
             var r = await m.Send(new DeleteEnvironmentDefinitionCommand(environmentId), ct);
@@ -185,6 +193,8 @@ public static class SettingsEndpoints
     public sealed record CreateBaseDomainRequest(string Hostname, string? CloudflareZoneId);
 
     public sealed record CreateEnvironmentDefinitionRequest(string Slug, string DisplayName, int? Order);
+
+    public sealed record UpdateEnvironmentRequest(string DisplayName);
 
     public sealed record ReorderEnvironmentDefinitionsRequest(IReadOnlyList<string> Ids);
 

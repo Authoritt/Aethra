@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { Lock, Plus, Shield } from "lucide-react";
+import { Lock, Pencil, Plus, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -151,7 +151,15 @@ export default async function RolesPage() {
                         {t("protected_label")}
                       </span>
                     ) : (
-                      <DeleteRoleButton id={r.id} slug={r.slug} />
+                      <div className="flex items-center justify-end gap-2">
+                        <Button asChild variant="outline" size="sm">
+                          <Link href={`/settings/roles/${r.id}/edit`}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            {t("list_action_edit")}
+                          </Link>
+                        </Button>
+                        <DeleteRoleButton id={r.id} slug={r.slug} />
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>

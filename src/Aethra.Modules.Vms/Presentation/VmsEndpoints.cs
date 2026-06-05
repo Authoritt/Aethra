@@ -158,6 +158,31 @@ public static class VmsEndpoints
         .AllowAnonymous()
         .WithName("DownloadInstallScript");
 
+        group.MapPatch("/{vmId}", async (
+            string vmId,
+            [FromBody] UpdateVmRequest body,
+            IMediator mediator,
+            CancellationToken ct) =>
+        {
+            var cmd = new UpdateVmCommand(vmId, body.Name, body.PublicIp, body.PrivateIp, body.Description);
+            var r = await mediator.Send(cmd, ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("UpdateVm");
+
+        group.MapDelete("/{vmId}", async (
+            string vmId,
+            [FromQuery] bool? force,
+            IMediator mediator,
+            CancellationToken ct) =>
+        {
+            var r = await mediator.Send(new DeleteVmCommand(vmId, force ?? false), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("DeleteVm");
+
         // F12.3 — opt-in / opt-out al pool de previews.
         group.MapPatch("/{vmId}/accepts-previews", async (
             string vmId,
@@ -202,6 +227,9 @@ public static class VmsEndpoints
 
     /// <summary>F12.3 — body para <c>PATCH /api/vms/{id}/accepts-previews</c>.</summary>
     public sealed record SetAcceptsPreviewsRequest(bool AcceptsPreviews);
+
+    /// <summary>Body para <c>PATCH /api/vms/{vmId}</c>.</summary>
+    public sealed record UpdateVmRequest(string Name, string? PublicIp, string? PrivateIp, string? Description);
 
     private static IResult ToResult<T>(Result<T> r)
         => r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
