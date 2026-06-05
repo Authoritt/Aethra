@@ -150,9 +150,9 @@ public static class ProjectsEndpoints
 
         // Borrar plantilla (force = cascada de instancias).
         app.MapDelete("/api/templates/{id}", async (
-            string id, [FromQuery] bool force, IMediator m, CancellationToken ct) =>
+            string id, [FromQuery] bool? force, IMediator m, CancellationToken ct) =>
         {
-            var r = await m.Send(new DeleteTemplateCommand(id, force), ct);
+            var r = await m.Send(new DeleteTemplateCommand(id, force ?? false), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         }).WithTags("Templates").RequireAuthorization(ScopeProjectsWrite).WithName("DeleteTemplate");
 
@@ -264,9 +264,9 @@ public static class ProjectsEndpoints
 
         // Borrar client (force = cascada de instancias asociadas).
         app.MapDelete("/api/clients/{id}", async (
-            string id, [FromQuery] bool force, IMediator m, CancellationToken ct) =>
+            string id, [FromQuery] bool? force, IMediator m, CancellationToken ct) =>
         {
-            var r = await m.Send(new DeleteClientCommand(id, force), ct);
+            var r = await m.Send(new DeleteClientCommand(id, force ?? false), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         }).WithTags("Clients").RequireAuthorization(ScopeProjectsWrite).WithName("DeleteClient");
     }
