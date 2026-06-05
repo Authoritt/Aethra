@@ -45,17 +45,17 @@ export async function CheckHistoryTable({ checks }: Props) {
                 <MonitorStatusPill status={c.status} />
               </TableCell>
               <TableCell className="font-mono text-xs">
-                {c.http_status_code ?? "—"}
+                {c.httpStatusCode ?? "—"}
               </TableCell>
               <TableCell className="font-mono text-xs">
-                {c.latency_ms === null ? "—" : `${c.latency_ms} ms`}
+                {c.latencyMs === null ? "—" : `${c.latencyMs} ms`}
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {c.error_message ? (
-                  <span className="text-destructive">{c.error_message}</span>
-                ) : c.response_snippet ? (
-                  <span title={c.response_snippet} className="line-clamp-1">
-                    {c.response_snippet}
+                {c.errorMessage ? (
+                  <span className="text-destructive">{c.errorMessage}</span>
+                ) : c.responseSnippet ? (
+                  <span title={c.responseSnippet} className="line-clamp-1">
+                    {c.responseSnippet}
                   </span>
                 ) : (
                   "—"

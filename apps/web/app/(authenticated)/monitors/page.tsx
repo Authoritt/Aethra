@@ -193,20 +193,20 @@ export default async function MonitorsPage({ searchParams }: ListPageProps) {
                   <TableCell>
                     <MonitorStatusPill
                       status={m.status}
-                      disabled={!m.is_enabled}
+                      disabled={!m.isEnabled}
                     />
                   </TableCell>
                   <TableCell className="font-mono text-xs">
-                    {m.http_method}
+                    {m.httpMethod}
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">
-                    {m.interval_sec}s
+                    {m.intervalSec}s
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {formatRelative(m.last_checked_at, t)}
+                    {formatRelative(m.lastCheckedAt, t)}
                   </TableCell>
                   <TableCell>
-                    <FailuresBadge n={m.consecutive_failures} />
+                    <FailuresBadge n={m.consecutiveFailures} />
                   </TableCell>
                 </TableRow>
               ))}

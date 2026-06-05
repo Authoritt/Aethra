@@ -67,7 +67,7 @@ export default function NewMonitorPage() {
     }
     setLoading(true);
     try {
-      const body_template = body.trim() === "" ? undefined : body;
+      const bodyTemplate = body.trim() === "" ? undefined : body;
       const headers =
         headersText.trim() === ""
           ? undefined
@@ -76,12 +76,12 @@ export default function NewMonitorPage() {
         slug: slug.trim(),
         name: name.trim(),
         url: url.trim(),
-        http_method: method,
-        expected_status_codes: parseExpected(expected),
-        interval_sec: interval,
-        timeout_ms: timeout,
+        httpMethod: method,
+        expectedStatusCodes: parseExpected(expected),
+        intervalSec: interval,
+        timeoutMs: timeout,
         headers,
-        body_template,
+        bodyTemplate,
       };
       const created = await api<MonitorDetailDto>("/api/monitors/", {
         method: "POST",

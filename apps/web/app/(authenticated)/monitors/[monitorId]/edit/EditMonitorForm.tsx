@@ -31,12 +31,12 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
   const [url, setUrl] = useState(initial.url);
-  const [method, setMethod] = useState<MonitorHttpMethod>(initial.http_method);
+  const [method, setMethod] = useState<MonitorHttpMethod>(initial.httpMethod);
   const [expected, setExpected] = useState(
-    initial.expected_status_codes.join(","),
+    initial.expectedStatusCodes.join(","),
   );
-  const [interval, setInterval] = useState(initial.interval_sec);
-  const [timeout, setTimeout] = useState(initial.timeout_ms);
+  const [interval, setInterval] = useState(initial.intervalSec);
+  const [timeout, setTimeout] = useState(initial.timeoutMs);
   const [headersText, setHeadersText] = useState(
     initial.headers
       ? Object.entries(initial.headers)
@@ -44,7 +44,7 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
           .join("\n")
       : "",
   );
-  const [body, setBody] = useState(initial.body_template ?? "");
+  const [body, setBody] = useState(initial.bodyTemplate ?? "");
   const [loading, setLoading] = useState(false);
 
   function validate(): string | null {
@@ -72,16 +72,16 @@ export function EditMonitorForm({ initial }: { initial: MonitorDetailDto }) {
       const payload: UpdateMonitorRequest = {
         name: name.trim() === initial.name ? undefined : name.trim(),
         url: url.trim() === initial.url ? undefined : url.trim(),
-        http_method: method === initial.http_method ? undefined : method,
-        expected_status_codes: parseExpected(expected),
-        interval_sec: interval,
-        timeout_ms: timeout,
+        httpMethod: method === initial.httpMethod ? undefined : method,
+        expectedStatusCodes: parseExpected(expected),
+        intervalSec: interval,
+        timeoutMs: timeout,
         headers: headersParsed ?? undefined,
-        clear_headers:
+        clearHeaders:
           headersText.trim() === "" && initial.headers !== null,
-        body_template: body.trim() === "" ? undefined : body,
-        clear_body_template:
-          body.trim() === "" && initial.body_template !== null,
+        bodyTemplate: body.trim() === "" ? undefined : body,
+        clearBodyTemplate:
+          body.trim() === "" && initial.bodyTemplate !== null,
       };
       await api(`/api/monitors/${initial.id}`, {
         method: "PATCH",

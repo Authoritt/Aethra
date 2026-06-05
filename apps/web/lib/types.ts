@@ -365,15 +365,15 @@ export interface MonitorSummaryDto {
   slug: string;
   name: string;
   url: string;
-  http_method: MonitorHttpMethod;
-  interval_sec: number;
-  timeout_ms: number;
+  httpMethod: MonitorHttpMethod;
+  intervalSec: number;
+  timeoutMs: number;
   status: MonitorStatus;
-  is_enabled: boolean;
-  last_checked_at: string | null;
-  consecutive_failures: number;
-  application_id: string | null;
-  project_id: string | null;
+  isEnabled: boolean;
+  lastCheckedAt: string | null;
+  consecutiveFailures: number;
+  instanceId: string | null;
+  projectId: string | null;
 }
 
 export interface MonitorDetailDto {
@@ -381,31 +381,31 @@ export interface MonitorDetailDto {
   slug: string;
   name: string;
   url: string;
-  http_method: MonitorHttpMethod;
-  expected_status_codes: number[];
-  interval_sec: number;
-  timeout_ms: number;
+  httpMethod: MonitorHttpMethod;
+  expectedStatusCodes: number[];
+  intervalSec: number;
+  timeoutMs: number;
   headers: Record<string, string> | null;
-  body_template: string | null;
-  application_id: string | null;
-  project_id: string | null;
-  is_enabled: boolean;
+  bodyTemplate: string | null;
+  instanceId: string | null;
+  projectId: string | null;
+  isEnabled: boolean;
   status: MonitorStatus;
-  last_checked_at: string | null;
-  consecutive_failures: number;
-  created_at: string;
-  updated_at: string;
+  lastCheckedAt: string | null;
+  consecutiveFailures: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MonitorCheckDto {
   id: string;
-  monitor_id: string;
+  monitorId: string;
   timestamp: string;
   status: MonitorStatus;
-  http_status_code: number | null;
-  latency_ms: number | null;
-  error_message: string | null;
-  response_snippet: string | null;
+  httpStatusCode: number | null;
+  latencyMs: number | null;
+  errorMessage: string | null;
+  responseSnippet: string | null;
 }
 
 export interface MonitorOverviewDto {
@@ -421,31 +421,31 @@ export interface CreateMonitorRequest {
   slug: string;
   name: string;
   url: string;
-  http_method?: MonitorHttpMethod;
-  expected_status_codes?: number[];
-  interval_sec?: number;
-  timeout_ms?: number;
+  httpMethod?: MonitorHttpMethod;
+  expectedStatusCodes?: number[];
+  intervalSec?: number;
+  timeoutMs?: number;
   headers?: Record<string, string>;
-  body_template?: string;
-  application_id?: string;
-  project_id?: string;
+  bodyTemplate?: string;
+  instanceId?: string;
+  projectId?: string;
 }
 
 export interface UpdateMonitorRequest {
   name?: string;
   url?: string;
-  http_method?: MonitorHttpMethod;
-  expected_status_codes?: number[];
-  interval_sec?: number;
-  timeout_ms?: number;
+  httpMethod?: MonitorHttpMethod;
+  expectedStatusCodes?: number[];
+  intervalSec?: number;
+  timeoutMs?: number;
   headers?: Record<string, string>;
-  clear_headers?: boolean;
-  body_template?: string;
-  clear_body_template?: boolean;
-  application_id?: string;
-  clear_application_id?: boolean;
-  project_id?: string;
-  clear_project_id?: boolean;
+  clearHeaders?: boolean;
+  bodyTemplate?: string;
+  clearBodyTemplate?: boolean;
+  instanceId?: string;
+  clearInstanceId?: boolean;
+  projectId?: string;
+  clearProjectId?: boolean;
 }
 
 export interface MonitorStatusChangedPayload {

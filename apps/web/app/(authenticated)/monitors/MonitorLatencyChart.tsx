@@ -13,10 +13,10 @@ interface Props {
  */
 export default function MonitorLatencyChart({ checks }: Props) {
   const data = checks
-    .filter((c) => c.latency_ms !== null)
+    .filter((c) => c.latencyMs !== null)
     .map((c) => ({
       timestamp: c.timestamp,
-      latency: c.latency_ms ?? 0,
+      latency: c.latencyMs ?? 0,
     }));
 
   if (data.length === 0) {

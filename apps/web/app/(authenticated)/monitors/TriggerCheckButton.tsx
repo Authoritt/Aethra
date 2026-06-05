@@ -20,8 +20,8 @@ export function TriggerCheckButton({ monitorId }: { monitorId: string }) {
         { method: "POST" },
       );
       toast.success(
-        `Check disparado: ${result.status} · ${result.http_status_code ?? "—"} · ${
-          result.latency_ms === null ? "—" : `${result.latency_ms}ms`
+        `Check disparado: ${result.status} · ${result.httpStatusCode ?? "—"} · ${
+          result.latencyMs === null ? "—" : `${result.latencyMs}ms`
         }`,
       );
       router.refresh();

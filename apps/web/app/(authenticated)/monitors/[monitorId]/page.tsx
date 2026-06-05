@@ -89,7 +89,7 @@ export default async function MonitorDetailPage({
             <span className="font-mono text-xs">{monitor.slug}</span>
             <span className="mx-2 text-muted-foreground/50">·</span>
             <span className="font-mono">
-              {monitor.http_method} {monitor.url}
+              {monitor.httpMethod} {monitor.url}
             </span>
           </>
         }
@@ -98,7 +98,7 @@ export default async function MonitorDetailPage({
             <TriggerCheckButton monitorId={monitor.id} />
             <EnableDisableButtons
               monitorId={monitor.id}
-              isEnabled={monitor.is_enabled}
+              isEnabled={monitor.isEnabled}
             />
             <Button asChild variant="outline" size="sm">
               <Link href={`/monitors/${monitor.id}/edit`}>
@@ -115,22 +115,22 @@ export default async function MonitorDetailPage({
         <MonitorDetailLive
           monitorId={monitor.id}
           initialStatus={monitor.status}
-          initialLastCheckedAt={monitor.last_checked_at}
-          isEnabled={monitor.is_enabled}
+          initialLastCheckedAt={monitor.lastCheckedAt}
+          isEnabled={monitor.isEnabled}
         />
       </div>
 
       <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <InfoCard label={t("label_interval")} value={`${monitor.interval_sec}s`} />
-        <InfoCard label={t("label_timeout")} value={`${monitor.timeout_ms}ms`} />
+        <InfoCard label={t("label_interval")} value={`${monitor.intervalSec}s`} />
+        <InfoCard label={t("label_timeout")} value={`${monitor.timeoutMs}ms`} />
         <InfoCard
           label={t("label_expected_ok")}
-          value={monitor.expected_status_codes.join(", ")}
+          value={monitor.expectedStatusCodes.join(", ")}
           mono
         />
         <InfoCard
           label={t("label_failures")}
-          value={String(monitor.consecutive_failures)}
+          value={String(monitor.consecutiveFailures)}
           mono
         />
       </section>
@@ -142,7 +142,7 @@ export default async function MonitorDetailPage({
         <MonitorLatencyChart checks={checks} />
       </section>
 
-      {monitor.headers || monitor.body_template ? (
+      {monitor.headers || monitor.bodyTemplate ? (
         <Card className="mb-6">
           <CardContent className="p-5">
             <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
@@ -163,13 +163,13 @@ export default async function MonitorDetailPage({
                 </dl>
               </div>
             ) : null}
-            {monitor.body_template ? (
+            {monitor.bodyTemplate ? (
               <div>
                 <h3 className="text-xs font-medium uppercase text-muted-foreground">
                   {t("body_title")}
                 </h3>
                 <pre className="mt-1 whitespace-pre-wrap break-all rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs text-foreground">
-                  {monitor.body_template}
+                  {monitor.bodyTemplate}
                 </pre>
               </div>
             ) : null}
