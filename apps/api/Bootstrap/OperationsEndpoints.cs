@@ -240,12 +240,16 @@ public static class OperationsEndpoints
         CancellationToken ct)
     {
         var snapshot = await LoadSnapshot(projectsDb, null, monitoringDb, ct);
-        var routes = await proxyDb.Routes.AsNoTracking()
-            .OrderBy(r => r.Hostname.Value)
-            .ThenBy(r => r.PathPrefix)
-            .Select(r => new RouteRow(r.Id.ToString(), r.Hostname.Value, r.PathPrefix, r.BackendUrl, r.TlsEnabled))
+        // Hostname es un value object (value-converted): ordenar/proyectar .Value no se traduce a SQL.
+        // Materializamos las entidades y proyectamos + ordenamos en memoria (el set de rutas es chico).
+        var routeEntities = await proxyDb.Routes.AsNoTracking()
             .ToListAsync(ct)
             .ConfigureAwait(false);
+        var routes = routeEntities
+            .Select(r => new RouteRow(r.Id.ToString(), r.Hostname.Value, r.PathPrefix, r.BackendUrl, r.TlsEnabled))
+            .OrderBy(r => r.hostname, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.pathPrefix, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         var groups = routes
             .GroupBy(r => r.hostname, StringComparer.OrdinalIgnoreCase)
