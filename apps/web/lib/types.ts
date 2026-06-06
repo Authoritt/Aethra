@@ -1191,3 +1191,133 @@ export interface ScheduledJobRunDto {
   stderr: string | null;
   durationMs: number | null;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Operations read models                                                     */
+/* -------------------------------------------------------------------------- */
+
+export interface AppOverviewDto {
+  id: string;
+  name: string;
+  slug: string;
+  gitRepoUrl: string;
+  defaultBranch: string;
+  portfolioId: string;
+  portfolioName: string;
+  portfolioSlug: string;
+  tenantCount: number;
+  environments: string[];
+  appEnvironmentCount: number;
+  status: string;
+  latestReleaseId: string | null;
+  latestReleaseAt: string | null;
+  issueCount: number;
+}
+
+export interface AppEnvironmentOverviewDto {
+  id: string;
+  slug: string;
+  appId: string;
+  appName: string;
+  appSlug: string;
+  portfolioId: string | null;
+  portfolioName: string;
+  portfolioSlug: string;
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  environment: string;
+  machineId: string;
+  machineName: string;
+  machineStatus: string;
+  publicUrl: string | null;
+  trackedRef: string | null;
+  latestReleaseId: string | null;
+  latestReleaseStatus: string | null;
+  latestReleaseAt: string | null;
+  monitorId: string | null;
+  monitorStatus: string | null;
+  healthStatus: string;
+  issueCount: number;
+  isEphemeral: boolean;
+}
+
+export interface ReleaseTargetDto {
+  deploymentId: string;
+  appEnvironmentId: string;
+  appEnvironmentSlug: string;
+  tenantId: string | null;
+  tenantName: string;
+  environment: string;
+  status: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+}
+
+export interface ReleaseOverviewDto {
+  id: string;
+  buildId: string;
+  appId: string | null;
+  appName: string;
+  appSlug: string;
+  portfolioId: string | null;
+  portfolioName: string;
+  gitSha: string;
+  shortSha: string;
+  gitRef: string;
+  trigger: string;
+  triggeredBy: string | null;
+  status: string;
+  buildStatus: string;
+  targetCount: number;
+  completedCount: number;
+  failedCount: number;
+  activeCount: number;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  imageRef: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  targets: ReleaseTargetDto[];
+}
+
+export interface PublicEndpointRouteDto {
+  routeId: string;
+  pathPrefix: string;
+  backendUrl: string;
+}
+
+export interface PublicEndpointOverviewDto {
+  hostname: string;
+  url: string;
+  appEnvironmentId: string | null;
+  appEnvironmentSlug: string | null;
+  appId: string | null;
+  appName: string | null;
+  tenantId: string | null;
+  tenantName: string | null;
+  environment: string | null;
+  machineId: string | null;
+  ownerStatus: string;
+  healthStatus: string;
+  tlsEnabled: boolean;
+  monitorId: string | null;
+  monitorStatus: string | null;
+  issues: string[];
+  routes: PublicEndpointRouteDto[];
+}
+
+export interface OperationalIssueDto {
+  id: string;
+  code: string;
+  severity: string;
+  title: string;
+  resourceType: string;
+  resourceId: string;
+  appEnvironmentId: string | null;
+  appName: string | null;
+  tenantName: string | null;
+  environment: string | null;
+  lastSeenAt: string | null;
+}

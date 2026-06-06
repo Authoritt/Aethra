@@ -261,6 +261,7 @@ app.MapHealthEndpoints();
 app.MapAuthEndpoints();
 app.MapContextEndpoints();
 app.MapNativeDeployEndpoints();
+app.MapOperationsEndpoints();
 app.MapProjectsModuleEndpoints();
 app.MapVmsModuleEndpoints();
 app.MapMetricsModuleEndpoints();
