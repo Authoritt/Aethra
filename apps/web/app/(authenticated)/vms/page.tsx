@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ExternalLink, Plus, Server } from "lucide-react";
+import { ExternalLink, Plus, Server, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/layout/page-header";
 import { KpiCard } from "@/components/aethra/kpi-card";
 import { serverFetch } from "@/lib/server-fetch";
@@ -12,8 +14,20 @@ import type { MachineOverviewDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function VmsPage() {
-  const data = await serverFetch<MachineOverviewDto[]>("/api/ops/machines");
+interface MachineFilters {
+  q?: string;
+  readiness?: string;
+  acceptsPreviews?: string;
+}
+
+export default async function VmsPage({
+  searchParams,
+}: {
+  searchParams: Promise<MachineFilters>;
+}) {
+  const filters = await searchParams;
+  const query = buildQuery(filters);
+  const data = await serverFetch<MachineOverviewDto[]>(`/api/ops/machines${query}`);
   if (data === "unauthorized") {
     redirect("/login");
   }
@@ -24,6 +38,7 @@ export default async function VmsPage() {
   const offline = machines.filter((m) => m.readinessStatus === "offline").length;
   const degraded = machines.filter((m) => m.readinessStatus === "degraded").length;
   const previews = machines.reduce((sum, m) => sum + m.previewAppEnvironmentCount, 0);
+  const hasFilters = Object.values(filters).some((value) => Boolean(value));
 
   return (
     <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
@@ -39,6 +54,61 @@ export default async function VmsPage() {
           </Button>
         }
       />
+
+      <Card>
+        <CardContent className="p-4">
+          <form method="get" className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="q">Buscar</Label>
+              <Input
+                id="q"
+                name="q"
+                defaultValue={filters.q ?? ""}
+                placeholder="machine, app, tenant, environment"
+                className="w-72"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="readiness">Readiness</Label>
+              <select
+                id="readiness"
+                name="readiness"
+                defaultValue={filters.readiness ?? ""}
+                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Todas</option>
+                <option value="ready">Ready</option>
+                <option value="busy">Busy</option>
+                <option value="degraded">Degraded</option>
+                <option value="offline">Offline</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="acceptsPreviews">Preview pool</Label>
+              <select
+                id="acceptsPreviews"
+                name="acceptsPreviews"
+                defaultValue={filters.acceptsPreviews ?? ""}
+                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Todas</option>
+                <option value="true">Acepta previews</option>
+                <option value="false">No previews</option>
+              </select>
+            </div>
+            <Button type="submit">Filtrar</Button>
+            {hasFilters ? (
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/vms">
+                  <X className="mr-2 h-4 w-4" />
+                  Limpiar
+                </Link>
+              </Button>
+            ) : null}
+          </form>
+        </CardContent>
+      </Card>
 
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
@@ -219,4 +289,15 @@ function formatDate(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function buildQuery(filters: MachineFilters) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) {
+      params.set(key, value);
+    }
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }

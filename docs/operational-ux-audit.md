@@ -629,6 +629,18 @@ Estado actual de implementacion:
 - `/instances/{id}` ya actua como detalle de App Environment: conserva tabs tecnicos, pero arriba muestra salud, release actual, public access, machine e issues.
 - `/releases/{id}` ya actua como detalle operacional de Release: muestra Git/ref/SHA, artefacto, timeline, fan-out por App Environment, public access, machine, issues y enlaces tecnicos a build/deployment.
 - `/app-environments` ya soporta filtros server-side por busqueda, status, app, environment y machine.
+- `/releases` ya soporta filtros server-side por busqueda, status, app y Git ref.
+- `/public-access` ya soporta filtros server-side por busqueda, health, app y environment.
+- `GET /api/ops/public-access-states` ya expone estado deseado vs estado real de Public Access por App Environment.
+- `/instances/{id}` ya muestra checklist de Public Access con desired hostname, Route, TLS, Monitor, issues y siguiente accion.
+- `POST /api/ops/public-access-states/{appEnvironmentId}/reconcile` ya permite dry-run y reconciliacion operacional de Route/TLS/Monitor para el hostname deseado.
+- `/instances/{id}` ya permite ejecutar `Dry run` y `Reconcile` desde la tarjeta de Public Access.
+- `/public-access` ya expone `Dry run` y `Reconcile` por endpoint con owner operacional resuelto, para que una lista grande de hostnames sea accionable sin abrir pantallas tecnicas de Routes.
+- `/operational-issues` ya soporta filtros server-side por busqueda, severidad, tipo de recurso y app.
+- `/vms`/Machines ya soporta filtros server-side por busqueda, readiness y preview pool.
+- `GET /api/ops/data-services` ya existe como read model operacional de servicios gestionados y bindings por App Environment.
+- `/instances/{id}` ya muestra los Data Services consumidos por ese App Environment.
+- `/data-services` ya existe como vista operacional filtrable por busqueda, status y tipo, y `/services` queda como vista tecnica.
 - `/dashboard` ya funciona como Command Center con issues, releases, public access y machines.
 - `/projects`, `/templates`, `/clients` y `/routes` quedan como compatibilidad/configuracion tecnica, no como camino principal.
 
@@ -682,6 +694,52 @@ Estado de avance:
 - Reconciler crea/actualiza Route, DNS, Tunnel y Monitor.
 - Agregar dry-run para cambios amplios.
 - Mostrar drift entre estado deseado y estado actual.
+
+Estado de avance:
+
+- El estado deseado se declara desde App Environment mediante `customDomain` o `autoHostname`.
+- `SetCustomDomainCommand` ya emite eventos de dominio custom para Cloudflare/Proxy.
+- `PublicAccessState` muestra drift operativo para Route, TLS y Monitor.
+- `POST /api/ops/public-access-states/{appEnvironmentId}/reconcile` ya permite `dryRun` y aplica acciones reconciliables desde la unidad mental correcta.
+- El reconciler actual crea Route faltante, actualiza backend/TLS de Route existente, crea Monitor faltante y dispara check manual si el Monitor esta `Down`.
+- Si falta hostname o puerto primario, la operacion devuelve accion `blocked` en vez de asumir configuracion insegura.
+- La UI de App Environment ya muestra botones `Dry run` y `Reconcile` en Public Access.
+- La UI global de Public Access ya muestra las mismas acciones por hostname cuando el owner apunta a un App Environment.
+- Pendiente: incorporar DNS, Cloudflare Tunnel, certificados/edge TLS y verificacion real backend/public endpoint al mismo reconciler de alto nivel.
+
+Contrato actual:
+
+```text
+GET  /api/ops/public-access-states?appEnvironmentId={id}
+POST /api/ops/public-access-states/{appEnvironmentId}/reconcile
+```
+
+Payload:
+
+```json
+{ "dryRun": true }
+```
+
+Resultado:
+
+```json
+{
+  "appEnvironmentId": "inst_x",
+  "dryRun": true,
+  "applied": false,
+  "actions": [
+    {
+      "kind": "create_route",
+      "status": "planned",
+      "message": "Crear Route host -> backend.",
+      "resourceId": null,
+      "errorCode": null,
+      "errorMessage": null
+    }
+  ],
+  "state": {}
+}
+```
 
 ### Fase 6: Operacion avanzada
 

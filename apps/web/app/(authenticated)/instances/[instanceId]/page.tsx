@@ -23,16 +23,19 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { BuildStatusPill } from "@/components/aethra/build-status-pill";
 import { DeploymentStatusPill } from "@/components/aethra/deployment-status-pill";
+import { PublicAccessReconcileActions } from "@/components/aethra/PublicAccessReconcileActions";
 import { ScopedEnvVarsPanel } from "@/components/aethra/ScopedEnvVarsPanel";
 import { AutoHostnameInfo } from "@/app/_components/AutoHostnameInfo";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   AppEnvironmentOverviewDto,
   BuildSummary,
+  DataServiceOverviewDto,
   DeploymentSummary,
   InstanceDetail,
   MachineOverviewDto,
   OperationalIssueDto,
+  PublicAccessStateDto,
   PublicEndpointOverviewDto,
   ReleaseOverviewDto,
   TemplateDetail,
@@ -78,8 +81,10 @@ export default async function InstanceDetailPage({
     appEnvironmentsResult,
     releasesResult,
     publicEndpointsResult,
+    publicAccessStatesResult,
     operationalIssuesResult,
     machinesResult,
+    dataServicesResult,
   ] = await Promise.all([
     serverFetch<DeploymentSummary[]>(
       `/api/deployments/instances/${instance.id}`,
@@ -88,8 +93,10 @@ export default async function InstanceDetailPage({
     serverFetch<AppEnvironmentOverviewDto[]>("/api/ops/app-environments"),
     serverFetch<ReleaseOverviewDto[]>("/api/ops/releases"),
     serverFetch<PublicEndpointOverviewDto[]>("/api/ops/public-endpoints"),
+    serverFetch<PublicAccessStateDto[]>(`/api/ops/public-access-states?appEnvironmentId=${encodeURIComponent(instance.id)}`),
     serverFetch<OperationalIssueDto[]>("/api/ops/operational-issues"),
     serverFetch<MachineOverviewDto[]>("/api/ops/machines"),
+    serverFetch<DataServiceOverviewDto[]>(`/api/ops/data-services?appEnvironmentId=${encodeURIComponent(instance.id)}`),
   ]);
 
   const deployments = Array.isArray(deploymentsResult)
@@ -98,8 +105,10 @@ export default async function InstanceDetailPage({
   const appEnvironments = Array.isArray(appEnvironmentsResult) ? appEnvironmentsResult : [];
   const releases = Array.isArray(releasesResult) ? releasesResult : [];
   const publicEndpoints = Array.isArray(publicEndpointsResult) ? publicEndpointsResult : [];
+  const publicAccessState = Array.isArray(publicAccessStatesResult) ? publicAccessStatesResult[0] ?? null : null;
   const operationalIssues = Array.isArray(operationalIssuesResult) ? operationalIssuesResult : [];
   const machines = Array.isArray(machinesResult) ? machinesResult : [];
+  const dataServices = Array.isArray(dataServicesResult) ? dataServicesResult : [];
   const operationalEnv = appEnvironments.find((env) => env.id === instance.id) ?? null;
   const envReleases = releases.filter((release) =>
     release.targets.some((target) => target.appEnvironmentId === instance.id),
@@ -292,6 +301,61 @@ export default async function InstanceDetailPage({
         </Card>
       ) : null}
 
+      <Card className="mb-6">
+        <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle className="text-base">Data Services</CardTitle>
+            <CardDescription>
+              Servicios consumidos por este App Environment.
+            </CardDescription>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/services">Ver servicios</Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {dataServices.length === 0 ? (
+            <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+              Este App Environment no tiene data services vinculados.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {dataServices.map((service) => {
+                const binding = service.bindings.find((b) => b.appEnvironmentId === instance.id);
+                return (
+                  <Link
+                    key={service.id}
+                    href={`/services/${service.id}`}
+                    className="rounded-md border p-4 transition-colors hover:border-primary/40"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{service.name}</p>
+                        <p className="mt-1 font-mono text-xs text-muted-foreground">
+                          {service.type} / {service.version}
+                        </p>
+                      </div>
+                      <StatusBadge status={service.status} />
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <SmallStat label="Resource" value={binding?.resourceName ?? "-"} mono />
+                      <SmallStat label="Permissions" value={binding?.permissions ?? "-"} />
+                      <SmallStat label="Env prefix" value={binding?.envVarPrefix || "-"} mono />
+                      <SmallStat label="Binding" value={binding?.status ?? "-"} />
+                    </div>
+                    {service.lastBackupAt ? (
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        Last backup {formatDate(service.lastBackupAt)}
+                      </p>
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">{t("tab_overview")}</TabsTrigger>
@@ -318,6 +382,57 @@ export default async function InstanceDetailPage({
                   instanceId={instance.id}
                   initialDomain={instance.customDomain}
                 />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Public Access state</CardTitle>
+                <CardDescription>
+                  Estado deseado vs. Route, TLS y Monitor reconciliados.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {publicAccessState ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-sm">
+                          {publicAccessState.desiredHostname ?? "-"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          source {publicAccessState.desiredSource}
+                        </p>
+                      </div>
+                      <StatusBadge status={publicAccessState.healthStatus} />
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <ChecklistItem label="Route" ok={publicAccessState.routeConfigured} />
+                      <ChecklistItem label="TLS" ok={publicAccessState.tlsEnabled} />
+                      <ChecklistItem
+                        label={`Monitor${publicAccessState.monitorStatus ? ` ${publicAccessState.monitorStatus}` : ""}`}
+                        ok={publicAccessState.monitorConfigured && publicAccessState.monitorStatus !== "Down"}
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        next {publicAccessState.nextAction}
+                      </Badge>
+                      {publicAccessState.issues.map((issue) => (
+                        <Badge key={issue} variant="warning" className="font-mono text-[10px]">
+                          {issue}
+                        </Badge>
+                      ))}
+                    </div>
+                    <PublicAccessReconcileActions
+                      appEnvironmentId={instance.id}
+                      disabled={publicAccessState.nextAction === "set_hostname"}
+                    />
+                  </>
+                ) : (
+                  <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                    No hay estado de Public Access para este ambiente.
+                  </p>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -542,4 +657,38 @@ function StatusBadge({ status }: { status: string }) {
             ? "warning"
             : "outline";
   return <Badge variant={variant} className="font-mono text-[10px] uppercase">{status}</Badge>;
+}
+
+function SmallStat({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className={`mt-0.5 truncate text-foreground ${mono ? "font-mono" : ""}`} title={value}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function ChecklistItem({ label, ok }: { label: string; ok: boolean }) {
+  return (
+    <div className="rounded-md border bg-muted/20 p-3">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <Badge variant={ok ? "success" : "warning"} className="mt-2 font-mono text-[10px] uppercase">
+        {ok ? "ok" : "pending"}
+      </Badge>
+    </div>
+  );
 }

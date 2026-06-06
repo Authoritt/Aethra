@@ -50,6 +50,7 @@ const navGroups: NavGroup[] = [
       { href: "/app-environments", labelKey: "app_environments", icon: Boxes },
       { href: "/releases", labelKey: "releases", icon: Rocket },
       { href: "/public-access", labelKey: "public_access", icon: Network },
+      { href: "/data-services", labelKey: "data_services", icon: Database },
       { href: "/vms", labelKey: "machines", icon: Server },
       { href: "/operational-issues", labelKey: "operational_issues", icon: AlertTriangle },
     ],

@@ -1308,6 +1308,44 @@ export interface PublicEndpointOverviewDto {
   routes: PublicEndpointRouteDto[];
 }
 
+export interface PublicAccessStateDto {
+  appEnvironmentId: string;
+  appEnvironmentSlug: string;
+  appId: string | null;
+  appName: string | null;
+  tenantId: string | null;
+  tenantName: string | null;
+  environment: string;
+  desiredHostname: string | null;
+  desiredUrl: string | null;
+  desiredSource: string;
+  healthStatus: string;
+  nextAction: string;
+  routeConfigured: boolean;
+  tlsEnabled: boolean;
+  monitorConfigured: boolean;
+  monitorStatus: string | null;
+  routes: PublicEndpointRouteDto[];
+  issues: string[];
+}
+
+export interface PublicAccessReconcileActionDto {
+  kind: string;
+  status: "planned" | "applied" | "skipped" | "failed" | "blocked" | string;
+  message: string;
+  resourceId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+}
+
+export interface PublicAccessReconcileResultDto {
+  appEnvironmentId: string;
+  dryRun: boolean;
+  applied: boolean;
+  actions: PublicAccessReconcileActionDto[];
+  state: PublicAccessStateDto;
+}
+
 export interface MachineWorkloadDto {
   appEnvironmentId: string;
   appEnvironmentSlug: string;
@@ -1340,6 +1378,49 @@ export interface MachineOverviewDto {
   workloads: MachineWorkloadDto[];
 }
 
+export interface DataServiceBindingOverviewDto {
+  id: string;
+  appEnvironmentId: string;
+  appEnvironmentSlug: string | null;
+  appId: string | null;
+  appName: string | null;
+  portfolioId: string | null;
+  portfolioName: string | null;
+  tenantId: string | null;
+  tenantName: string | null;
+  environment: string | null;
+  resourceName: string;
+  permissions: string;
+  envVarPrefix: string;
+  hasMigrationsHook: boolean;
+  status: string;
+  createdAt: string;
+  provisionedAt: string | null;
+  revokedAt: string | null;
+  lastRotatedAt: string | null;
+}
+
+export interface DataServiceOverviewDto {
+  id: string;
+  slug: string;
+  name: string;
+  type: string;
+  version: string;
+  status: string;
+  machineId: string;
+  containerName: string;
+  exposedExternally: boolean;
+  createdAt: string;
+  updatedAt: string;
+  provisionedAt: string | null;
+  lastBackupAt: string | null;
+  lastRestoredAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  activeBindingCount: number;
+  bindings: DataServiceBindingOverviewDto[];
+}
+
 export interface OperationalIssueDto {
   id: string;
   code: string;
@@ -1348,6 +1429,7 @@ export interface OperationalIssueDto {
   resourceType: string;
   resourceId: string;
   appEnvironmentId: string | null;
+  appId: string | null;
   appName: string | null;
   tenantName: string | null;
   environment: string | null;

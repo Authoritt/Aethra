@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ExternalLink, Network } from "lucide-react";
+import { ExternalLink, Network, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -13,30 +15,133 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PublicAccessReconcileActions } from "@/components/aethra/PublicAccessReconcileActions";
 import { PageHeader } from "@/components/layout/page-header";
 import { serverFetch } from "@/lib/server-fetch";
-import type { PublicEndpointOverviewDto } from "@/lib/types";
+import type { AppOverviewDto, PublicEndpointOverviewDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function PublicAccessPage() {
-  const data = await serverFetch<PublicEndpointOverviewDto[]>("/api/ops/public-endpoints");
-  if (data === "unauthorized") redirect("/login");
+interface PublicAccessFilters {
+  q?: string;
+  health?: string;
+  appId?: string;
+  environment?: string;
+}
+
+export default async function PublicAccessPage({
+  searchParams,
+}: {
+  searchParams: Promise<PublicAccessFilters>;
+}) {
+  const filters = await searchParams;
+  const query = buildQuery(filters);
+  const [data, appsData] = await Promise.all([
+    serverFetch<PublicEndpointOverviewDto[]>(`/api/ops/public-endpoints${query}`),
+    serverFetch<AppOverviewDto[]>("/api/ops/apps"),
+  ]);
+  if (data === "unauthorized" || appsData === "unauthorized") {
+    redirect("/login");
+  }
   const endpoints = Array.isArray(data) ? data : [];
+  const apps = Array.isArray(appsData) ? appsData : [];
+  const environmentOptions = Array.from(
+    new Set([
+      "dev",
+      "staging",
+      "production",
+      ...endpoints
+        .map((endpoint) => endpoint.environment)
+        .filter((environment): environment is string => Boolean(environment)),
+    ]),
+  ).sort((a, b) => a.localeCompare(b));
+  const hasFilters = Object.values(filters).some((value) => Boolean(value));
 
   return (
     <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         title="Public Access"
-        description="Hosts públicos agrupados por owner operacional, rutas técnicas, monitor y salud."
+        description="Hosts publicos agrupados por owner operacional, rutas tecnicas, monitor y salud."
         actions={
           <Button asChild variant="outline">
-            <Link href="/routes">Routes técnicas</Link>
+            <Link href="/routes">Routes tecnicas</Link>
           </Button>
         }
       />
 
-      {data === "error" ? (
+      <Card>
+        <CardContent className="p-4">
+          <form method="get" className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="q">Buscar</Label>
+              <Input
+                id="q"
+                name="q"
+                defaultValue={filters.q ?? ""}
+                placeholder="host, app, backend, issue"
+                className="w-64"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="health">Health</Label>
+              <select
+                id="health"
+                name="health"
+                defaultValue={filters.health ?? ""}
+                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Todos</option>
+                <option value="healthy">Healthy</option>
+                <option value="degraded">Degraded</option>
+                <option value="broken">Broken</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="appId">App</Label>
+              <select
+                id="appId"
+                name="appId"
+                defaultValue={filters.appId ?? ""}
+                className="flex h-10 max-w-64 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Todas</option>
+                {apps.map((app) => (
+                  <option key={app.id} value={app.id}>
+                    {app.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="environment">Environment</Label>
+              <select
+                id="environment"
+                name="environment"
+                defaultValue={filters.environment ?? ""}
+                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Todos</option>
+                {environmentOptions.map((env) => (
+                  <option key={env} value={env}>
+                    {env}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button type="submit">Filtrar</Button>
+            {hasFilters ? (
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/public-access">
+                  <X className="mr-2 h-4 w-4" />
+                  Limpiar
+                </Link>
+              </Button>
+            ) : null}
+          </form>
+        </CardContent>
+      </Card>
+
+      {data === "error" || data === "notfound" ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
             No se pudo cargar Public Access.
@@ -45,8 +150,12 @@ export default async function PublicAccessPage() {
       ) : endpoints.length === 0 ? (
         <EmptyState
           icon={<Network className="h-6 w-6" />}
-          title="Sin endpoints públicos"
-          description="Cuando existan routes o dominios de apps aparecerán agrupados por hostname."
+          title="Sin endpoints publicos"
+          description={
+            hasFilters
+              ? "No hay endpoints que coincidan con los filtros actuales."
+              : "Cuando existan routes o dominios de apps apareceran agrupados por hostname."
+          }
         />
       ) : (
         <div className="space-y-4">
@@ -76,6 +185,22 @@ export default async function PublicAccessPage() {
                     <Badge variant="outline">{endpoint.ownerStatus}</Badge>
                     {endpoint.monitorStatus ? <Badge variant="outline">monitor {endpoint.monitorStatus}</Badge> : null}
                   </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {endpoint.appEnvironmentId ? (
+                    <>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/instances/${endpoint.appEnvironmentId}`}>
+                          App Environment
+                        </Link>
+                      </Button>
+                      <PublicAccessReconcileActions appEnvironmentId={endpoint.appEnvironmentId} />
+                    </>
+                  ) : (
+                    <Badge variant="warning" className="font-mono text-[10px]">
+                      owner_missing
+                    </Badge>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -122,4 +247,15 @@ export default async function PublicAccessPage() {
 function StatusBadge({ status }: { status: string }) {
   const variant = status === "healthy" ? "success" : status === "broken" ? "destructive" : "warning";
   return <Badge variant={variant} className="font-mono text-[10px] uppercase">{status}</Badge>;
+}
+
+function buildQuery(filters: PublicAccessFilters) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) {
+      params.set(key, value);
+    }
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }
