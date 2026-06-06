@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -13,23 +16,148 @@ import {
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
 import { serverFetch } from "@/lib/server-fetch";
-import type { AppEnvironmentOverviewDto } from "@/lib/types";
+import type {
+  AppEnvironmentOverviewDto,
+  AppOverviewDto,
+  MachineOverviewDto,
+} from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function AppEnvironmentsPage() {
-  const data = await serverFetch<AppEnvironmentOverviewDto[]>("/api/ops/app-environments");
-  if (data === "unauthorized") redirect("/login");
+interface AppEnvironmentFilters {
+  q?: string;
+  status?: string;
+  appId?: string;
+  environment?: string;
+  machineId?: string;
+}
+
+export default async function AppEnvironmentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<AppEnvironmentFilters>;
+}) {
+  const filters = await searchParams;
+  const query = buildQuery(filters);
+  const [data, appsData, machinesData] = await Promise.all([
+    serverFetch<AppEnvironmentOverviewDto[]>(`/api/ops/app-environments${query}`),
+    serverFetch<AppOverviewDto[]>("/api/ops/apps"),
+    serverFetch<MachineOverviewDto[]>("/api/ops/machines"),
+  ]);
+
+  if (
+    data === "unauthorized" ||
+    appsData === "unauthorized" ||
+    machinesData === "unauthorized"
+  ) {
+    redirect("/login");
+  }
+
   const envs = Array.isArray(data) ? data : [];
+  const apps = Array.isArray(appsData) ? appsData : [];
+  const machines = Array.isArray(machinesData) ? machinesData : [];
+  const environmentOptions = Array.from(
+    new Set(["dev", "staging", "production", ...envs.map((env) => env.environment)]),
+  ).sort((a, b) => a.localeCompare(b));
+  const hasFilters = Object.values(filters).some((value) => Boolean(value));
 
   return (
     <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         title="App Environments"
-        description="La unidad operativa real: app, tenant, ambiente, máquina, release y URL pública."
+        description="Unidad operativa: app, tenant, ambiente, machine, release y URL publica."
       />
 
-      {data === "error" ? (
+      <Card>
+        <CardContent className="p-4">
+          <form method="get" className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="q">Buscar</Label>
+              <Input
+                id="q"
+                name="q"
+                defaultValue={filters.q ?? ""}
+                placeholder="app, tenant, URL, machine"
+                className="w-64"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="status">Status</Label>
+              <select
+                id="status"
+                name="status"
+                defaultValue={filters.status ?? ""}
+                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Todos</option>
+                <option value="healthy">Healthy</option>
+                <option value="degraded">Degraded</option>
+                <option value="deploying">Deploying</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="appId">App</Label>
+              <select
+                id="appId"
+                name="appId"
+                defaultValue={filters.appId ?? ""}
+                className="flex h-10 max-w-64 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Todas</option>
+                {apps.map((app) => (
+                  <option key={app.id} value={app.id}>
+                    {app.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="environment">Environment</Label>
+              <select
+                id="environment"
+                name="environment"
+                defaultValue={filters.environment ?? ""}
+                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Todos</option>
+                {environmentOptions.map((env) => (
+                  <option key={env} value={env}>
+                    {env}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="machineId">Machine</Label>
+              <select
+                id="machineId"
+                name="machineId"
+                defaultValue={filters.machineId ?? ""}
+                className="flex h-10 max-w-64 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Todas</option>
+                {machines.map((machine) => (
+                  <option key={machine.id} value={machine.id}>
+                    {machine.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button type="submit">Filtrar</Button>
+            {hasFilters ? (
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/app-environments">
+                  <X className="mr-2 h-4 w-4" />
+                  Limpiar
+                </Link>
+              </Button>
+            ) : null}
+          </form>
+        </CardContent>
+      </Card>
+
+      {data === "error" || data === "notfound" ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
             No se pudo cargar la vista operacional.
@@ -102,6 +230,24 @@ export default async function AppEnvironmentsPage() {
 
 function StatusBadge({ status }: { status: string }) {
   const normalized = status.toLowerCase();
-  const variant = normalized === "healthy" ? "success" : normalized === "failed" ? "destructive" : normalized === "deploying" ? "warning" : "outline";
+  const variant =
+    normalized === "healthy"
+      ? "success"
+      : normalized === "failed"
+        ? "destructive"
+        : normalized === "deploying" || normalized === "degraded"
+          ? "warning"
+          : "outline";
   return <Badge variant={variant} className="font-mono text-[10px] uppercase">{status}</Badge>;
+}
+
+function buildQuery(filters: AppEnvironmentFilters) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) {
+      params.set(key, value);
+    }
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }

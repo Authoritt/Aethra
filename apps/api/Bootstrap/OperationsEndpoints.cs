@@ -4,6 +4,8 @@ using Aethra.Modules.Monitoring.Infrastructure;
 using Aethra.Modules.Projects.Infrastructure;
 using Aethra.Modules.Proxy.Infrastructure;
 using Aethra.Modules.Vms.Infrastructure;
+using Aethra.Shared.Kernel.Ids;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,9 +34,17 @@ public static class OperationsEndpoints
             .RequireAuthorization("scope:deployments:read")
             .WithName("ListOperationalReleases");
 
+        group.MapGet("/releases/{releaseId}", GetRelease)
+            .RequireAuthorization("scope:deployments:read")
+            .WithName("GetOperationalRelease");
+
         group.MapGet("/public-endpoints", ListPublicEndpoints)
             .RequireAuthorization("scope:proxy:read")
             .WithName("ListOperationalPublicEndpoints");
+
+        group.MapGet("/machines", ListMachines)
+            .RequireAuthorization("scope:vms:read")
+            .WithName("ListOperationalMachines");
 
         group.MapGet("/operational-issues", ListOperationalIssues)
             .RequireAuthorization("scope:projects:read")
@@ -91,6 +101,11 @@ public static class OperationsEndpoints
     }
 
     private static async Task<IResult> ListAppEnvironments(
+        [FromQuery] string? q,
+        [FromQuery] string? status,
+        [FromQuery] string? appId,
+        [FromQuery] string? environment,
+        [FromQuery] string? machineId,
         ProjectsDbContext projectsDb,
         DeploymentsDbContext deploymentsDb,
         MonitoringDbContext monitoringDb,
@@ -101,6 +116,7 @@ public static class OperationsEndpoints
         var vms = await LoadVms(vmsDb, ct);
         var rows = snapshot.Instances
             .Select(i => ToAppEnvironment(i, snapshot, vms))
+            .Where(r => MatchesAppEnvironmentFilters(r, q, status, appId, environment, machineId))
             .OrderBy(r => r.AppName)
             .ThenBy(r => r.TenantName)
             .ThenBy(r => r.Environment)
@@ -110,8 +126,33 @@ public static class OperationsEndpoints
     }
 
     private static async Task<IResult> ListReleases(
+        [FromQuery] string? q,
+        [FromQuery] string? status,
+        [FromQuery] string? appId,
+        [FromQuery] string? gitRef,
         ProjectsDbContext projectsDb,
         DeploymentsDbContext deploymentsDb,
+        CancellationToken ct)
+    {
+        var releases = await LoadReleases(projectsDb, deploymentsDb, releaseId: null, take: 100, ct);
+        return Results.Ok(releases.Where(r => MatchesReleaseFilters(r, q, status, appId, gitRef)).ToList());
+    }
+
+    private static async Task<IResult> GetRelease(
+        string releaseId,
+        ProjectsDbContext projectsDb,
+        DeploymentsDbContext deploymentsDb,
+        CancellationToken ct)
+    {
+        var releases = await LoadReleases(projectsDb, deploymentsDb, releaseId, take: null, ct);
+        return releases.Count == 0 ? Results.NotFound() : Results.Ok(releases[0]);
+    }
+
+    private static async Task<List<ReleaseOverviewDto>> LoadReleases(
+        ProjectsDbContext projectsDb,
+        DeploymentsDbContext deploymentsDb,
+        string? releaseId,
+        int? take,
         CancellationToken ct)
     {
         var projects = await LoadProjects(projectsDb, ct);
@@ -119,9 +160,25 @@ public static class OperationsEndpoints
         var instances = await LoadInstances(projectsDb, ct);
         var clients = await LoadClients(projectsDb, ct);
 
-        var builds = await deploymentsDb.Builds.AsNoTracking()
-            .OrderByDescending(b => b.CreatedAt)
-            .Take(100)
+        var buildsQuery = deploymentsDb.Builds.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(releaseId))
+        {
+            if (!AethraId.TryParse(releaseId, out var parsed) || parsed.Value.Prefix != "bld")
+            {
+                return [];
+            }
+
+            var typed = new BuildId(parsed.Value);
+            buildsQuery = buildsQuery.Where(b => b.Id == typed);
+        }
+
+        buildsQuery = buildsQuery.OrderByDescending(b => b.CreatedAt);
+        if (take is not null)
+        {
+            buildsQuery = buildsQuery.Take(take.Value);
+        }
+
+        var builds = await buildsQuery
             .Select(b => new
             {
                 id = b.Id.ToString(),
@@ -230,7 +287,7 @@ public static class OperationsEndpoints
                 affected);
         }).ToList();
 
-        return Results.Ok(releases);
+        return releases;
     }
 
     private static async Task<IResult> ListPublicEndpoints(
@@ -262,6 +319,74 @@ public static class OperationsEndpoints
             .ToList();
 
         return Results.Ok(groups);
+    }
+
+    private static async Task<IResult> ListMachines(
+        ProjectsDbContext projectsDb,
+        DeploymentsDbContext deploymentsDb,
+        MonitoringDbContext monitoringDb,
+        VmsDbContext vmsDb,
+        CancellationToken ct)
+    {
+        var snapshot = await LoadSnapshot(projectsDb, deploymentsDb, monitoringDb, ct);
+        var vms = await LoadVms(vmsDb, ct);
+
+        var workloadsByVm = snapshot.Instances
+            .GroupBy(i => i.targetVmId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+        var machines = vms.Values
+            .Select(vm =>
+            {
+                var workloads = workloadsByVm.GetValueOrDefault(vm.id) ?? [];
+                var workloadDtos = workloads
+                    .Select(i =>
+                    {
+                        var env = ToAppEnvironment(i, snapshot, vms);
+                        return new MachineWorkloadDto(
+                            env.Id,
+                            env.Slug,
+                            env.AppId,
+                            env.AppName,
+                            env.TenantId,
+                            env.TenantName,
+                            env.Environment,
+                            env.HealthStatus,
+                            env.LatestReleaseStatus,
+                            env.PublicUrl,
+                            env.IssueCount,
+                            env.IsEphemeral);
+                    })
+                    .OrderBy(w => w.AppName)
+                    .ThenBy(w => w.TenantName)
+                    .ThenBy(w => w.Environment)
+                    .ToList();
+                var failing = workloadDtos.Count(w => w.HealthStatus is "failed" or "degraded");
+                var deploying = workloadDtos.Count(w => w.HealthStatus == "deploying");
+                var preview = workloadDtos.Count(w => w.IsEphemeral);
+                var readiness = ResolveMachineReadiness(vm.status, failing, deploying);
+
+                return new MachineOverviewDto(
+                    vm.id,
+                    vm.name,
+                    vm.slug,
+                    vm.status,
+                    readiness,
+                    workloadDtos.Count,
+                    failing,
+                    deploying,
+                    preview,
+                    vm.acceptsPreviews,
+                    vm.lastConnectedAt,
+                    vm.lastSeenAt,
+                    vm.updatedAt,
+                    workloadDtos);
+            })
+            .OrderBy(m => ReadinessRank(m.ReadinessStatus))
+            .ThenBy(m => m.Name)
+            .ToList();
+
+        return Results.Ok(machines);
     }
 
     private static async Task<IResult> ListOperationalIssues(
@@ -484,7 +609,15 @@ public static class OperationsEndpoints
 
     private static async Task<Dictionary<string, VmRow>> LoadVms(VmsDbContext db, CancellationToken ct)
         => await db.Vms.AsNoTracking()
-            .Select(v => new VmRow(v.Id.ToString(), v.Name, v.Slug.Value, v.Status.ToString(), v.UpdatedAt))
+            .Select(v => new VmRow(
+                v.Id.ToString(),
+                v.Name,
+                v.Slug.Value,
+                v.Status.ToString(),
+                v.AcceptsPreviews,
+                v.LastConnectedAt,
+                v.LastSeenAt,
+                v.UpdatedAt))
             .ToDictionaryAsync(v => v.id, StringComparer.Ordinal, ct)
             .ConfigureAwait(false);
 
@@ -554,6 +687,78 @@ public static class OperationsEndpoints
             status,
             issues,
             i.isEphemeral);
+    }
+
+    private static bool MatchesAppEnvironmentFilters(
+        AppEnvironmentOverviewDto row,
+        string? q,
+        string? status,
+        string? appId,
+        string? environment,
+        string? machineId)
+    {
+        if (!string.IsNullOrWhiteSpace(appId) && !string.Equals(row.AppId, appId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(environment) && !string.Equals(row.Environment, environment, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(machineId) && !string.Equals(row.MachineId, machineId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(status) && !string.Equals(row.HealthStatus, status, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(q))
+        {
+            return true;
+        }
+
+        return Contains(row.Slug, q)
+            || Contains(row.AppName, q)
+            || Contains(row.TenantName, q)
+            || Contains(row.Environment, q)
+            || Contains(row.MachineName, q)
+            || Contains(row.PublicUrl, q)
+            || Contains(row.TrackedRef, q);
+    }
+
+    private static bool MatchesReleaseFilters(
+        ReleaseOverviewDto row,
+        string? q,
+        string? status,
+        string? appId,
+        string? gitRef)
+    {
+        if (!string.IsNullOrWhiteSpace(appId) && !string.Equals(row.AppId, appId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(status) && !string.Equals(row.Status, status, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(gitRef) && !Contains(row.GitRef, gitRef))
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(q))
+        {
+            return true;
+        }
+
+        return Contains(row.AppName, q)
+            || Contains(row.PortfolioName, q)
+            || Contains(row.GitRef, q)
+            || Contains(row.GitSha, q)
+            || Contains(row.ShortSha, q)
+            || Contains(row.Trigger, q)
+            || Contains(row.TriggeredBy, q)
+            || row.Targets.Any(t => Contains(t.TenantName, q) || Contains(t.Environment, q) || Contains(t.AppEnvironmentSlug, q));
     }
 
     private static EndpointOwnerDto? ResolveEndpointOwner(string hostname, IReadOnlyList<RouteRow> routes, OpsSnapshot snapshot)
@@ -640,12 +845,46 @@ public static class OperationsEndpoints
     private static string? TryGetHost(string url)
         => Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : null;
 
+    private static bool Contains(string? value, string query)
+        => value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+
     private static int SeverityRank(string severity)
         => severity switch
         {
             "critical" => 3,
             "warning" => 2,
             _ => 1,
+        };
+
+    private static string ResolveMachineReadiness(string status, int failingWorkloads, int deployingWorkloads)
+    {
+        if (status.Equals("Disconnected", StringComparison.OrdinalIgnoreCase))
+        {
+            return "offline";
+        }
+        if (failingWorkloads > 0)
+        {
+            return "degraded";
+        }
+        if (deployingWorkloads > 0)
+        {
+            return "busy";
+        }
+        if (status.Equals("Connected", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ready";
+        }
+        return "unknown";
+    }
+
+    private static int ReadinessRank(string readiness)
+        => readiness switch
+        {
+            "offline" => 0,
+            "degraded" => 1,
+            "unknown" => 2,
+            "busy" => 3,
+            _ => 4,
         };
 
     private sealed record OpsSnapshot(
@@ -666,7 +905,7 @@ public static class OperationsEndpoints
     }
     private sealed record DeploymentRow(string id, string buildId, string instanceId, string status, DateTimeOffset createdAt, DateTimeOffset? startedAt, DateTimeOffset? finishedAt, string newImageRef, string? errorCode, string? errorMessage);
     private sealed record MonitorRow(string id, string name, string url, string? instanceId, string? projectId, bool enabled, string status, DateTimeOffset? lastCheckedAt);
-    private sealed record VmRow(string id, string name, string slug, string status, DateTimeOffset updatedAt);
+    private sealed record VmRow(string id, string name, string slug, string status, bool acceptsPreviews, DateTimeOffset? lastConnectedAt, DateTimeOffset? lastSeenAt, DateTimeOffset updatedAt);
     private sealed record RouteRow(string id, string hostname, string pathPrefix, string backendUrl, bool tlsEnabled);
     private sealed record EndpointOwnerDto(string instanceId, string instanceSlug, string? appId, string? appName, string? tenantId, string? tenantName, string environment, string machineId);
 
@@ -772,6 +1011,36 @@ public static class OperationsEndpoints
         IReadOnlyList<PublicEndpointRouteDto> Routes);
 
     public sealed record PublicEndpointRouteDto(string RouteId, string PathPrefix, string BackendUrl);
+
+    public sealed record MachineOverviewDto(
+        string Id,
+        string Name,
+        string Slug,
+        string Status,
+        string ReadinessStatus,
+        int AppEnvironmentCount,
+        int FailingAppEnvironmentCount,
+        int DeployingAppEnvironmentCount,
+        int PreviewAppEnvironmentCount,
+        bool AcceptsPreviews,
+        DateTimeOffset? LastConnectedAt,
+        DateTimeOffset? LastSeenAt,
+        DateTimeOffset UpdatedAt,
+        IReadOnlyList<MachineWorkloadDto> Workloads);
+
+    public sealed record MachineWorkloadDto(
+        string AppEnvironmentId,
+        string AppEnvironmentSlug,
+        string AppId,
+        string AppName,
+        string TenantId,
+        string TenantName,
+        string Environment,
+        string HealthStatus,
+        string? LatestReleaseStatus,
+        string? PublicUrl,
+        int IssueCount,
+        bool IsEphemeral);
 
     public sealed record OperationalIssueDto(
         string Id,

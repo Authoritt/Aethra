@@ -580,12 +580,13 @@ No todos los conceptos deben nacer como entidades transaccionales. La primera fa
 Endpoints recomendados:
 
 ```text
-GET /api/apps
-GET /api/app-environments
-GET /api/releases
-GET /api/public-endpoints
-GET /api/machines
-GET /api/operational-issues
+GET /api/ops/apps
+GET /api/ops/app-environments
+GET /api/ops/releases
+GET /api/ops/releases/{releaseId}
+GET /api/ops/public-endpoints
+GET /api/ops/machines
+GET /api/ops/operational-issues
 ```
 
 Compatibilidad:
@@ -600,7 +601,7 @@ Read models:
 - `AppEnvironmentOverview`.
 - `ReleaseOverview`.
 - `PublicEndpointOverview`.
-- `MachineCapabilitySnapshot`.
+- `MachineOverview`.
 - `OperationalIssue`.
 
 Campos minimos de `AppEnvironmentOverview`:
@@ -619,6 +620,17 @@ Campos minimos de `AppEnvironmentOverview`:
 - `healthStatus`.
 
 ## Fases de implementacion recomendadas
+
+Estado actual de implementacion:
+
+- `GET /api/ops/apps`, `/api/ops/app-environments`, `/api/ops/releases`, `/api/ops/public-endpoints`, `/api/ops/machines` y `/api/ops/operational-issues` existen como read models host-level.
+- `/apps` ya es la entrada operacional para aplicaciones, con detalle y matriz Tenant x Environment cuando el volumen lo permite.
+- `/app-environments`, `/releases`, `/public-access`, `/operational-issues` y `/vms` ya consumen la capa operacional.
+- `/instances/{id}` ya actua como detalle de App Environment: conserva tabs tecnicos, pero arriba muestra salud, release actual, public access, machine e issues.
+- `/releases/{id}` ya actua como detalle operacional de Release: muestra Git/ref/SHA, artefacto, timeline, fan-out por App Environment, public access, machine, issues y enlaces tecnicos a build/deployment.
+- `/app-environments` ya soporta filtros server-side por busqueda, status, app, environment y machine.
+- `/dashboard` ya funciona como Command Center con issues, releases, public access y machines.
+- `/projects`, `/templates`, `/clients` y `/routes` quedan como compatibilidad/configuracion tecnica, no como camino principal.
 
 ### Fase 1: Reencuadre sin romper modelo
 
@@ -649,9 +661,17 @@ Campos minimos de `AppEnvironmentOverview`:
 - Mostrar timeline por commit/push/manual trigger.
 - Agregar retry failed, rollback y redeploy selected.
 
+Estado de avance:
+
+- `ReleaseOverview` existe en `/api/ops/releases`.
+- `/releases` lista releases como unidad build + deploy fan-out.
+- `/releases/{id}` muestra detalle operacional y mantiene links a `/builds/{id}` y `/deployments/{id}` como soporte tecnico.
+- `/releases/{id}` permite `Retry`/`Redeploy` por App Environment reutilizando `POST /api/deployments/builds/{buildId}/instances/{instanceId}/trigger`.
+- Pendiente: rollback manual como comando explicito. El rollback actual existe como mecanismo automatico del orquestador cuando un deployment falla, no como accion de operador.
+
 ### Fase 4: Machines y readiness
 
-- Crear `MachineCapabilitySnapshot`.
+- Crear `MachineOverview` y evolucionarlo luego a `MachineCapabilitySnapshot` si se necesita capacidad historica o calculos de scheduling.
 - Mostrar readiness en Machines y App Environment.
 - Bloquear o advertir deploys cuando la maquina no este lista.
 - Crear issues de VM/satelite/runtime.
@@ -688,6 +708,7 @@ Campos minimos de `AppEnvironmentOverview`:
 - Releases como build + deploy + verificacion.
 - Machine readiness.
 - Public endpoint verification.
+- Filtros server-side para listas operacionales de alto volumen.
 
 ### P2
 

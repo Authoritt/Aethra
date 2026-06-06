@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { ExternalLink } from "lucide-react";
+import { AlertTriangle, ExternalLink, GitBranch, MonitorCheck, Network, Rocket, Server } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,9 +27,14 @@ import { ScopedEnvVarsPanel } from "@/components/aethra/ScopedEnvVarsPanel";
 import { AutoHostnameInfo } from "@/app/_components/AutoHostnameInfo";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
+  AppEnvironmentOverviewDto,
   BuildSummary,
   DeploymentSummary,
   InstanceDetail,
+  MachineOverviewDto,
+  OperationalIssueDto,
+  PublicEndpointOverviewDto,
+  ReleaseOverviewDto,
   TemplateDetail,
 } from "@/lib/types";
 import { AutoDeployToggle } from "./AutoDeployToggle";
@@ -67,16 +72,42 @@ export default async function InstanceDetailPage({
   }
   const instance = instanceResult;
 
-  const [deploymentsResult, templateResult] = await Promise.all([
+  const [
+    deploymentsResult,
+    templateResult,
+    appEnvironmentsResult,
+    releasesResult,
+    publicEndpointsResult,
+    operationalIssuesResult,
+    machinesResult,
+  ] = await Promise.all([
     serverFetch<DeploymentSummary[]>(
       `/api/deployments/instances/${instance.id}`,
     ),
     serverFetch<TemplateDetail>(`/api/templates/${instance.templateId}`),
+    serverFetch<AppEnvironmentOverviewDto[]>("/api/ops/app-environments"),
+    serverFetch<ReleaseOverviewDto[]>("/api/ops/releases"),
+    serverFetch<PublicEndpointOverviewDto[]>("/api/ops/public-endpoints"),
+    serverFetch<OperationalIssueDto[]>("/api/ops/operational-issues"),
+    serverFetch<MachineOverviewDto[]>("/api/ops/machines"),
   ]);
 
   const deployments = Array.isArray(deploymentsResult)
     ? deploymentsResult.slice(0, 10)
     : [];
+  const appEnvironments = Array.isArray(appEnvironmentsResult) ? appEnvironmentsResult : [];
+  const releases = Array.isArray(releasesResult) ? releasesResult : [];
+  const publicEndpoints = Array.isArray(publicEndpointsResult) ? publicEndpointsResult : [];
+  const operationalIssues = Array.isArray(operationalIssuesResult) ? operationalIssuesResult : [];
+  const machines = Array.isArray(machinesResult) ? machinesResult : [];
+  const operationalEnv = appEnvironments.find((env) => env.id === instance.id) ?? null;
+  const envReleases = releases.filter((release) =>
+    release.targets.some((target) => target.appEnvironmentId === instance.id),
+  );
+  const currentRelease = envReleases[0] ?? null;
+  const envEndpoints = publicEndpoints.filter((endpoint) => endpoint.appEnvironmentId === instance.id);
+  const envIssues = operationalIssues.filter((issue) => issue.appEnvironmentId === instance.id);
+  const machine = machines.find((m) => m.id === instance.targetVmId) ?? null;
 
   let buildsResult:
     | Awaited<ReturnType<typeof serverFetch<BuildSummary[]>>>
@@ -102,19 +133,26 @@ export default async function InstanceDetailPage({
       ? templateResult
       : null;
   const hasServices = (template?.services?.length ?? 0) > 0;
+  const pageTitle = operationalEnv
+    ? `${operationalEnv.appName} / ${operationalEnv.tenantName} / ${operationalEnv.environment}`
+    : instance.slug;
 
   return (
     <div className="px-6 py-8 md:px-10 md:py-10">
       <PageHeader
         breadcrumbs={[
-          { label: tBreadcrumbs("templates"), href: `/templates/${instance.templateId}` },
-          { label: tBreadcrumbs("clients"), href: `/clients/${instance.clientId}` },
-          { label: instance.slug },
+          operationalEnv
+            ? { label: "Apps", href: "/apps" }
+            : { label: tBreadcrumbs("templates"), href: `/templates/${instance.templateId}` },
+          operationalEnv
+            ? { label: operationalEnv.appName, href: `/apps/${operationalEnv.appId}` }
+            : { label: tBreadcrumbs("clients"), href: `/clients/${instance.clientId}` },
+          { label: "App Environment" },
         ]}
-        title={instance.slug}
+        title={pageTitle}
         description={
           <>
-            {t("container_label", { name: "" })}
+            App Environment operativo. {t("container_label", { name: "" })}
             <span className="font-mono">{instance.containerName}</span>
           </>
         }
@@ -150,6 +188,109 @@ export default async function InstanceDetailPage({
           </Badge>
         ) : null}
       </div>
+
+      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-4">
+        <Card>
+          <CardContent className="space-y-3 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Health
+              </p>
+              <MonitorCheck className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <StatusBadge status={operationalEnv?.healthStatus ?? "unknown"} />
+            <p className="text-xs text-muted-foreground">
+              {envIssues.length === 0 ? "Sin issues operacionales activos." : `${envIssues.length} issue(s) requieren atencion.`}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="space-y-3 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Current release
+              </p>
+              <Rocket className="h-4 w-4 text-muted-foreground" />
+            </div>
+            {currentRelease ? (
+              <>
+                <Link href={`/releases/${currentRelease.id}`} className="block font-mono text-sm font-medium hover:text-primary">
+                  {currentRelease.shortSha || currentRelease.buildId.slice(0, 8)}
+                </Link>
+                <p className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                  <GitBranch className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{currentRelease.gitRef}</span>
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Sin release asociado.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="space-y-3 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Public access
+              </p>
+              <Network className="h-4 w-4 text-muted-foreground" />
+            </div>
+            {envEndpoints.length > 0 ? (
+              <div className="space-y-2">
+                {envEndpoints.slice(0, 2).map((endpoint) => (
+                  <div key={endpoint.hostname} className="flex items-center justify-between gap-2">
+                    <Link href={endpoint.url} target="_blank" className="min-w-0 truncate text-sm font-medium hover:text-primary">
+                      {endpoint.hostname}
+                    </Link>
+                    <StatusBadge status={endpoint.healthStatus} />
+                  </div>
+                ))}
+              </div>
+            ) : openUrl ? (
+              <Link href={openUrl} target="_blank" className="block truncate text-sm font-medium hover:text-primary">
+                {effectiveHost}
+              </Link>
+            ) : (
+              <p className="text-sm text-muted-foreground">Sin URL publica.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="space-y-3 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Machine
+              </p>
+              <Server className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <Link href={`/vms/${instance.targetVmId}`} className="block truncate text-sm font-medium hover:text-primary">
+              {machine?.name ?? operationalEnv?.machineName ?? instance.targetVmId}
+            </Link>
+            <StatusBadge status={machine?.readinessStatus ?? operationalEnv?.machineStatus ?? "unknown"} />
+          </CardContent>
+        </Card>
+      </section>
+
+      {envIssues.length > 0 ? (
+        <Card className="mb-6 border-warning/40 bg-warning/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="h-4 w-4" />
+              Operational issues
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {envIssues.map((issue) => (
+              <Badge key={issue.id} variant={issue.severity === "critical" ? "destructive" : "warning"} className="font-mono text-[10px]">
+                {issue.code}
+              </Badge>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Tabs defaultValue="overview">
         <TabsList>
@@ -386,4 +527,19 @@ function formatDate(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const normalized = status.toLowerCase();
+  const variant =
+    normalized === "healthy" || normalized === "ready" || normalized === "completed" || normalized === "connected"
+      ? "success"
+      : normalized === "failed" || normalized === "broken" || normalized === "offline" || normalized === "disconnected"
+        ? "destructive"
+        : normalized === "active" || normalized === "busy"
+          ? "info"
+          : normalized === "degraded" || normalized === "deploying" || normalized === "warning"
+            ? "warning"
+            : "outline";
+  return <Badge variant={variant} className="font-mono text-[10px] uppercase">{status}</Badge>;
 }

@@ -1,54 +1,40 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getTranslations } from "next-intl/server";
-import { Plus, Server } from "lucide-react";
+import { ExternalLink, Plus, Server } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
-import { VmStatusPill } from "@/components/aethra/vm-status-pill";
-import { API_URL } from "@/lib/api";
-import type { VmDto } from "@/lib/types";
+import { KpiCard } from "@/components/aethra/kpi-card";
+import { serverFetch } from "@/lib/server-fetch";
+import type { MachineOverviewDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-async function fetchVms(): Promise<VmDto[] | "unauthorized" | "error"> {
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ");
-  const res = await fetch(`${API_URL}/api/vms/`, {
-    headers: { cookie: cookieHeader },
-    cache: "no-store",
-  });
-  if (res.status === 401) return "unauthorized";
-  if (!res.ok) return "error";
-  return (await res.json()) as VmDto[];
-}
-
 export default async function VmsPage() {
-  const t = await getTranslations("pages.vms_list");
-  const tCommon = await getTranslations("common");
-  const data = await fetchVms();
+  const data = await serverFetch<MachineOverviewDto[]>("/api/ops/machines");
   if (data === "unauthorized") {
     redirect("/login");
   }
 
-  const errored = data === "error";
-  const vms = Array.isArray(data) ? data : [];
+  const errored = data === "error" || data === "notfound";
+  const machines = Array.isArray(data) ? data : [];
+  const ready = machines.filter((m) => m.readinessStatus === "ready").length;
+  const offline = machines.filter((m) => m.readinessStatus === "offline").length;
+  const degraded = machines.filter((m) => m.readinessStatus === "degraded").length;
+  const previews = machines.reduce((sum, m) => sum + m.previewAppEnvironmentCount, 0);
 
   return (
-    <div className="px-6 py-8 md:px-10 md:py-10">
+    <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title={t("title")}
-        description={t("description")}
+        title="Machines"
+        description="Capacidad real de despliegue: cada maquina muestra sus app environments, previews, salud y disponibilidad."
         actions={
           <Button asChild>
             <Link href="/vms/new">
               <Plus className="mr-2 h-4 w-4" />
-              {t("register_vm")}
+              Registrar machine
             </Link>
           </Button>
         }
@@ -57,101 +43,180 @@ export default async function VmsPage() {
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            {tCommon("load_error")}
+            No se pudo cargar la vista operacional de machines.
           </CardContent>
         </Card>
-      ) : vms.length === 0 ? (
+      ) : machines.length === 0 ? (
         <EmptyState
           icon={<Server className="h-6 w-6" />}
-          title={t("empty_title")}
-          description={t("empty_description")}
+          title="No hay machines"
+          description="Registra la primera maquina para poder desplegar app environments."
           action={
             <Button asChild>
               <Link href="/vms/new">
                 <Plus className="mr-2 h-4 w-4" />
-                {t("register_vm")}
+                Registrar machine
               </Link>
             </Button>
           }
         />
       ) : (
-        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {vms.map((vm) => (
-            <li key={vm.id}>
-              <Link href={`/vms/${vm.id}`} className="group block h-full">
-                <Card className="h-full transition-colors group-hover:border-primary/40">
-                  <CardContent className="space-y-3 p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="truncate text-base font-semibold text-foreground">
-                        {vm.name}
-                      </h3>
-                      <VmStatusPill status={vm.status} />
-                    </div>
-                    <p className="font-mono text-xs text-muted-foreground">
-                      {vm.slug}
-                    </p>
-                    {vm.description ? (
-                      <p className="line-clamp-2 text-sm text-muted-foreground">
-                        {vm.description}
-                      </p>
-                    ) : null}
+        <>
+          <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <KpiCard
+              label="Ready"
+              value={ready}
+              tone={ready > 0 ? "success" : "default"}
+              icon={<Server className="h-4 w-4" />}
+            />
+            <KpiCard
+              label="Degraded"
+              value={degraded}
+              tone={degraded > 0 ? "warning" : "success"}
+              icon={<Server className="h-4 w-4" />}
+            />
+            <KpiCard
+              label="Offline"
+              value={offline}
+              tone={offline > 0 ? "destructive" : "success"}
+              icon={<Server className="h-4 w-4" />}
+            />
+            <KpiCard
+              label="Preview app envs"
+              value={previews}
+              tone={previews > 0 ? "info" : "default"}
+              icon={<Server className="h-4 w-4" />}
+            />
+          </section>
 
-                    <dl className="grid grid-cols-2 gap-2 pt-2 text-xs">
-                      <Stat
-                        label={t("label_publicIp")}
-                        value={vm.publicIp ?? "—"}
-                        mono
-                      />
-                      <Stat
-                        label={t("label_cpu")}
-                        value={vm.cpuCores ? `${vm.cpuCores} cores` : "—"}
-                      />
-                      <Stat
-                        label={t("label_ram")}
-                        value={formatGb(vm.totalMemoryBytes)}
-                      />
-                      <Stat
-                        label={t("label_agent")}
-                        value={vm.agentVersion ?? "—"}
-                        mono
-                      />
-                    </dl>
+          <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {machines.map((machine) => (
+              <li key={machine.id}>
+                <Card className="h-full">
+                  <CardContent className="space-y-4 p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/vms/${machine.id}`}
+                          className="truncate text-base font-semibold text-foreground hover:text-primary"
+                        >
+                          {machine.name}
+                        </Link>
+                        <p className="mt-1 font-mono text-xs text-muted-foreground">
+                          {machine.slug}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <ReadinessBadge status={machine.readinessStatus} />
+                        <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
+                          {machine.status}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                      <Stat label="App envs" value={machine.appEnvironmentCount.toString()} />
+                      <Stat label="Issues" value={machine.failingAppEnvironmentCount.toString()} />
+                      <Stat label="Deploying" value={machine.deployingAppEnvironmentCount.toString()} />
+                      <Stat label="Previews" value={machine.previewAppEnvironmentCount.toString()} />
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant={machine.acceptsPreviews ? "info" : "outline"}>
+                        {machine.acceptsPreviews ? "Preview pool" : "No previews"}
+                      </Badge>
+                      <Badge variant="outline">Last seen {formatDate(machine.lastSeenAt ?? machine.updatedAt)}</Badge>
+                    </div>
+
+                    {machine.workloads.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Workloads
+                        </p>
+                        <div className="space-y-2">
+                          {machine.workloads.slice(0, 5).map((workload) => (
+                            <div
+                              key={workload.appEnvironmentId}
+                              className="flex items-center justify-between gap-3 rounded-md border p-3"
+                            >
+                              <div className="min-w-0">
+                                <Link
+                                  href={`/instances/${workload.appEnvironmentId}`}
+                                  className="block truncate text-sm font-medium hover:text-primary"
+                                >
+                                  {workload.appName}
+                                </Link>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {workload.tenantName} / {workload.environment}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2">
+                                {workload.publicUrl ? (
+                                  <Link href={workload.publicUrl} target="_blank" className="text-primary">
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </Link>
+                                ) : null}
+                                <ReadinessBadge status={workload.healthStatus} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {machine.workloads.length > 5 ? (
+                          <p className="text-xs text-muted-foreground">
+                            +{machine.workloads.length - 5} app environments mas
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                        Sin app environments asignados.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
-              </Link>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );
 }
 
-function Stat({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+    <div className="rounded-md border bg-muted/20 p-3">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
-      </dt>
-      <dd
-        className={`mt-0.5 truncate text-foreground ${mono ? "font-mono" : ""}`}
-        title={value}
-      >
+      </p>
+      <p className="mt-1 text-lg font-semibold tabular-nums text-foreground">
         {value}
-      </dd>
+      </p>
     </div>
   );
 }
 
-function formatGb(bytes: number | null) {
-  if (!bytes) return "—";
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+function ReadinessBadge({ status }: { status: string }) {
+  const normalized = status.toLowerCase();
+  const variant =
+    normalized === "ready" || normalized === "healthy"
+      ? "success"
+      : normalized === "offline" || normalized === "failed"
+        ? "destructive"
+        : normalized === "busy" || normalized === "deploying"
+          ? "info"
+          : normalized === "degraded"
+            ? "warning"
+            : "outline";
+  return <Badge variant={variant} className="font-mono text-[10px] uppercase">{status}</Badge>;
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("es-CO", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }

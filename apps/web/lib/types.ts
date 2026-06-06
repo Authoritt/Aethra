@@ -1308,6 +1308,38 @@ export interface PublicEndpointOverviewDto {
   routes: PublicEndpointRouteDto[];
 }
 
+export interface MachineWorkloadDto {
+  appEnvironmentId: string;
+  appEnvironmentSlug: string;
+  appId: string;
+  appName: string;
+  tenantId: string;
+  tenantName: string;
+  environment: string;
+  healthStatus: string;
+  latestReleaseStatus: string | null;
+  publicUrl: string | null;
+  issueCount: number;
+  isEphemeral: boolean;
+}
+
+export interface MachineOverviewDto {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  readinessStatus: string;
+  appEnvironmentCount: number;
+  failingAppEnvironmentCount: number;
+  deployingAppEnvironmentCount: number;
+  previewAppEnvironmentCount: number;
+  acceptsPreviews: boolean;
+  lastConnectedAt: string | null;
+  lastSeenAt: string | null;
+  updatedAt: string;
+  workloads: MachineWorkloadDto[];
+}
+
 export interface OperationalIssueDto {
   id: string;
   code: string;
