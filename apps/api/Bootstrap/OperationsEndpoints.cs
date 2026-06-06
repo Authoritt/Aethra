@@ -1638,6 +1638,16 @@ public static class OperationsEndpoints
     private sealed record EndpointOwnerDto(string instanceId, string instanceSlug, string? appId, string? appName, string? tenantId, string? tenantName, string environment, string machineId);
     private sealed record AppliedResource(string? resourceId, string? errorCode, string? errorMessage);
 
+    // Snapshot de la infra pública (Cloudflare) usado por el reconcile de Public Access.
+    private sealed record DnsRecordRow(
+        string id, string zoneId, string zoneName, string type, string name,
+        string content, bool proxied, bool synced, string? lastError);
+    private sealed record PublicAccessInfraSnapshot(
+        string? TunnelCname,
+        IReadOnlyList<CloudflareZoneDto> Zones,
+        IReadOnlyList<DnsRecordRow> DnsRecords,
+        CloudflareTunnelDto? Tunnel);
+
     public sealed record AppOverviewDto(
         string Id,
         string Name,
@@ -1733,6 +1743,11 @@ public static class OperationsEndpoints
         string? MachineId,
         string OwnerStatus,
         string HealthStatus,
+        bool DnsConfigured,
+        string? DnsTarget,
+        string? ExpectedDnsTarget,
+        bool TunnelConfigured,
+        string? TunnelName,
         bool TlsEnabled,
         string? MonitorId,
         string? MonitorStatus,
@@ -1754,6 +1769,11 @@ public static class OperationsEndpoints
         string DesiredSource,
         string HealthStatus,
         string NextAction,
+        bool DnsConfigured,
+        string? DnsTarget,
+        string? ExpectedDnsTarget,
+        bool TunnelConfigured,
+        string? TunnelName,
         bool RouteConfigured,
         bool TlsEnabled,
         bool MonitorConfigured,
