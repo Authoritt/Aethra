@@ -154,21 +154,28 @@ export default async function Dashboard() {
               topIssues.map((issue) => (
                 <Link
                   key={issue.id}
-                  href={issue.appEnvironmentId ? `/instances/${issue.appEnvironmentId}` : "/operational-issues"}
-                  className="flex items-start justify-between gap-4 rounded-md border p-3 transition-colors hover:border-primary/40"
+                  href={issue.suggestedHref ?? "/operational-issues"}
+                  className="block rounded-md border p-3 transition-colors hover:border-primary/40"
                 >
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <SeverityBadge severity={issue.severity} />
-                      <span className="truncate text-sm font-medium">{issue.title}</span>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <SeverityBadge severity={issue.severity} />
+                        <span className="truncate text-sm font-medium">{issue.title}</span>
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {[issue.appName, issue.tenantName, issue.environment].filter(Boolean).join(" / ") || issue.resourceType}
+                      </p>
                     </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {[issue.appName, issue.tenantName, issue.environment].filter(Boolean).join(" / ") || issue.resourceType}
-                    </p>
+                    <span className="shrink-0 font-mono text-[10px] uppercase text-muted-foreground">
+                      {issue.code}
+                    </span>
                   </div>
-                  <span className="shrink-0 font-mono text-[10px] uppercase text-muted-foreground">
-                    {issue.code}
-                  </span>
+                  <div className="mt-3 flex justify-end">
+                    <Badge variant="outline" className="text-[10px]">
+                      {issue.suggestedAction}
+                    </Badge>
+                  </div>
                 </Link>
               ))
             )}
