@@ -1,5 +1,6 @@
 using Aethra.Modules.Deployments.Infrastructure;
 using Aethra.Modules.Deployments.Domain.Build;
+using Aethra.Modules.Deployments.Domain.Deployment;
 using Aethra.Modules.Cloudflare.Application.Dtos;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Queries;
@@ -165,6 +166,7 @@ public static class OperationsEndpoints
     private static async Task<IResult> GetAppEnvironmentEffectiveConfig(
         string appEnvironmentId,
         ProjectsDbContext projectsDb,
+        DeploymentsDbContext deploymentsDb,
         CancellationToken ct)
     {
         var projects = await LoadProjects(projectsDb, ct);
@@ -183,6 +185,12 @@ public static class OperationsEndpoints
         var scopes = BuildConfigScopes(project, template, client, instance);
         var scopeTypes = scopes.Select(s => s.ScopeType).Distinct().ToList();
         var scopeIds = scopes.Select(s => s.ScopeId).Distinct(StringComparer.Ordinal).ToList();
+        var lastDeployedAt = await deploymentsDb.Deployments.AsNoTracking()
+            .Where(d => d.InstanceId == instance.id && d.Status == DeploymentStatus.Completed)
+            .OrderByDescending(d => d.FinishedAt ?? d.CreatedAt)
+            .Select(d => d.FinishedAt ?? d.CreatedAt)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
 
         var envVars = await projectsDb.EnvironmentVariables.AsNoTracking()
             .Where(v => scopeTypes.Contains(v.ScopeType) && scopeIds.Contains(v.ScopeId))
@@ -242,6 +250,8 @@ public static class OperationsEndpoints
                     winner.HasValue,
                     winner.IsBuildTime,
                     winner.IsRuntime,
+                    winner.UpdatedAt,
+                    lastDeployedAt != default && winner.UpdatedAt > lastDeployedAt,
                     winner.ScopeType,
                     winner.ScopeId,
                     scopeLabels.GetValueOrDefault((winner.ScopeType, winner.ScopeId)) ?? winner.ScopeId,
@@ -263,6 +273,8 @@ public static class OperationsEndpoints
             client?.id ?? instance.clientId,
             client?.displayName ?? instance.clientSlug,
             instance.environment,
+            lastDeployedAt == default ? null : lastDeployedAt,
+            items.Count(i => i.ChangedSinceLastDeploy),
             scopes.Select(s => new EffectiveConfigScopeDto(s.ScopeType.ToString(), s.ScopeId, s.Label, s.Rank)).ToList(),
             items));
     }
@@ -1130,6 +1142,7 @@ public static class OperationsEndpoints
             var project = app is null ? null : snapshot.Projects.GetValueOrDefault(app.projectId);
             var client = snapshot.Clients.GetValueOrDefault(env.clientId);
             var latestDeployment = snapshot.DeploymentsByInstance.GetValueOrDefault(env.id);
+            var latestSuccessfulDeployment = snapshot.SuccessfulDeploymentsByInstance.GetValueOrDefault(env.id);
             var monitor = snapshot.MonitorsByInstance.GetValueOrDefault(env.id);
             var vm = vms.GetValueOrDefault(env.targetVmId);
 
@@ -1166,6 +1179,32 @@ public static class OperationsEndpoints
                     env.environment,
                     env.updatedAt,
                     "Review effective config",
+                    $"/instances/{env.id}"));
+            }
+
+            var changedConfig = FindEffectiveConfigChangedAfterDeploy(
+                project,
+                app,
+                client,
+                env,
+                configRows,
+                latestSuccessfulDeployment?.finishedAt ?? latestSuccessfulDeployment?.createdAt);
+            if (changedConfig.Count > 0)
+            {
+                issues.Add(new OperationalIssueDto(
+                    $"{env.id}:config.changed_since_last_deploy",
+                    "config.changed_since_last_deploy",
+                    "warning",
+                    $"{changedConfig.Count} config key(s) changed after last successful deploy",
+                    "AppEnvironment",
+                    env.id,
+                    env.id,
+                    app?.id,
+                    app?.name,
+                    client?.displayName,
+                    env.environment,
+                    changedConfig.Max(c => c.UpdatedAt),
+                    "Redeploy or review config",
                     $"/instances/{env.id}"));
             }
         }
@@ -1296,6 +1335,34 @@ public static class OperationsEndpoints
         return effectiveEnvKeys
             .Intersect(effectiveSecretKeys, StringComparer.Ordinal)
             .Order(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<OperationalConfigRow> FindEffectiveConfigChangedAfterDeploy(
+        ProjectRow? project,
+        TemplateRow? template,
+        ClientRow? client,
+        InstanceRow instance,
+        IReadOnlyList<OperationalConfigRow> configRows,
+        DateTimeOffset? lastDeployedAt)
+    {
+        if (lastDeployedAt is null)
+        {
+            return [];
+        }
+
+        var scopes = BuildConfigScopes(project, template, client, instance);
+        var scopeRank = scopes.ToDictionary(s => (s.ScopeType, s.ScopeId), s => s.Rank);
+        var scopeIds = scopes.Select(s => s.ScopeId).ToHashSet(StringComparer.Ordinal);
+
+        return configRows
+            .Where(row => scopeIds.Contains(row.ScopeId))
+            .GroupBy(row => $"{row.Kind}\u001f{row.Key}", StringComparer.Ordinal)
+            .Select(group => group
+                .OrderByDescending(row => scopeRank.GetValueOrDefault((row.ScopeType, row.ScopeId)))
+                .ThenByDescending(row => row.UpdatedAt)
+                .First())
+            .Where(row => row.UpdatedAt > lastDeployedAt.Value)
             .ToList();
     }
 
@@ -1503,6 +1570,7 @@ public static class OperationsEndpoints
             .ConfigureAwait(false);
 
         var deploymentsByInstance = new Dictionary<string, DeploymentRow>(StringComparer.Ordinal);
+        var successfulDeploymentsByInstance = new Dictionary<string, DeploymentRow>(StringComparer.Ordinal);
         if (deploymentsDb is not null)
         {
             var deployments = await deploymentsDb.Deployments.AsNoTracking()
@@ -1523,6 +1591,13 @@ public static class OperationsEndpoints
             deploymentsByInstance = deployments
                 .GroupBy(d => d.instanceId, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.createdAt).First(), StringComparer.Ordinal);
+            successfulDeploymentsByInstance = deployments
+                .Where(d => d.status == DeploymentStatus.Completed.ToString())
+                .GroupBy(d => d.instanceId, StringComparer.Ordinal)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderByDescending(x => x.finishedAt ?? x.createdAt).First(),
+                    StringComparer.Ordinal);
         }
 
         return new OpsSnapshot(
@@ -1531,6 +1606,7 @@ public static class OperationsEndpoints
             clients,
             instances.Values.ToList(),
             deploymentsByInstance,
+            successfulDeploymentsByInstance,
             monitors
                 .Where(m => !string.IsNullOrWhiteSpace(m.instanceId))
                 .GroupBy(m => m.instanceId!, StringComparer.Ordinal)
@@ -1942,6 +2018,7 @@ public static class OperationsEndpoints
             "monitor.down" => "Check monitor and endpoint",
             "machine.disconnected" => "Check machine",
             "config.key_type_conflict" => "Review effective config",
+            "config.changed_since_last_deploy" => "Redeploy or review config",
             _ => "Open App Environment",
         };
 
@@ -2202,6 +2279,7 @@ public static class OperationsEndpoints
         IReadOnlyDictionary<string, ClientRow> Clients,
         IReadOnlyList<InstanceRow> Instances,
         IReadOnlyDictionary<string, DeploymentRow> DeploymentsByInstance,
+        IReadOnlyDictionary<string, DeploymentRow> SuccessfulDeploymentsByInstance,
         IReadOnlyDictionary<string, MonitorRow> MonitorsByInstance,
         IReadOnlyDictionary<string, MonitorRow> MonitorsByUrlHost);
 
@@ -2302,6 +2380,8 @@ public static class OperationsEndpoints
         string TenantId,
         string TenantName,
         string Environment,
+        DateTimeOffset? LastDeployedAt,
+        int DriftCount,
         IReadOnlyList<EffectiveConfigScopeDto> Scopes,
         IReadOnlyList<EffectiveConfigItemDto> Items);
 
@@ -2318,6 +2398,8 @@ public static class OperationsEndpoints
         bool HasValue,
         bool IsBuildTime,
         bool IsRuntime,
+        DateTimeOffset UpdatedAt,
+        bool ChangedSinceLastDeploy,
         string WinningScopeType,
         string WinningScopeId,
         string WinningScopeLabel,

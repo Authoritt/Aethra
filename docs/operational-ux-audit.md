@@ -485,8 +485,9 @@ Estado de avance:
 - `GET /api/ops/data-services` ya muestra servicios gestionados y consumidores por App Environment.
 - `/instances/{id}` ya muestra los Data Services consumidos por ese App Environment.
 - `GET /api/ops/app-environments/{appEnvironmentId}/effective-config` ya resuelve la precedencia `Instance > Client > Template > Project`.
-- La pestaña Config de `/instances/{id}` ya muestra un inspector efectivo con variables, secretos enmascarados, scope ganador, uso build/runtime y overrides ocultos.
-- Pendiente: comparar config contra ultimo release, detectar secretos rotados sin redeploy y promover acciones como redeploy/restart desde el inspector.
+- La pestaña Config de `/instances/{id}` ya muestra un inspector efectivo con variables, secretos enmascarados, scope ganador, uso build/runtime, overrides ocultos y drift frente al ultimo deploy exitoso.
+- `/operational-issues` ya genera `config.changed_since_last_deploy` cuando config efectiva cambio despues del ultimo deploy exitoso.
+- Pendiente: detectar rotacion semantica de secretos por binding, diferenciar redeploy vs restart y promover acciones directas desde el inspector.
 
 ## Operational Issues
 
@@ -504,7 +505,7 @@ Ejemplos:
 - `release.build_failed`: build fallo.
 - `release.deploy_failed`: deploy fallo.
 - `config.key_type_conflict`: la misma key gana como variable y como secreto en un App Environment.
-- `config.secret_changed_not_redeployed`: secret cambio pero ambiente no fue redeployado.
+- `config.changed_since_last_deploy`: variable o secreto efectivo cambio pero el ambiente no se ha redeployado con esa config.
 - `preview.expired`: preview debe limpiarse.
 
 Cada issue debe tener:
@@ -649,6 +650,7 @@ Estado actual de implementacion:
 - `/operational-issues` ya soporta filtros server-side por busqueda, severidad, tipo de recurso y app.
 - `/operational-issues` ya muestra accion sugerida y destino operacional por issue, para saltar a App Environment, Build o Public Access sin interpretar codigos tecnicos.
 - `/operational-issues` ya genera `config.key_type_conflict` cuando una key efectiva existe como env var y secret en el mismo App Environment.
+- `/operational-issues` ya genera `config.changed_since_last_deploy` cuando variables o secretos efectivos cambiaron despues del ultimo deployment exitoso.
 - `/vms`/Machines ya soporta filtros server-side por busqueda, readiness y preview pool.
 - `GET /api/ops/data-services` ya existe como read model operacional de servicios gestionados y bindings por App Environment.
 - `/instances/{id}` ya muestra los Data Services consumidos por ese App Environment.
@@ -770,7 +772,7 @@ Resultado:
 ### Fase 6: Operacion avanzada
 
 - Data Services con consumidores y backups.
-- Config & Secrets inspector con drift frente al ultimo release.
+- Config & Secrets inspector con drift frente al ultimo deploy exitoso.
 - Search global.
 - Command palette.
 - MCP de alto nivel.

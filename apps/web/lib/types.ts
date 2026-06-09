@@ -1252,6 +1252,8 @@ export interface AppEnvironmentEffectiveConfigDto {
   tenantId: string;
   tenantName: string;
   environment: string;
+  lastDeployedAt: string | null;
+  driftCount: number;
   scopes: EffectiveConfigScopeDto[];
   items: EffectiveConfigItemDto[];
 }
@@ -1270,6 +1272,8 @@ export interface EffectiveConfigItemDto {
   hasValue: boolean;
   isBuildTime: boolean;
   isRuntime: boolean;
+  updatedAt: string;
+  changedSinceLastDeploy: boolean;
   winningScopeType: string;
   winningScopeId: string;
   winningScopeLabel: string;

@@ -45,10 +45,22 @@ export function EffectiveConfigPanel({
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{envCount} vars</Badge>
             <Badge variant="outline">{secretCount} secrets</Badge>
+            {config.driftCount > 0 ? (
+              <Badge variant="warning">{config.driftCount} drift</Badge>
+            ) : (
+              <Badge variant="success">sin drift</Badge>
+            )}
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          Ultimo deploy exitoso:{" "}
+          <span className="font-mono text-foreground">
+            {config.lastDeployedAt ? formatDate(config.lastDeployedAt) : "sin deploy exitoso"}
+          </span>
+        </div>
+
         <div className="flex flex-wrap gap-2">
           {config.scopes
             .slice()
@@ -74,6 +86,7 @@ export function EffectiveConfigPanel({
                 <TableHead>Valor</TableHead>
                 <TableHead>Gana</TableHead>
                 <TableHead>Uso</TableHead>
+                <TableHead>Drift</TableHead>
                 <TableHead>Overrides</TableHead>
               </TableRow>
             </TableHeader>
@@ -95,6 +108,13 @@ export function EffectiveConfigPanel({
                       {item.isBuildTime ? <Badge variant="outline">build</Badge> : null}
                       {item.isRuntime ? <Badge variant="outline">runtime</Badge> : null}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {item.changedSinceLastDeploy ? (
+                      <Badge variant="warning">requiere redeploy</Badge>
+                    ) : (
+                      <Badge variant="outline">ok</Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {item.overriddenCount > 0
@@ -119,4 +139,11 @@ function renderValue(item: EffectiveConfigItemDto) {
     return item.hasValue ? "********" : "sin valor";
   }
   return item.value ?? "";
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("es-CO", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
