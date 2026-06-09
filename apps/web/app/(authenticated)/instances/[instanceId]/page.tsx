@@ -388,7 +388,7 @@ export default async function InstanceDetailPage({
               <CardHeader>
                 <CardTitle className="text-base">Public Access state</CardTitle>
                 <CardDescription>
-                  Estado deseado vs. Route, TLS y Monitor reconciliados.
+                  Estado deseado vs. DNS, Tunnel, Route, TLS y Monitor.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -405,12 +405,29 @@ export default async function InstanceDetailPage({
                       </div>
                       <StatusBadge status={publicAccessState.healthStatus} />
                     </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-5">
+                      <ChecklistItem label="DNS" ok={publicAccessState.dnsConfigured} />
+                      <ChecklistItem
+                        label={`Tunnel${publicAccessState.tunnelName ? ` ${publicAccessState.tunnelName}` : ""}`}
+                        ok={publicAccessState.tunnelConfigured}
+                      />
                       <ChecklistItem label="Route" ok={publicAccessState.routeConfigured} />
                       <ChecklistItem label="TLS" ok={publicAccessState.tlsEnabled} />
                       <ChecklistItem
                         label={`Monitor${publicAccessState.monitorStatus ? ` ${publicAccessState.monitorStatus}` : ""}`}
                         ok={publicAccessState.monitorConfigured && publicAccessState.monitorStatus !== "Down"}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                      <SmallStat
+                        label="DNS target"
+                        value={publicAccessState.dnsTarget ?? "-"}
+                        mono
+                      />
+                      <SmallStat
+                        label="Expected target"
+                        value={publicAccessState.expectedDnsTarget ?? "-"}
+                        mono
                       />
                     </div>
                     <div className="flex flex-wrap gap-2">

@@ -630,10 +630,10 @@ Estado actual de implementacion:
 - `/releases/{id}` ya actua como detalle operacional de Release: muestra Git/ref/SHA, artefacto, timeline, fan-out por App Environment, public access, machine, issues y enlaces tecnicos a build/deployment.
 - `/app-environments` ya soporta filtros server-side por busqueda, status, app, environment y machine.
 - `/releases` ya soporta filtros server-side por busqueda, status, app y Git ref.
-- `/public-access` ya soporta filtros server-side por busqueda, health, app y environment.
+- `/public-access` ya soporta filtros server-side por busqueda, health, app, environment, DNS, Tunnel y Monitor.
 - `GET /api/ops/public-access-states` ya expone estado deseado vs estado real de Public Access por App Environment.
-- `/instances/{id}` ya muestra checklist de Public Access con desired hostname, Route, TLS, Monitor, issues y siguiente accion.
-- `POST /api/ops/public-access-states/{appEnvironmentId}/reconcile` ya permite dry-run y reconciliacion operacional de Route/TLS/Monitor para el hostname deseado.
+- `/instances/{id}` ya muestra checklist de Public Access con desired hostname, DNS, Tunnel, Route, TLS, Monitor, issues y siguiente accion.
+- `POST /api/ops/public-access-states/{appEnvironmentId}/reconcile` ya permite dry-run y reconciliacion operacional de DNS, Tunnel, Route/TLS y Monitor para el hostname deseado.
 - `/instances/{id}` ya permite ejecutar `Dry run` y `Reconcile` desde la tarjeta de Public Access.
 - `/public-access` ya expone `Dry run` y `Reconcile` por endpoint con owner operacional resuelto, para que una lista grande de hostnames sea accionable sin abrir pantallas tecnicas de Routes.
 - `/operational-issues` ya soporta filtros server-side por busqueda, severidad, tipo de recurso y app.
@@ -699,13 +699,15 @@ Estado de avance:
 
 - El estado deseado se declara desde App Environment mediante `customDomain` o `autoHostname`.
 - `SetCustomDomainCommand` ya emite eventos de dominio custom para Cloudflare/Proxy.
-- `PublicAccessState` muestra drift operativo para Route, TLS y Monitor.
+- `PublicAccessState` muestra drift operativo para DNS, Tunnel, Route, TLS y Monitor.
 - `POST /api/ops/public-access-states/{appEnvironmentId}/reconcile` ya permite `dryRun` y aplica acciones reconciliables desde la unidad mental correcta.
+- El reconciler actual crea o repara CNAME proxied hacia `NativeDeploy:TunnelCname` cuando hay zona Cloudflare registrada.
+- El reconciler actual asegura ingress en Cloudflare Tunnel remoto mediante `EnsureTunnelHostnameCommand` cuando hay tunnel gestionado registrado.
 - El reconciler actual crea Route faltante, actualiza backend/TLS de Route existente, crea Monitor faltante y dispara check manual si el Monitor esta `Down`.
-- Si falta hostname o puerto primario, la operacion devuelve accion `blocked` en vez de asumir configuracion insegura.
-- La UI de App Environment ya muestra botones `Dry run` y `Reconcile` en Public Access.
-- La UI global de Public Access ya muestra las mismas acciones por hostname cuando el owner apunta a un App Environment.
-- Pendiente: incorporar DNS, Cloudflare Tunnel, certificados/edge TLS y verificacion real backend/public endpoint al mismo reconciler de alto nivel.
+- Si falta hostname, zona DNS, tunnel gestionado, CNAME esperado o puerto primario, la operacion devuelve accion `blocked` para ese tramo en vez de asumir configuracion insegura.
+- La UI de App Environment ya muestra botones `Dry run` y `Reconcile` en Public Access, con checks DNS/Tunnel/Route/TLS/Monitor.
+- La UI global de Public Access ya muestra las mismas acciones por hostname cuando el owner apunta a un App Environment, ademas de DNS target, target esperado y tunnel.
+- Pendiente: incorporar certificados/edge TLS, verificacion real backend/public endpoint y metadata de owner/origen persistida al mismo reconciler de alto nivel.
 
 Contrato actual:
 

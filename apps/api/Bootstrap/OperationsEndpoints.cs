@@ -320,6 +320,9 @@ public static class OperationsEndpoints
         [FromQuery] string? health,
         [FromQuery] string? appId,
         [FromQuery] string? environment,
+        [FromQuery] string? dns,
+        [FromQuery] string? tunnel,
+        [FromQuery] string? monitor,
         ProjectsDbContext projectsDb,
         ProxyDbContext proxyDb,
         MonitoringDbContext monitoringDb,
@@ -346,7 +349,7 @@ public static class OperationsEndpoints
             {
                 return BuildPublicEndpoint(g.Key, g.ToList(), snapshot, publicInfra);
             })
-            .Where(e => MatchesPublicEndpointFilters(e, q, health, appId, environment))
+            .Where(e => MatchesPublicEndpointFilters(e, q, health, appId, environment, dns, tunnel, monitor))
             .OrderBy(e => e.HealthStatus == "healthy")
             .ThenBy(e => e.Hostname)
             .ToList();
@@ -419,7 +422,120 @@ public static class OperationsEndpoints
             return Results.Ok(new PublicAccessReconcileResultDto(appEnvironmentId, dryRun, false, actions, state));
         }
 
+        var dnsRecord = FindDnsRecord(desiredHostname, publicInfra);
+        var zone = FindZoneForHostname(desiredHostname, publicInfra);
+        if (zone is null)
+        {
+            actions.Add(new PublicAccessReconcileActionDto(
+                "register_dns_zone",
+                "blocked",
+                $"No hay zona Cloudflare registrada que cubra {desiredHostname}.",
+                null,
+                "cloudflare.zone_missing",
+                "Registra la zona en Settings/Domains o Cloudflare antes de crear DNS."));
+        }
+        else if (string.IsNullOrWhiteSpace(publicInfra.TunnelCname))
+        {
+            actions.Add(new PublicAccessReconcileActionDto(
+                "configure_dns_target",
+                "blocked",
+                "NativeDeploy:TunnelCname no esta configurado; no se conoce el target CNAME esperado.",
+                null,
+                "cloudflare.tunnel_cname_missing",
+                "Configura NativeDeploy:TunnelCname para que Aethra pueda crear o reparar DNS."));
+        }
+        else if (dnsRecord is null)
+        {
+            await ApplyAction(
+                actions,
+                dryRun,
+                "create_dns_record",
+                $"Crear CNAME proxied {desiredHostname} -> {publicInfra.TunnelCname}.",
+                async () =>
+                {
+                    var result = await mediator.Send(new CreateDnsRecordCommand(
+                        ZoneId: zone.Id,
+                        Type: "CNAME",
+                        Name: desiredHostname,
+                        Content: publicInfra.TunnelCname,
+                        Ttl: 1,
+                        Proxied: true,
+                        Comment: "aethra operational public-access reconcile"), ct).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? new AppliedResource(result.Value.Id, null, null)
+                        : new AppliedResource(null, result.Error.Code, result.Error.Message);
+                });
+        }
+        else if (!string.Equals(dnsRecord.content, publicInfra.TunnelCname, StringComparison.OrdinalIgnoreCase) || !dnsRecord.proxied)
+        {
+            await ApplyAction(
+                actions,
+                dryRun,
+                "update_dns_record",
+                $"Actualizar DNS {dnsRecord.id} para apuntar a {publicInfra.TunnelCname} con proxy activo.",
+                async () =>
+                {
+                    var result = await mediator.Send(new UpdateDnsRecordCommand(
+                        RecordId: dnsRecord.id,
+                        Content: publicInfra.TunnelCname,
+                        Ttl: 1,
+                        Proxied: true,
+                        Comment: "aethra operational public-access reconcile"), ct).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? new AppliedResource(result.Value.Id, null, null)
+                        : new AppliedResource(null, result.Error.Code, result.Error.Message);
+                });
+        }
+        else
+        {
+            actions.Add(new PublicAccessReconcileActionDto(
+                "dns",
+                "skipped",
+                "El DNS ya existe y apunta al CNAME esperado.",
+                dnsRecord.id,
+                null,
+                null));
+        }
+
+        if (publicInfra.Tunnel is null)
+        {
+            actions.Add(new PublicAccessReconcileActionDto(
+                "register_tunnel",
+                "blocked",
+                "No hay Cloudflare Tunnel gestionado registrado.",
+                null,
+                "cloudflare.tunnel_missing",
+                "Registra o promueve un tunnel remoto antes de asegurar ingress."));
+        }
+        else if (!HasTunnelIngress(desiredHostname, publicInfra))
+        {
+            await ApplyAction(
+                actions,
+                dryRun,
+                "ensure_tunnel_ingress",
+                $"Asegurar ingress del tunnel para {desiredHostname}.",
+                async () =>
+                {
+                    var result = await mediator.Send(new EnsureTunnelHostnameCommand(desiredHostname), ct).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? new AppliedResource(publicInfra.Tunnel.Id, null, null)
+                        : new AppliedResource(null, result.Error.Code, result.Error.Message);
+                });
+        }
+        else
+        {
+            actions.Add(new PublicAccessReconcileActionDto(
+                "tunnel",
+                "skipped",
+                "El tunnel ya tiene ingress para el hostname.",
+                publicInfra.Tunnel.Id,
+                null,
+                null));
+        }
+
         var backendUrl = BuildBackendUrl(instance);
+        var existingRoutes = routesByHost.GetValueOrDefault(desiredHostname) ?? [];
+        var mainRoute = existingRoutes.FirstOrDefault(r => r.pathPrefix == "/") ?? existingRoutes.FirstOrDefault();
         if (backendUrl is null)
         {
             actions.Add(new PublicAccessReconcileActionDto(
@@ -427,14 +543,10 @@ public static class OperationsEndpoints
                 "blocked",
                 "El App Environment no tiene puerto primario; no se puede construir el backend URL de la Route.",
                 null,
-                null,
-                null));
-            return Results.Ok(new PublicAccessReconcileResultDto(appEnvironmentId, dryRun, false, actions, state));
+                "app_environment.primary_port_missing",
+                "Configura al menos un puerto del contenedor para que Aethra pueda crear la Route."));
         }
-
-        var existingRoutes = routesByHost.GetValueOrDefault(desiredHostname) ?? [];
-        var mainRoute = existingRoutes.FirstOrDefault(r => r.pathPrefix == "/") ?? existingRoutes.FirstOrDefault();
-        if (mainRoute is null)
+        else if (mainRoute is null)
         {
             await ApplyAction(
                 actions,
@@ -882,7 +994,7 @@ public static class OperationsEndpoints
     {
         var tunnelCname = configuration["NativeDeploy:TunnelCname"];
         var zonesResult = await mediator.Send(new ListZonesQuery(), ct).ConfigureAwait(false);
-        var zones = zonesResult.IsSuccess ? zonesResult.Value : [];
+        IReadOnlyList<CloudflareZoneDto> zones = zonesResult.IsSuccess ? zonesResult.Value : [];
         var dnsRecords = new List<DnsRecordRow>();
 
         foreach (var zone in zones)
@@ -1420,7 +1532,10 @@ public static class OperationsEndpoints
         string? q,
         string? health,
         string? appId,
-        string? environment)
+        string? environment,
+        string? dns,
+        string? tunnel,
+        string? monitor)
     {
         if (!string.IsNullOrWhiteSpace(health) && !string.Equals(row.HealthStatus, health, StringComparison.OrdinalIgnoreCase))
         {
@@ -1434,6 +1549,18 @@ public static class OperationsEndpoints
         {
             return false;
         }
+        if (!MatchesDnsFilter(row, dns))
+        {
+            return false;
+        }
+        if (!MatchesTunnelFilter(row, tunnel))
+        {
+            return false;
+        }
+        if (!MatchesMonitorFilter(row, monitor))
+        {
+            return false;
+        }
         if (string.IsNullOrWhiteSpace(q))
         {
             return true;
@@ -1443,9 +1570,29 @@ public static class OperationsEndpoints
             || Contains(row.AppName, q)
             || Contains(row.TenantName, q)
             || Contains(row.Environment, q)
+            || Contains(row.DnsTarget, q)
+            || Contains(row.ExpectedDnsTarget, q)
+            || Contains(row.TunnelName, q)
             || row.Issues.Any(issue => Contains(issue, q))
             || row.Routes.Any(route => Contains(route.PathPrefix, q) || Contains(route.BackendUrl, q));
     }
+
+    private static bool MatchesDnsFilter(PublicEndpointOverviewDto row, string? dns)
+        => string.IsNullOrWhiteSpace(dns)
+            || dns.Equals("ok", StringComparison.OrdinalIgnoreCase) && row.DnsConfigured && (row.ExpectedDnsTarget is null || string.Equals(row.DnsTarget, row.ExpectedDnsTarget, StringComparison.OrdinalIgnoreCase))
+            || dns.Equals("missing", StringComparison.OrdinalIgnoreCase) && !row.DnsConfigured
+            || dns.Equals("wrong", StringComparison.OrdinalIgnoreCase) && row.DnsConfigured && row.ExpectedDnsTarget is not null && !string.Equals(row.DnsTarget, row.ExpectedDnsTarget, StringComparison.OrdinalIgnoreCase);
+
+    private static bool MatchesTunnelFilter(PublicEndpointOverviewDto row, string? tunnel)
+        => string.IsNullOrWhiteSpace(tunnel)
+            || tunnel.Equals("ok", StringComparison.OrdinalIgnoreCase) && row.TunnelConfigured
+            || tunnel.Equals("missing", StringComparison.OrdinalIgnoreCase) && !row.TunnelConfigured;
+
+    private static bool MatchesMonitorFilter(PublicEndpointOverviewDto row, string? monitor)
+        => string.IsNullOrWhiteSpace(monitor)
+            || monitor.Equals("missing", StringComparison.OrdinalIgnoreCase) && row.MonitorId is null
+            || monitor.Equals("down", StringComparison.OrdinalIgnoreCase) && string.Equals(row.MonitorStatus, "Down", StringComparison.OrdinalIgnoreCase)
+            || monitor.Equals("up", StringComparison.OrdinalIgnoreCase) && string.Equals(row.MonitorStatus, "Up", StringComparison.OrdinalIgnoreCase);
 
     private static OperationalIssueDto Issue(string code, string severity, string title, string envId, string? appId, string? appName, string? tenantName, string env, DateTimeOffset? seenAt)
         => new($"{envId}:{code}", code, severity, title, "AppEnvironment", envId, envId, appId, appName, tenantName, env, seenAt);

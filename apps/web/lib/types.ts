@@ -1301,6 +1301,11 @@ export interface PublicEndpointOverviewDto {
   machineId: string | null;
   ownerStatus: string;
   healthStatus: string;
+  dnsConfigured: boolean;
+  dnsTarget: string | null;
+  expectedDnsTarget: string | null;
+  tunnelConfigured: boolean;
+  tunnelName: string | null;
   tlsEnabled: boolean;
   monitorId: string | null;
   monitorStatus: string | null;
@@ -1321,6 +1326,11 @@ export interface PublicAccessStateDto {
   desiredSource: string;
   healthStatus: string;
   nextAction: string;
+  dnsConfigured: boolean;
+  dnsTarget: string | null;
+  expectedDnsTarget: string | null;
+  tunnelConfigured: boolean;
+  tunnelName: string | null;
   routeConfigured: boolean;
   tlsEnabled: boolean;
   monitorConfigured: boolean;
