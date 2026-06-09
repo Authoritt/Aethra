@@ -1359,6 +1359,8 @@ export interface PublicAccessReconcileResultDto {
 export interface PublicAccessVerificationCheckDto {
   kind: string;
   status: "passed" | "failed" | "blocked" | string;
+  label: string;
+  target: string | null;
   httpStatusCode: number | null;
   latencyMs: number | null;
   responseSnippet: string | null;

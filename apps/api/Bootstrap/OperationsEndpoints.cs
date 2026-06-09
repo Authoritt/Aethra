@@ -689,6 +689,8 @@ public static class OperationsEndpoints
             checks.Add(new PublicAccessVerificationCheckDto(
                 "public_url",
                 "blocked",
+                "Public URL",
+                state.DesiredUrl,
                 null,
                 null,
                 null,
@@ -697,15 +699,24 @@ public static class OperationsEndpoints
         }
 
         var httpClient = httpClientFactory.CreateClient();
-        checks.Add(await ProbeUrl(httpClient, "public_url", state.DesiredUrl, ct).ConfigureAwait(false));
+        var routes = routesByHost.GetValueOrDefault(state.DesiredHostname) ?? [];
 
-        var mainRoute = routesByHost.GetValueOrDefault(state.DesiredHostname)?.FirstOrDefault(r => r.pathPrefix == "/")
-            ?? routesByHost.GetValueOrDefault(state.DesiredHostname)?.FirstOrDefault();
-        if (mainRoute is null)
+        if (routes.Count == 0)
         {
+            checks.Add(new PublicAccessVerificationCheckDto(
+                "public_route",
+                "blocked",
+                "Public route",
+                state.DesiredUrl,
+                null,
+                null,
+                null,
+                "No route is configured."));
             checks.Add(new PublicAccessVerificationCheckDto(
                 "route_backend",
                 "blocked",
+                "Route backend",
+                null,
                 null,
                 null,
                 null,
@@ -713,7 +724,30 @@ public static class OperationsEndpoints
         }
         else
         {
-            checks.Add(await ProbeUrl(httpClient, "route_backend", mainRoute.backendUrl, ct).ConfigureAwait(false));
+            foreach (var route in routes.OrderByDescending(r => r.pathPrefix.Length).ThenBy(r => r.pathPrefix, StringComparer.Ordinal))
+            {
+                var publicRouteUrl = BuildPublicRouteUrl(state.DesiredHostname, route.pathPrefix);
+                checks.Add(await ProbeUrl(
+                    httpClient,
+                    "public_route",
+                    $"Public {route.pathPrefix}",
+                    publicRouteUrl,
+                    ct).ConfigureAwait(false));
+            }
+
+            foreach (var backend in routes
+                .Select(r => r.backendUrl)
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase))
+            {
+                checks.Add(await ProbeUrl(
+                    httpClient,
+                    "route_backend",
+                    $"Backend {backend}",
+                    backend,
+                    ct).ConfigureAwait(false));
+            }
         }
 
         var monitor = snapshot.MonitorsByUrlHost.GetValueOrDefault(state.DesiredHostname);
@@ -722,6 +756,8 @@ public static class OperationsEndpoints
             checks.Add(new PublicAccessVerificationCheckDto(
                 "monitor",
                 "blocked",
+                "Monitor",
+                state.DesiredUrl,
                 null,
                 null,
                 null,
@@ -734,6 +770,8 @@ public static class OperationsEndpoints
                 ? new PublicAccessVerificationCheckDto(
                     "monitor",
                     result.Value.Status == "Up" ? "passed" : "failed",
+                    "Monitor",
+                    monitor.url,
                     result.Value.HttpStatusCode,
                     result.Value.LatencyMs,
                     result.Value.ResponseSnippet,
@@ -741,6 +779,8 @@ public static class OperationsEndpoints
                 : new PublicAccessVerificationCheckDto(
                     "monitor",
                     "failed",
+                    "Monitor",
+                    state.DesiredUrl,
                     null,
                     null,
                     null,
@@ -1853,9 +1893,15 @@ public static class OperationsEndpoints
             ? null
             : $"http://{instance.containerName}:{instance.primaryPort}";
 
+    private static string BuildPublicRouteUrl(string hostname, string pathPrefix)
+        => pathPrefix == "/"
+            ? $"https://{hostname}/"
+            : $"https://{hostname}{pathPrefix}";
+
     private static async Task<PublicAccessVerificationCheckDto> ProbeUrl(
         HttpClient httpClient,
         string kind,
+        string label,
         string url,
         CancellationToken ct)
     {
@@ -1876,6 +1922,8 @@ public static class OperationsEndpoints
             return new PublicAccessVerificationCheckDto(
                 kind,
                 status,
+                label,
+                url,
                 statusCode,
                 (int)stopwatch.ElapsedMilliseconds,
                 null,
@@ -1884,12 +1932,12 @@ public static class OperationsEndpoints
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             stopwatch.Stop();
-            return new PublicAccessVerificationCheckDto(kind, "failed", null, (int)stopwatch.ElapsedMilliseconds, null, "Timeout after 10s.");
+            return new PublicAccessVerificationCheckDto(kind, "failed", label, url, null, (int)stopwatch.ElapsedMilliseconds, null, "Timeout after 10s.");
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
             stopwatch.Stop();
-            return new PublicAccessVerificationCheckDto(kind, "failed", null, (int)stopwatch.ElapsedMilliseconds, null, ex.Message);
+            return new PublicAccessVerificationCheckDto(kind, "failed", label, url, null, (int)stopwatch.ElapsedMilliseconds, null, ex.Message);
         }
     }
 
@@ -2139,6 +2187,8 @@ public static class OperationsEndpoints
     public sealed record PublicAccessVerificationCheckDto(
         string Kind,
         string Status,
+        string Label,
+        string? Target,
         int? HttpStatusCode,
         int? LatencyMs,
         string? ResponseSnippet,

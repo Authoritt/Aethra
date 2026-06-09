@@ -636,7 +636,7 @@ Estado actual de implementacion:
 - `POST /api/ops/public-access-states/{appEnvironmentId}/reconcile` ya permite dry-run y reconciliacion operacional de DNS, Tunnel, Route/TLS y Monitor para el hostname deseado.
 - `/instances/{id}` ya permite ejecutar `Dry run` y `Reconcile` desde la tarjeta de Public Access.
 - `/public-access` ya expone `Dry run` y `Reconcile` por endpoint con owner operacional resuelto, para que una lista grande de hostnames sea accionable sin abrir pantallas tecnicas de Routes.
-- `/public-access` y `/instances/{id}` ya exponen `Verify` para comprobar URL publica, backend de Route y Monitor manual en una sola accion operacional.
+- `/public-access` y `/instances/{id}` ya exponen `Verify` para comprobar rutas publicas por `PathPrefix`, backends deduplicados y Monitor manual en una sola accion operacional.
 - `/operational-issues` ya soporta filtros server-side por busqueda, severidad, tipo de recurso y app.
 - `/operational-issues` ya muestra accion sugerida y destino operacional por issue, para saltar a App Environment, Build o Public Access sin interpretar codigos tecnicos.
 - `/vms`/Machines ya soporta filtros server-side por busqueda, readiness y preview pool.
@@ -660,12 +660,22 @@ Estado actual de implementacion:
 
 ### Fase 2: Public Access
 
-- Agregar owner/origen a rutas existentes.
-- Crear `GET /api/public-endpoints`.
+- Crear `GET /api/ops/public-endpoints`.
 - Redisenar `/routes` como `/public-access`.
-- Agrupar por hostname.
-- Verificar DNS, tunnel, route, backend y monitor.
-- Generar issues por faltantes.
+- Agrupar por hostname y resolver owner operacional cuando el backend permite asociarlo a un App Environment.
+- Filtrar por busqueda, health, app, environment, DNS, Tunnel y Monitor.
+- Mostrar DNS target vs target esperado, tunnel, TLS, Monitor, rutas tecnicas y issues.
+- Verificar DNS, tunnel, route, backend, path publico y monitor.
+- Generar issues por faltantes y llevar al usuario al App Environment o Public Access correcto.
+
+Estado de avance:
+
+- `/public-access` ya existe como reemplazo operacional de `/routes`.
+- `GET /api/ops/public-endpoints` ya agrupa por hostname e incluye owner, DNS, Tunnel, TLS, Monitor, health, issues y rutas.
+- `GET /api/ops/public-access-states` ya calcula estado deseado vs real por App Environment.
+- `POST /api/ops/public-access-states/{appEnvironmentId}/reconcile` ya repara DNS, Tunnel ingress, Route/TLS y Monitor cuando hay suficiente configuracion.
+- `POST /api/ops/public-access-states/{appEnvironmentId}/verify` ya valida cada path publico expuesto por YARP, cada backend unico y el Monitor asociado; los checks devuelven `label` y `target` para que el fallo sea localizable.
+- Pendiente: persistir owner/origen de Route como metadata propia, no solo inferida por backend URL.
 
 ### Fase 3: Releases
 
@@ -709,14 +719,15 @@ Estado de avance:
 - Si falta hostname, zona DNS, tunnel gestionado, CNAME esperado o puerto primario, la operacion devuelve accion `blocked` para ese tramo en vez de asumir configuracion insegura.
 - La UI de App Environment ya muestra botones `Dry run` y `Reconcile` en Public Access, con checks DNS/Tunnel/Route/TLS/Monitor.
 - La UI global de Public Access ya muestra las mismas acciones por hostname cuando el owner apunta a un App Environment, ademas de DNS target, target esperado y tunnel.
-- `POST /api/ops/public-access-states/{appEnvironmentId}/verify` ya ejecuta verificacion manual de URL publica, backend de Route y Monitor cuando existe.
-- Pendiente: incorporar certificados/edge TLS, verificacion profunda por path/service y metadata de owner/origen persistida al mismo reconciler de alto nivel.
+- `POST /api/ops/public-access-states/{appEnvironmentId}/verify` ya ejecuta verificacion manual por cada `PathPrefix` publico, cada backend unico y Monitor cuando existe.
+- Pendiente: incorporar certificados/edge TLS, politicas de reconciliacion por ambiente y metadata de owner/origen persistida al mismo reconciler de alto nivel.
 
 Contrato actual:
 
 ```text
 GET  /api/ops/public-access-states?appEnvironmentId={id}
 POST /api/ops/public-access-states/{appEnvironmentId}/reconcile
+POST /api/ops/public-access-states/{appEnvironmentId}/verify
 ```
 
 Payload:

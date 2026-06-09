@@ -30,11 +30,18 @@ export function PublicAccessVerifyButton({
       if (failed.length > 0) {
         toast.error(
           failed
-            .map((check) => `${check.kind}: ${check.errorMessage ?? check.httpStatusCode ?? "failed"}`)
+            .map((check) => {
+              const reason = check.errorMessage ?? check.httpStatusCode ?? "failed";
+              return `${check.label}${check.target ? ` (${check.target})` : ""}: ${reason}`;
+            })
             .join(" | "),
         );
       } else if (blocked.length > 0) {
-        toast.warning(`${blocked.length} check(s) bloqueados; revisa Public Access.`);
+        toast.warning(
+          blocked
+            .map((check) => `${check.label}: ${check.errorMessage ?? "blocked"}`)
+            .join(" | "),
+        );
       } else {
         toast.success("Public Access verificado");
       }
