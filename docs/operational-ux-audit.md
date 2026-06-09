@@ -503,6 +503,7 @@ Ejemplos:
 - `machine.not_ready`: VM online pero sin runtime disponible.
 - `release.build_failed`: build fallo.
 - `release.deploy_failed`: deploy fallo.
+- `config.key_type_conflict`: la misma key gana como variable y como secreto en un App Environment.
 - `config.secret_changed_not_redeployed`: secret cambio pero ambiente no fue redeployado.
 - `preview.expired`: preview debe limpiarse.
 
@@ -647,6 +648,7 @@ Estado actual de implementacion:
 - `/public-access` y `/instances/{id}` ya exponen `Verify` para comprobar rutas publicas por `PathPrefix`, backends deduplicados y Monitor manual en una sola accion operacional.
 - `/operational-issues` ya soporta filtros server-side por busqueda, severidad, tipo de recurso y app.
 - `/operational-issues` ya muestra accion sugerida y destino operacional por issue, para saltar a App Environment, Build o Public Access sin interpretar codigos tecnicos.
+- `/operational-issues` ya genera `config.key_type_conflict` cuando una key efectiva existe como env var y secret en el mismo App Environment.
 - `/vms`/Machines ya soporta filtros server-side por busqueda, readiness y preview pool.
 - `GET /api/ops/data-services` ya existe como read model operacional de servicios gestionados y bindings por App Environment.
 - `/instances/{id}` ya muestra los Data Services consumidos por ese App Environment.

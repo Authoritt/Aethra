@@ -1121,11 +1121,13 @@ public static class OperationsEndpoints
     {
         var snapshot = await LoadSnapshot(projectsDb, deploymentsDb, monitoringDb, ct);
         var vms = await LoadVms(vmsDb, ct);
+        var configRows = await LoadOperationalConfigRows(projectsDb, ct);
         var issues = new List<OperationalIssueDto>();
 
         foreach (var env in snapshot.Instances)
         {
             var app = snapshot.Templates.GetValueOrDefault(env.templateId);
+            var project = app is null ? null : snapshot.Projects.GetValueOrDefault(app.projectId);
             var client = snapshot.Clients.GetValueOrDefault(env.clientId);
             var latestDeployment = snapshot.DeploymentsByInstance.GetValueOrDefault(env.id);
             var monitor = snapshot.MonitorsByInstance.GetValueOrDefault(env.id);
@@ -1146,6 +1148,25 @@ public static class OperationsEndpoints
             if (vm?.status == "Disconnected")
             {
                 issues.Add(Issue("machine.disconnected", "critical", $"Machine disconnected: {vm.name}", env.id, app?.id, app?.name, client?.displayName, env.environment, vm.updatedAt));
+            }
+
+            foreach (var conflict in FindEffectiveConfigKeyTypeConflicts(project, app, client, env, configRows))
+            {
+                issues.Add(new OperationalIssueDto(
+                    $"{env.id}:config.key_type_conflict:{conflict}",
+                    "config.key_type_conflict",
+                    "warning",
+                    $"Config key '{conflict}' exists as env var and secret",
+                    "AppEnvironment",
+                    env.id,
+                    env.id,
+                    app?.id,
+                    app?.name,
+                    client?.displayName,
+                    env.environment,
+                    env.updatedAt,
+                    "Review effective config",
+                    $"/instances/{env.id}"));
             }
         }
 
@@ -1243,6 +1264,51 @@ public static class OperationsEndpoints
             .GroupBy(r => r.hostname, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
     }
+
+    private static async Task<List<OperationalConfigRow>> LoadOperationalConfigRows(ProjectsDbContext db, CancellationToken ct)
+    {
+        var envRows = await db.EnvironmentVariables.AsNoTracking()
+            .Select(v => new OperationalConfigRow("env", v.Key, v.ScopeType, v.ScopeId, v.UpdatedAt))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var secretRows = await db.Secrets.AsNoTracking()
+            .Select(s => new OperationalConfigRow("secret", s.Key, s.ScopeType, s.ScopeId, s.UpdatedAt))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return envRows.Concat(secretRows).ToList();
+    }
+
+    private static List<string> FindEffectiveConfigKeyTypeConflicts(
+        ProjectRow? project,
+        TemplateRow? template,
+        ClientRow? client,
+        InstanceRow instance,
+        IReadOnlyList<OperationalConfigRow> configRows)
+    {
+        var scopes = BuildConfigScopes(project, template, client, instance);
+        var scopeRank = scopes.ToDictionary(s => (s.ScopeType, s.ScopeId), s => s.Rank);
+        var scopeIds = scopes.Select(s => s.ScopeId).ToHashSet(StringComparer.Ordinal);
+        var relevant = configRows.Where(row => scopeIds.Contains(row.ScopeId)).ToList();
+        var effectiveEnvKeys = SelectEffectiveConfigKeys(relevant.Where(row => row.Kind == "env"), scopeRank);
+        var effectiveSecretKeys = SelectEffectiveConfigKeys(relevant.Where(row => row.Kind == "secret"), scopeRank);
+
+        return effectiveEnvKeys
+            .Intersect(effectiveSecretKeys, StringComparer.Ordinal)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static HashSet<string> SelectEffectiveConfigKeys(
+        IEnumerable<OperationalConfigRow> rows,
+        IReadOnlyDictionary<(EnvScopeType ScopeType, string ScopeId), int> scopeRank)
+        => rows
+            .GroupBy(row => row.Key, StringComparer.Ordinal)
+            .Select(group => group
+                .OrderByDescending(row => scopeRank.GetValueOrDefault((row.ScopeType, row.ScopeId)))
+                .ThenByDescending(row => row.UpdatedAt)
+                .First().Key)
+            .ToHashSet(StringComparer.Ordinal);
 
     private static async Task<PublicAccessInfraSnapshot> LoadPublicAccessInfra(
         IMediator mediator,
@@ -1875,6 +1941,7 @@ public static class OperationsEndpoints
             "release.deploy_failed" => "Open deploy context",
             "monitor.down" => "Check monitor and endpoint",
             "machine.disconnected" => "Check machine",
+            "config.key_type_conflict" => "Review effective config",
             _ => "Open App Environment",
         };
 
@@ -2162,6 +2229,13 @@ public static class OperationsEndpoints
         string ScopeType,
         string ScopeId,
         string? Source,
+        DateTimeOffset UpdatedAt);
+
+    private sealed record OperationalConfigRow(
+        string Kind,
+        string Key,
+        EnvScopeType ScopeType,
+        string ScopeId,
         DateTimeOffset UpdatedAt);
 
     // Snapshot de la infra pública (Cloudflare) usado por el reconcile de Public Access.
