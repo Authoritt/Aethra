@@ -19,6 +19,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using System.Diagnostics;
+using System.Net.Http;
 
 namespace Aethra.Api.Bootstrap;
 
@@ -62,6 +64,11 @@ public static class OperationsEndpoints
             .RequireAuthorization("scope:monitoring:write")
             .RequireAuthorization("scope:cloudflare:write")
             .WithName("ReconcileOperationalPublicAccessState");
+
+        group.MapPost("/public-access-states/{appEnvironmentId}/verify", VerifyPublicAccessState)
+            .RequireAuthorization("scope:proxy:read")
+            .RequireAuthorization("scope:monitoring:write")
+            .WithName("VerifyOperationalPublicAccessState");
 
         group.MapGet("/machines", ListMachines)
             .RequireAuthorization("scope:vms:read")
@@ -653,6 +660,100 @@ public static class OperationsEndpoints
         }
 
         return Results.Ok(new PublicAccessReconcileResultDto(appEnvironmentId, dryRun, applied, actions, refreshedState));
+    }
+
+    private static async Task<IResult> VerifyPublicAccessState(
+        string appEnvironmentId,
+        ProjectsDbContext projectsDb,
+        ProxyDbContext proxyDb,
+        MonitoringDbContext monitoringDb,
+        IMediator mediator,
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory,
+        CancellationToken ct)
+    {
+        var snapshot = await LoadSnapshot(projectsDb, null, monitoringDb, ct);
+        var instance = snapshot.Instances.FirstOrDefault(i => string.Equals(i.id, appEnvironmentId, StringComparison.Ordinal));
+        if (instance is null)
+        {
+            return Results.NotFound(new { Code = "app_environment.not_found", Message = $"App Environment '{appEnvironmentId}' no existe." });
+        }
+
+        var routesByHost = await LoadRoutesByHost(proxyDb, ct);
+        var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
+        var state = BuildPublicAccessState(instance, snapshot, routesByHost, publicInfra);
+        var checks = new List<PublicAccessVerificationCheckDto>();
+
+        if (string.IsNullOrWhiteSpace(state.DesiredHostname) || string.IsNullOrWhiteSpace(state.DesiredUrl))
+        {
+            checks.Add(new PublicAccessVerificationCheckDto(
+                "public_url",
+                "blocked",
+                null,
+                null,
+                null,
+                "No desired public URL is configured."));
+            return Results.Ok(new PublicAccessVerificationResultDto(appEnvironmentId, "blocked", checks, state));
+        }
+
+        var httpClient = httpClientFactory.CreateClient();
+        checks.Add(await ProbeUrl(httpClient, "public_url", state.DesiredUrl, ct).ConfigureAwait(false));
+
+        var mainRoute = routesByHost.GetValueOrDefault(state.DesiredHostname)?.FirstOrDefault(r => r.pathPrefix == "/")
+            ?? routesByHost.GetValueOrDefault(state.DesiredHostname)?.FirstOrDefault();
+        if (mainRoute is null)
+        {
+            checks.Add(new PublicAccessVerificationCheckDto(
+                "route_backend",
+                "blocked",
+                null,
+                null,
+                null,
+                "No route backend is configured."));
+        }
+        else
+        {
+            checks.Add(await ProbeUrl(httpClient, "route_backend", mainRoute.backendUrl, ct).ConfigureAwait(false));
+        }
+
+        var monitor = snapshot.MonitorsByUrlHost.GetValueOrDefault(state.DesiredHostname);
+        if (monitor is null)
+        {
+            checks.Add(new PublicAccessVerificationCheckDto(
+                "monitor",
+                "blocked",
+                null,
+                null,
+                null,
+                "No monitor is configured."));
+        }
+        else
+        {
+            var result = await mediator.Send(new TriggerMonitorCheckCommand(monitor.id), ct).ConfigureAwait(false);
+            checks.Add(result.IsSuccess
+                ? new PublicAccessVerificationCheckDto(
+                    "monitor",
+                    result.Value.Status == "Up" ? "passed" : "failed",
+                    result.Value.HttpStatusCode,
+                    result.Value.LatencyMs,
+                    result.Value.ResponseSnippet,
+                    result.Value.ErrorMessage)
+                : new PublicAccessVerificationCheckDto(
+                    "monitor",
+                    "failed",
+                    null,
+                    null,
+                    null,
+                    result.Error.Message));
+        }
+
+        var aggregate = checks.Any(c => c.Status == "failed")
+            ? "failed"
+            : checks.Any(c => c.Status == "blocked")
+                ? "partial"
+                : "passed";
+
+        return Results.Ok(new PublicAccessVerificationResultDto(appEnvironmentId, aggregate, checks, state));
     }
 
     private static async Task<IResult> ListMachines(
@@ -1752,6 +1853,46 @@ public static class OperationsEndpoints
             ? null
             : $"http://{instance.containerName}:{instance.primaryPort}";
 
+    private static async Task<PublicAccessVerificationCheckDto> ProbeUrl(
+        HttpClient httpClient,
+        string kind,
+        string url,
+        CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using var response = await httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                timeout.Token).ConfigureAwait(false);
+            stopwatch.Stop();
+            var statusCode = (int)response.StatusCode;
+            var status = response.IsSuccessStatusCode ? "passed" : "failed";
+            return new PublicAccessVerificationCheckDto(
+                kind,
+                status,
+                statusCode,
+                (int)stopwatch.ElapsedMilliseconds,
+                null,
+                response.IsSuccessStatusCode ? null : $"HTTP {statusCode} {response.ReasonPhrase}");
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            return new PublicAccessVerificationCheckDto(kind, "failed", null, (int)stopwatch.ElapsedMilliseconds, null, "Timeout after 10s.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        {
+            stopwatch.Stop();
+            return new PublicAccessVerificationCheckDto(kind, "failed", null, (int)stopwatch.ElapsedMilliseconds, null, ex.Message);
+        }
+    }
+
     private static string SafeSlug(string hostname)
     {
         var chars = hostname.Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '-').ToArray();
@@ -1987,6 +2128,20 @@ public static class OperationsEndpoints
         string Message,
         string? ResourceId,
         string? ErrorCode,
+        string? ErrorMessage);
+
+    public sealed record PublicAccessVerificationResultDto(
+        string AppEnvironmentId,
+        string Status,
+        IReadOnlyList<PublicAccessVerificationCheckDto> Checks,
+        PublicAccessStateDto State);
+
+    public sealed record PublicAccessVerificationCheckDto(
+        string Kind,
+        string Status,
+        int? HttpStatusCode,
+        int? LatencyMs,
+        string? ResponseSnippet,
         string? ErrorMessage);
 
     public sealed record MachineOverviewDto(

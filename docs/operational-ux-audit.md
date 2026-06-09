@@ -636,6 +636,7 @@ Estado actual de implementacion:
 - `POST /api/ops/public-access-states/{appEnvironmentId}/reconcile` ya permite dry-run y reconciliacion operacional de DNS, Tunnel, Route/TLS y Monitor para el hostname deseado.
 - `/instances/{id}` ya permite ejecutar `Dry run` y `Reconcile` desde la tarjeta de Public Access.
 - `/public-access` ya expone `Dry run` y `Reconcile` por endpoint con owner operacional resuelto, para que una lista grande de hostnames sea accionable sin abrir pantallas tecnicas de Routes.
+- `/public-access` y `/instances/{id}` ya exponen `Verify` para comprobar URL publica, backend de Route y Monitor manual en una sola accion operacional.
 - `/operational-issues` ya soporta filtros server-side por busqueda, severidad, tipo de recurso y app.
 - `/operational-issues` ya muestra accion sugerida y destino operacional por issue, para saltar a App Environment, Build o Public Access sin interpretar codigos tecnicos.
 - `/vms`/Machines ya soporta filtros server-side por busqueda, readiness y preview pool.
@@ -708,7 +709,8 @@ Estado de avance:
 - Si falta hostname, zona DNS, tunnel gestionado, CNAME esperado o puerto primario, la operacion devuelve accion `blocked` para ese tramo en vez de asumir configuracion insegura.
 - La UI de App Environment ya muestra botones `Dry run` y `Reconcile` en Public Access, con checks DNS/Tunnel/Route/TLS/Monitor.
 - La UI global de Public Access ya muestra las mismas acciones por hostname cuando el owner apunta a un App Environment, ademas de DNS target, target esperado y tunnel.
-- Pendiente: incorporar certificados/edge TLS, verificacion real backend/public endpoint y metadata de owner/origen persistida al mismo reconciler de alto nivel.
+- `POST /api/ops/public-access-states/{appEnvironmentId}/verify` ya ejecuta verificacion manual de URL publica, backend de Route y Monitor cuando existe.
+- Pendiente: incorporar certificados/edge TLS, verificacion profunda por path/service y metadata de owner/origen persistida al mismo reconciler de alto nivel.
 
 Contrato actual:
 

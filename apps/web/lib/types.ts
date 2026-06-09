@@ -1356,6 +1356,22 @@ export interface PublicAccessReconcileResultDto {
   state: PublicAccessStateDto;
 }
 
+export interface PublicAccessVerificationCheckDto {
+  kind: string;
+  status: "passed" | "failed" | "blocked" | string;
+  httpStatusCode: number | null;
+  latencyMs: number | null;
+  responseSnippet: string | null;
+  errorMessage: string | null;
+}
+
+export interface PublicAccessVerificationResultDto {
+  appEnvironmentId: string;
+  status: "passed" | "failed" | "partial" | "blocked" | string;
+  checks: PublicAccessVerificationCheckDto[];
+  state: PublicAccessStateDto;
+}
+
 export interface MachineWorkloadDto {
   appEnvironmentId: string;
   appEnvironmentSlug: string;

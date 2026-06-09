@@ -24,6 +24,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { BuildStatusPill } from "@/components/aethra/build-status-pill";
 import { DeploymentStatusPill } from "@/components/aethra/deployment-status-pill";
 import { PublicAccessReconcileActions } from "@/components/aethra/PublicAccessReconcileActions";
+import { PublicAccessVerifyButton } from "@/components/aethra/PublicAccessVerifyButton";
 import { ScopedEnvVarsPanel } from "@/components/aethra/ScopedEnvVarsPanel";
 import { AutoHostnameInfo } from "@/app/_components/AutoHostnameInfo";
 import { serverFetch } from "@/lib/server-fetch";
@@ -443,6 +444,10 @@ export default async function InstanceDetailPage({
                     <PublicAccessReconcileActions
                       appEnvironmentId={instance.id}
                       disabled={publicAccessState.nextAction === "set_hostname"}
+                    />
+                    <PublicAccessVerifyButton
+                      appEnvironmentId={instance.id}
+                      disabled={!publicAccessState.desiredHostname}
                     />
                   </>
                 ) : (

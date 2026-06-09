@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PublicAccessReconcileActions } from "@/components/aethra/PublicAccessReconcileActions";
+import { PublicAccessVerifyButton } from "@/components/aethra/PublicAccessVerifyButton";
 import { PageHeader } from "@/components/layout/page-header";
 import { serverFetch } from "@/lib/server-fetch";
 import type { AppOverviewDto, PublicEndpointOverviewDto } from "@/lib/types";
@@ -253,6 +254,7 @@ export default async function PublicAccessPage({
                         </Link>
                       </Button>
                       <PublicAccessReconcileActions appEnvironmentId={endpoint.appEnvironmentId} />
+                      <PublicAccessVerifyButton appEnvironmentId={endpoint.appEnvironmentId} />
                     </>
                   ) : (
                     <Badge variant="warning" className="font-mono text-[10px]">
