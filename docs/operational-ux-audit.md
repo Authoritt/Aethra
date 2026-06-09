@@ -637,6 +637,7 @@ Estado actual de implementacion:
 - `/instances/{id}` ya permite ejecutar `Dry run` y `Reconcile` desde la tarjeta de Public Access.
 - `/public-access` ya expone `Dry run` y `Reconcile` por endpoint con owner operacional resuelto, para que una lista grande de hostnames sea accionable sin abrir pantallas tecnicas de Routes.
 - `/operational-issues` ya soporta filtros server-side por busqueda, severidad, tipo de recurso y app.
+- `/operational-issues` ya muestra accion sugerida y destino operacional por issue, para saltar a App Environment, Build o Public Access sin interpretar codigos tecnicos.
 - `/vms`/Machines ya soporta filtros server-side por busqueda, readiness y preview pool.
 - `GET /api/ops/data-services` ya existe como read model operacional de servicios gestionados y bindings por App Environment.
 - `/instances/{id}` ya muestra los Data Services consumidos por ese App Environment.

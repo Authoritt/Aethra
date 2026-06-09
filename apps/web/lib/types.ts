@@ -1444,4 +1444,6 @@ export interface OperationalIssueDto {
   tenantName: string | null;
   environment: string | null;
   lastSeenAt: string | null;
+  suggestedAction: string;
+  suggestedHref: string | null;
 }

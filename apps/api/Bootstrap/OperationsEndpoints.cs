@@ -920,7 +920,9 @@ public static class OperationsEndpoints
                 app?.name,
                 null,
                 null,
-                build.at));
+                build.at,
+                "Open build logs",
+                $"/builds/{build.id}"));
         }
 
         var routes = await proxyDb.Routes.AsNoTracking()
@@ -945,7 +947,11 @@ public static class OperationsEndpoints
                     endpoint.AppName,
                     endpoint.TenantName,
                     endpoint.Environment,
-                    null));
+                    null,
+                    SuggestedEndpointAction(code, endpoint.AppEnvironmentId),
+                    endpoint.AppEnvironmentId is null
+                        ? $"/public-access?q={Uri.EscapeDataString(endpoint.Hostname)}"
+                        : $"/instances/{endpoint.AppEnvironmentId}"));
             }
         }
 
@@ -1595,7 +1601,44 @@ public static class OperationsEndpoints
             || monitor.Equals("up", StringComparison.OrdinalIgnoreCase) && string.Equals(row.MonitorStatus, "Up", StringComparison.OrdinalIgnoreCase);
 
     private static OperationalIssueDto Issue(string code, string severity, string title, string envId, string? appId, string? appName, string? tenantName, string env, DateTimeOffset? seenAt)
-        => new($"{envId}:{code}", code, severity, title, "AppEnvironment", envId, envId, appId, appName, tenantName, env, seenAt);
+        => new(
+            $"{envId}:{code}",
+            code,
+            severity,
+            title,
+            "AppEnvironment",
+            envId,
+            envId,
+            appId,
+            appName,
+            tenantName,
+            env,
+            seenAt,
+            SuggestedAppEnvironmentAction(code),
+            $"/instances/{envId}");
+
+    private static string SuggestedAppEnvironmentAction(string code)
+        => code switch
+        {
+            "app_environment.no_public_url" => "Configure public access",
+            "release.deploy_failed" => "Open deploy context",
+            "monitor.down" => "Check monitor and endpoint",
+            "machine.disconnected" => "Check machine",
+            _ => "Open App Environment",
+        };
+
+    private static string SuggestedEndpointAction(string code, string? appEnvironmentId)
+        => code switch
+        {
+            "route.owner_missing" => "Resolve endpoint owner",
+            "endpoint.dns_zone_missing" => "Register DNS zone",
+            "endpoint.dns_missing" or "endpoint.dns_target_mismatch" => appEnvironmentId is null ? "Resolve owner before DNS" : "Reconcile DNS",
+            "endpoint.tunnel_missing" => "Register Cloudflare Tunnel",
+            "endpoint.tunnel_ingress_missing" => appEnvironmentId is null ? "Resolve owner before tunnel" : "Reconcile tunnel",
+            "endpoint.monitor_missing" => appEnvironmentId is null ? "Resolve owner before monitor" : "Create monitor",
+            "monitor.down" => appEnvironmentId is null ? "Open public endpoint" : "Run monitor check",
+            _ => appEnvironmentId is null ? "Open public endpoint" : "Reconcile public access",
+        };
 
     private static bool MatchesOperationalIssueFilters(
         OperationalIssueDto row,
@@ -1627,7 +1670,8 @@ public static class OperationsEndpoints
             || Contains(row.ResourceId, q)
             || Contains(row.AppName, q)
             || Contains(row.TenantName, q)
-            || Contains(row.Environment, q);
+            || Contains(row.Environment, q)
+            || Contains(row.SuggestedAction, q);
     }
 
     private static bool MatchesMachineFilters(
@@ -2028,5 +2072,7 @@ public static class OperationsEndpoints
         string? AppName,
         string? TenantName,
         string? Environment,
-        DateTimeOffset? LastSeenAt);
+        DateTimeOffset? LastSeenAt,
+        string SuggestedAction,
+        string? SuggestedHref);
 }

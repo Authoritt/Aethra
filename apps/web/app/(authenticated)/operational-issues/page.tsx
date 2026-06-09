@@ -152,6 +152,7 @@ export default async function OperationalIssuesPage({
                 <TableHead>Tenant</TableHead>
                 <TableHead>Environment</TableHead>
                 <TableHead>Resource</TableHead>
+                <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -166,12 +167,25 @@ export default async function OperationalIssuesPage({
                   <TableCell>{issue.tenantName ?? "-"}</TableCell>
                   <TableCell className="font-mono text-xs">{issue.environment ?? "-"}</TableCell>
                   <TableCell>
-                    {issue.appEnvironmentId ? (
-                      <Link href={`/instances/${issue.appEnvironmentId}`} className="text-primary">
+                    {issue.suggestedHref ? (
+                      <Link href={issue.suggestedHref} className="text-primary">
                         {issue.resourceType}
                       </Link>
                     ) : (
                       <span>{issue.resourceType}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {issue.suggestedHref ? (
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={issue.suggestedHref}>
+                          {issue.suggestedAction}
+                        </Link>
+                      </Button>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        {issue.suggestedAction}
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>
