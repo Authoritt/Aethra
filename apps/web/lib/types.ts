@@ -1242,6 +1242,51 @@ export interface AppEnvironmentOverviewDto {
   isEphemeral: boolean;
 }
 
+export interface AppEnvironmentEffectiveConfigDto {
+  appEnvironmentId: string;
+  appEnvironmentSlug: string;
+  appId: string;
+  appName: string;
+  portfolioId: string | null;
+  portfolioName: string | null;
+  tenantId: string;
+  tenantName: string;
+  environment: string;
+  scopes: EffectiveConfigScopeDto[];
+  items: EffectiveConfigItemDto[];
+}
+
+export interface EffectiveConfigScopeDto {
+  scopeType: string;
+  scopeId: string;
+  label: string;
+  rank: number;
+}
+
+export interface EffectiveConfigItemDto {
+  kind: "env" | "secret" | string;
+  key: string;
+  value: string | null;
+  hasValue: boolean;
+  isBuildTime: boolean;
+  isRuntime: boolean;
+  winningScopeType: string;
+  winningScopeId: string;
+  winningScopeLabel: string;
+  source: string | null;
+  overriddenCount: number;
+  sources: EffectiveConfigSourceDto[];
+}
+
+export interface EffectiveConfigSourceDto {
+  scopeType: string;
+  scopeId: string;
+  scopeLabel: string;
+  source: string | null;
+  updatedAt: string;
+  wins: boolean;
+}
+
 export interface ReleaseTargetDto {
   deploymentId: string;
   appEnvironmentId: string;

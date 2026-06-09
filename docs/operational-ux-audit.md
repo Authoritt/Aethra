@@ -480,6 +480,14 @@ Cada App Environment debe tener una vista de **Config & Secrets** que responda:
 
 Esto reduce errores porque muchos fallos de deploy son problemas de configuracion efectiva, no de Git.
 
+Estado de avance:
+
+- `GET /api/ops/data-services` ya muestra servicios gestionados y consumidores por App Environment.
+- `/instances/{id}` ya muestra los Data Services consumidos por ese App Environment.
+- `GET /api/ops/app-environments/{appEnvironmentId}/effective-config` ya resuelve la precedencia `Instance > Client > Template > Project`.
+- La pestaña Config de `/instances/{id}` ya muestra un inspector efectivo con variables, secretos enmascarados, scope ganador, uso build/runtime y overrides ocultos.
+- Pendiente: comparar config contra ultimo release, detectar secretos rotados sin redeploy y promover acciones como redeploy/restart desde el inspector.
+
 ## Operational Issues
 
 Los problemas no deben estar escondidos en rutas, monitores, deployments, VMs y Cloudflare. Deben aparecer en una sola bandeja accionable.
@@ -760,7 +768,7 @@ Resultado:
 ### Fase 6: Operacion avanzada
 
 - Data Services con consumidores y backups.
-- Config & Secrets inspector.
+- Config & Secrets inspector con drift frente al ultimo release.
 - Search global.
 - Command palette.
 - MCP de alto nivel.
@@ -787,7 +795,7 @@ Resultado:
 ### P2
 
 - Data Services con consumidores.
-- Config & Secrets inspector.
+- Config & Secrets drift/redeploy guidance.
 - Notes/Facts contextuales.
 - MCP actions de alto nivel.
 - Saved views para listas grandes.
@@ -805,6 +813,7 @@ Resultado:
 - Una app con 2 clientes y 3 ambientes se ve como matriz, no como lista tecnica de 6 instancias.
 - Una app con muchos clientes se puede filtrar por tenant, environment, status, version, machine y public endpoint.
 - Un App Environment muestra release actual, commit, maquina, URLs, servicios, datos, config e issues.
+- Config de App Environment muestra que variables y secretos aplican realmente y que scope gana por precedencia.
 - Una ruta publica siempre muestra su App Environment owner, origen, estado DNS, tunnel, route, TLS y monitor.
 - Un push a Git se ve como un Release unico con build, deploy fan-out y verificacion.
 - Una VM online pero incapaz de desplegar aparece como "not ready" con razon concreta.

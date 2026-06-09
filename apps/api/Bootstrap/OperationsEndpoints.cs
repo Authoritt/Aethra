@@ -8,6 +8,7 @@ using Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries;
 using Aethra.Modules.Cloudflare.UseCases.Zones.Queries;
 using Aethra.Modules.Monitoring.Infrastructure;
 using Aethra.Modules.Monitoring.UseCases.Commands;
+using Aethra.Modules.Projects.Domain.EnvVars;
 using Aethra.Modules.Projects.Infrastructure;
 using Aethra.Modules.Proxy.Infrastructure;
 using Aethra.Modules.Proxy.UseCases.Routes.Commands;
@@ -42,6 +43,10 @@ public static class OperationsEndpoints
         group.MapGet("/app-environments", ListAppEnvironments)
             .RequireAuthorization("scope:projects:read")
             .WithName("ListOperationalAppEnvironments");
+
+        group.MapGet("/app-environments/{appEnvironmentId}/effective-config", GetAppEnvironmentEffectiveConfig)
+            .RequireAuthorization("scope:projects:read")
+            .WithName("GetOperationalAppEnvironmentEffectiveConfig");
 
         group.MapGet("/releases", ListReleases)
             .RequireAuthorization("scope:deployments:read")
@@ -155,6 +160,111 @@ public static class OperationsEndpoints
             .ToList();
 
         return Results.Ok(rows);
+    }
+
+    private static async Task<IResult> GetAppEnvironmentEffectiveConfig(
+        string appEnvironmentId,
+        ProjectsDbContext projectsDb,
+        CancellationToken ct)
+    {
+        var projects = await LoadProjects(projectsDb, ct);
+        var templates = await LoadTemplates(projectsDb, ct);
+        var clients = await LoadClients(projectsDb, ct);
+        var instances = await LoadInstances(projectsDb, ct);
+        var instance = instances.GetValueOrDefault(appEnvironmentId);
+        if (instance is null)
+        {
+            return Results.NotFound(new { Code = "app_environment.not_found", Message = $"App Environment '{appEnvironmentId}' no existe." });
+        }
+
+        var template = templates.GetValueOrDefault(instance.templateId);
+        var project = template is null ? null : projects.GetValueOrDefault(template.projectId);
+        var client = clients.GetValueOrDefault(instance.clientId);
+        var scopes = BuildConfigScopes(project, template, client, instance);
+        var scopeTypes = scopes.Select(s => s.ScopeType).Distinct().ToList();
+        var scopeIds = scopes.Select(s => s.ScopeId).Distinct(StringComparer.Ordinal).ToList();
+
+        var envVars = await projectsDb.EnvironmentVariables.AsNoTracking()
+            .Where(v => scopeTypes.Contains(v.ScopeType) && scopeIds.Contains(v.ScopeId))
+            .Select(v => new EffectiveConfigCandidate(
+                "env",
+                v.Key,
+                v.Value,
+                true,
+                v.IsBuildTime,
+                v.IsRuntime,
+                v.ScopeType.ToString(),
+                v.ScopeId,
+                v.Source,
+                v.UpdatedAt))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var secrets = await projectsDb.Secrets.AsNoTracking()
+            .Where(s => scopeTypes.Contains(s.ScopeType) && scopeIds.Contains(s.ScopeId))
+            .Select(s => new EffectiveConfigCandidate(
+                "secret",
+                s.Key,
+                null,
+                s.ValueCipher.Length > 0,
+                false,
+                true,
+                s.ScopeType.ToString(),
+                s.ScopeId,
+                s.Source,
+                s.UpdatedAt))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var scopeRank = scopes.ToDictionary(s => (s.ScopeType.ToString(), s.ScopeId), s => s.Rank);
+        var scopeLabels = scopes.ToDictionary(s => (s.ScopeType.ToString(), s.ScopeId), s => s.Label);
+        var items = envVars.Concat(secrets)
+            .GroupBy(c => $"{c.Kind}\u001f{c.Key}", StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var ordered = group
+                    .OrderByDescending(c => scopeRank.GetValueOrDefault((c.ScopeType, c.ScopeId)))
+                    .ThenByDescending(c => c.UpdatedAt)
+                    .ToList();
+                var winner = ordered[0];
+                var sources = ordered.Select(c => new EffectiveConfigSourceDto(
+                    c.ScopeType,
+                    c.ScopeId,
+                    scopeLabels.GetValueOrDefault((c.ScopeType, c.ScopeId)) ?? c.ScopeId,
+                    c.Source,
+                    c.UpdatedAt,
+                    ReferenceEquals(c, winner))).ToList();
+
+                return new EffectiveConfigItemDto(
+                    winner.Kind,
+                    winner.Key,
+                    winner.Kind == "secret" ? null : winner.Value,
+                    winner.HasValue,
+                    winner.IsBuildTime,
+                    winner.IsRuntime,
+                    winner.ScopeType,
+                    winner.ScopeId,
+                    scopeLabels.GetValueOrDefault((winner.ScopeType, winner.ScopeId)) ?? winner.ScopeId,
+                    winner.Source,
+                    sources.Count - 1,
+                    sources);
+            })
+            .OrderBy(i => i.Kind)
+            .ThenBy(i => i.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return Results.Ok(new AppEnvironmentEffectiveConfigDto(
+            instance.id,
+            instance.slug,
+            template?.id ?? instance.templateId,
+            template?.name ?? instance.templateId,
+            project?.id,
+            project?.name,
+            client?.id ?? instance.clientId,
+            client?.displayName ?? instance.clientSlug,
+            instance.environment,
+            scopes.Select(s => new EffectiveConfigScopeDto(s.ScopeType.ToString(), s.ScopeId, s.Label, s.Rank)).ToList(),
+            items));
     }
 
     private static async Task<IResult> ListReleases(
@@ -1893,6 +2003,30 @@ public static class OperationsEndpoints
             ? null
             : $"http://{instance.containerName}:{instance.primaryPort}";
 
+    private static List<EffectiveConfigScope> BuildConfigScopes(
+        ProjectRow? project,
+        TemplateRow? template,
+        ClientRow? client,
+        InstanceRow instance)
+    {
+        var scopes = new List<EffectiveConfigScope>(4);
+        if (project is not null)
+        {
+            scopes.Add(new EffectiveConfigScope(EnvScopeType.Project, project.id, $"Portfolio: {project.name}", 0));
+        }
+        if (template is not null)
+        {
+            scopes.Add(new EffectiveConfigScope(EnvScopeType.Template, template.id, $"App: {template.name}", 1));
+        }
+        if (client is not null)
+        {
+            scopes.Add(new EffectiveConfigScope(EnvScopeType.Client, client.id, $"Tenant: {client.displayName}", 2));
+        }
+
+        scopes.Add(new EffectiveConfigScope(EnvScopeType.Instance, instance.id, $"App Environment: {instance.slug}", 3));
+        return scopes;
+    }
+
     private static string BuildPublicRouteUrl(string hostname, string pathPrefix)
         => pathPrefix == "/"
             ? $"https://{hostname}/"
@@ -2017,6 +2151,18 @@ public static class OperationsEndpoints
     private sealed record RouteRow(string id, string hostname, string pathPrefix, string backendUrl, bool tlsEnabled);
     private sealed record EndpointOwnerDto(string instanceId, string instanceSlug, string? appId, string? appName, string? tenantId, string? tenantName, string environment, string machineId);
     private sealed record AppliedResource(string? resourceId, string? errorCode, string? errorMessage);
+    private sealed record EffectiveConfigScope(EnvScopeType ScopeType, string ScopeId, string Label, int Rank);
+    private sealed record EffectiveConfigCandidate(
+        string Kind,
+        string Key,
+        string? Value,
+        bool HasValue,
+        bool IsBuildTime,
+        bool IsRuntime,
+        string ScopeType,
+        string ScopeId,
+        string? Source,
+        DateTimeOffset UpdatedAt);
 
     // Snapshot de la infra pública (Cloudflare) usado por el reconcile de Public Access.
     private sealed record DnsRecordRow(
@@ -2071,6 +2217,47 @@ public static class OperationsEndpoints
         string HealthStatus,
         int IssueCount,
         bool IsEphemeral);
+
+    public sealed record AppEnvironmentEffectiveConfigDto(
+        string AppEnvironmentId,
+        string AppEnvironmentSlug,
+        string AppId,
+        string AppName,
+        string? PortfolioId,
+        string? PortfolioName,
+        string TenantId,
+        string TenantName,
+        string Environment,
+        IReadOnlyList<EffectiveConfigScopeDto> Scopes,
+        IReadOnlyList<EffectiveConfigItemDto> Items);
+
+    public sealed record EffectiveConfigScopeDto(
+        string ScopeType,
+        string ScopeId,
+        string Label,
+        int Rank);
+
+    public sealed record EffectiveConfigItemDto(
+        string Kind,
+        string Key,
+        string? Value,
+        bool HasValue,
+        bool IsBuildTime,
+        bool IsRuntime,
+        string WinningScopeType,
+        string WinningScopeId,
+        string WinningScopeLabel,
+        string? Source,
+        int OverriddenCount,
+        IReadOnlyList<EffectiveConfigSourceDto> Sources);
+
+    public sealed record EffectiveConfigSourceDto(
+        string ScopeType,
+        string ScopeId,
+        string ScopeLabel,
+        string? Source,
+        DateTimeOffset UpdatedAt,
+        bool Wins);
 
     public sealed record ReleaseOverviewDto(
         string Id,

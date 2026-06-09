@@ -23,6 +23,7 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { BuildStatusPill } from "@/components/aethra/build-status-pill";
 import { DeploymentStatusPill } from "@/components/aethra/deployment-status-pill";
+import { EffectiveConfigPanel } from "@/components/aethra/EffectiveConfigPanel";
 import { PublicAccessReconcileActions } from "@/components/aethra/PublicAccessReconcileActions";
 import { PublicAccessVerifyButton } from "@/components/aethra/PublicAccessVerifyButton";
 import { ScopedEnvVarsPanel } from "@/components/aethra/ScopedEnvVarsPanel";
@@ -30,6 +31,7 @@ import { AutoHostnameInfo } from "@/app/_components/AutoHostnameInfo";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   AppEnvironmentOverviewDto,
+  AppEnvironmentEffectiveConfigDto,
   BuildSummary,
   DataServiceOverviewDto,
   DeploymentSummary,
@@ -86,6 +88,7 @@ export default async function InstanceDetailPage({
     operationalIssuesResult,
     machinesResult,
     dataServicesResult,
+    effectiveConfigResult,
   ] = await Promise.all([
     serverFetch<DeploymentSummary[]>(
       `/api/deployments/instances/${instance.id}`,
@@ -98,6 +101,9 @@ export default async function InstanceDetailPage({
     serverFetch<OperationalIssueDto[]>("/api/ops/operational-issues"),
     serverFetch<MachineOverviewDto[]>("/api/ops/machines"),
     serverFetch<DataServiceOverviewDto[]>(`/api/ops/data-services?appEnvironmentId=${encodeURIComponent(instance.id)}`),
+    serverFetch<AppEnvironmentEffectiveConfigDto>(
+      `/api/ops/app-environments/${encodeURIComponent(instance.id)}/effective-config`,
+    ),
   ]);
 
   const deployments = Array.isArray(deploymentsResult)
@@ -110,6 +116,12 @@ export default async function InstanceDetailPage({
   const operationalIssues = Array.isArray(operationalIssuesResult) ? operationalIssuesResult : [];
   const machines = Array.isArray(machinesResult) ? machinesResult : [];
   const dataServices = Array.isArray(dataServicesResult) ? dataServicesResult : [];
+  const effectiveConfig =
+    effectiveConfigResult !== "unauthorized" &&
+    effectiveConfigResult !== "notfound" &&
+    effectiveConfigResult !== "error"
+      ? effectiveConfigResult
+      : null;
   const operationalEnv = appEnvironments.find((env) => env.id === instance.id) ?? null;
   const envReleases = releases.filter((release) =>
     release.targets.some((target) => target.appEnvironmentId === instance.id),
@@ -543,6 +555,9 @@ export default async function InstanceDetailPage({
                 )}
               </CardContent>
             </Card>
+          </div>
+          <div className="mt-4">
+            <EffectiveConfigPanel config={effectiveConfig} />
           </div>
           <div className="mt-4">
             <ScopedEnvVarsPanel scopeType="instance" scopeId={instance.id} />
