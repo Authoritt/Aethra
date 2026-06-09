@@ -557,7 +557,20 @@ export default async function InstanceDetailPage({
             </Card>
           </div>
           <div className="mt-4">
-            <EffectiveConfigPanel config={effectiveConfig} />
+            <EffectiveConfigPanel
+              config={effectiveConfig}
+              action={
+                hasServices ? (
+                  <DeployNativeButton instanceId={instance.id} hostname={effectiveHost} />
+                ) : currentRelease ? (
+                  <DeployBuildButton
+                    buildId={currentRelease.buildId}
+                    instanceId={instance.id}
+                    disabled={currentRelease.buildStatus !== "Completed"}
+                  />
+                ) : null
+              }
+            />
           </div>
           <div className="mt-4">
             <ScopedEnvVarsPanel scopeType="instance" scopeId={instance.id} />

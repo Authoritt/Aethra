@@ -486,8 +486,9 @@ Estado de avance:
 - `/instances/{id}` ya muestra los Data Services consumidos por ese App Environment.
 - `GET /api/ops/app-environments/{appEnvironmentId}/effective-config` ya resuelve la precedencia `Instance > Client > Template > Project`.
 - La pestaña Config de `/instances/{id}` ya muestra un inspector efectivo con variables, secretos enmascarados, scope ganador, uso build/runtime, overrides ocultos y drift frente al ultimo deploy exitoso.
+- Cuando hay drift, el inspector ya ofrece accion directa de deploy/redeploy desde la misma tarjeta.
 - `/operational-issues` ya genera `config.changed_since_last_deploy` cuando config efectiva cambio despues del ultimo deploy exitoso.
-- Pendiente: detectar rotacion semantica de secretos por binding, diferenciar redeploy vs restart y promover acciones directas desde el inspector.
+- Pendiente: detectar rotacion semantica de secretos por binding y diferenciar redeploy vs restart.
 
 ## Operational Issues
 

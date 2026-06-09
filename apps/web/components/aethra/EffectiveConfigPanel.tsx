@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -12,8 +13,10 @@ import {
 import type { AppEnvironmentEffectiveConfigDto, EffectiveConfigItemDto } from "@/lib/types";
 
 export function EffectiveConfigPanel({
+  action,
   config,
 }: {
+  action?: ReactNode;
   config: AppEnvironmentEffectiveConfigDto | null;
 }) {
   if (!config) {
@@ -42,14 +45,17 @@ export function EffectiveConfigPanel({
               Precedencia real para este App Environment antes de desplegar o diagnosticar runtime.
             </CardDescription>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">{envCount} vars</Badge>
-            <Badge variant="outline">{secretCount} secrets</Badge>
-            {config.driftCount > 0 ? (
-              <Badge variant="warning">{config.driftCount} drift</Badge>
-            ) : (
-              <Badge variant="success">sin drift</Badge>
-            )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">{envCount} vars</Badge>
+              <Badge variant="outline">{secretCount} secrets</Badge>
+              {config.driftCount > 0 ? (
+                <Badge variant="warning">{config.driftCount} drift</Badge>
+              ) : (
+                <Badge variant="success">sin drift</Badge>
+              )}
+            </div>
+            {config.driftCount > 0 && action ? action : null}
           </div>
         </div>
       </CardHeader>
