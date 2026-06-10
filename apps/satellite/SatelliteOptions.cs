@@ -5,6 +5,7 @@ public sealed class SatelliteOptions
     public string CentralUrl { get; set; } = "http://localhost:5080";
     public string Token { get; set; } = string.Empty;
     public int MetricsIntervalSeconds { get; set; } = 5;
+    public string ContainerRuntime { get; set; } = "docker";
 
     /// <summary>
     /// Path al archivo SQLite del buffer de snapshots. Si es null/empty, se resuelve por

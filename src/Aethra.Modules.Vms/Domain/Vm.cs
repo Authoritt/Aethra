@@ -31,6 +31,9 @@ public sealed class Vm : AggregateRoot<VmId>
     public string? CpuModel { get; private set; }
     public int? CpuCores { get; private set; }
     public long? TotalMemoryBytes { get; private set; }
+    public string? ContainerRuntime { get; private set; }
+    public long? RootDiskTotalBytes { get; private set; }
+    public long? RootDiskAvailableBytes { get; private set; }
 
     // F11.4 — Auto-instalación del satélite vía SSH.
     /// <summary>
@@ -99,13 +102,17 @@ public sealed class Vm : AggregateRoot<VmId>
     }
 
     public void RecordConnected(string hostname, string kernelVersion, string cpuModel, int cpuCores,
-        long totalMemoryBytes, string agentVersion, DateTimeOffset now)
+        long totalMemoryBytes, string agentVersion, DateTimeOffset now, string? containerRuntime = null,
+        long? rootDiskTotalBytes = null, long? rootDiskAvailableBytes = null)
     {
         Hostname = hostname;
         KernelVersion = kernelVersion;
         CpuModel = cpuModel;
         CpuCores = cpuCores;
         TotalMemoryBytes = totalMemoryBytes;
+        ContainerRuntime = string.IsNullOrWhiteSpace(containerRuntime) ? null : containerRuntime.Trim();
+        RootDiskTotalBytes = rootDiskTotalBytes;
+        RootDiskAvailableBytes = rootDiskAvailableBytes;
         Satellite.RecordHandshake(agentVersion, now);
         Status = VmStatus.Connected;
         LastConnectedAt = now;

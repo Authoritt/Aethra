@@ -40,6 +40,9 @@ builder.Services.Configure<SatelliteOptions>(opts =>
     }
     opts.BufferPath = Environment.GetEnvironmentVariable("AETHRA_SATELLITE_BUFFER_PATH")
         ?? section["BufferPath"];
+    opts.ContainerRuntime = (Environment.GetEnvironmentVariable("AETHRA_CONTAINER_RUNTIME")
+        ?? section["ContainerRuntime"]
+        ?? "docker").ToLowerInvariant();
 });
 
 // Elegimos probe según OS. Linux → /proc real; otros → BCL cross-platform (Windows dev).
@@ -59,7 +62,9 @@ builder.Services.AddSingleton<ISnapshotBuffer, SqliteSnapshotBuffer>();
 // Container runtime: selector configurable Satellite:ContainerRuntime = "docker" | "podman".
 // docker → Docker.DotNet contra el socket local (unix o named pipe).
 // podman → wrapper sobre el CLI podman.
-var runtimeKind = (builder.Configuration["Satellite:ContainerRuntime"] ?? "docker").ToLowerInvariant();
+var runtimeKind = (Environment.GetEnvironmentVariable("AETHRA_CONTAINER_RUNTIME")
+    ?? builder.Configuration["Satellite:ContainerRuntime"]
+    ?? "docker").ToLowerInvariant();
 switch (runtimeKind)
 {
     case "docker":

@@ -18,13 +18,16 @@ public sealed class CrossPlatformMetricsProbe : IMetricsProbe
 
     public Task<SatelliteHandshake> HandshakeAsync(CancellationToken ct)
     {
+        var rootDisk = ReadRootDisk();
         var info = new SatelliteHandshake(
             Hostname: Environment.MachineName,
             KernelVersion: RuntimeInformation.OSDescription,
             CpuModel: RuntimeInformation.ProcessArchitecture.ToString(),
             CpuCores: Environment.ProcessorCount,
             TotalMemoryBytes: GetTotalMemoryBytes(),
-            AgentVersion: typeof(CrossPlatformMetricsProbe).Assembly.GetName().Version?.ToString() ?? "0.0.0");
+            AgentVersion: typeof(CrossPlatformMetricsProbe).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+            RootDiskTotalBytes: rootDisk?.total,
+            RootDiskAvailableBytes: rootDisk?.available);
         return Task.FromResult(info);
     }
 
@@ -94,5 +97,20 @@ public sealed class CrossPlatformMetricsProbe : IMetricsProbe
         return info.TotalAvailableMemoryBytes > 0
             ? info.TotalAvailableMemoryBytes
             : Environment.WorkingSet * 4;
+    }
+
+    private static (long total, long available)? ReadRootDisk()
+    {
+        try
+        {
+            var rootPath = Path.GetPathRoot(Environment.CurrentDirectory);
+            var root = DriveInfo.GetDrives()
+                .Where(d => d.IsReady && d.DriveType is DriveType.Fixed)
+                .OrderByDescending(d => string.Equals(d.RootDirectory.FullName, rootPath, StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
+            return root is null ? null : (root.TotalSize, root.AvailableFreeSpace);
+        }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
     }
 }

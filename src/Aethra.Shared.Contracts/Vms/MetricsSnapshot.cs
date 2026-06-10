@@ -11,7 +11,10 @@ public sealed record SatelliteHandshake(
     string CpuModel,
     int CpuCores,
     long TotalMemoryBytes,
-    string AgentVersion);
+    string AgentVersion,
+    string? ContainerRuntime = null,
+    long? RootDiskTotalBytes = null,
+    long? RootDiskAvailableBytes = null);
 
 public sealed record VmMetricSnapshot(
     DateTimeOffset Timestamp,

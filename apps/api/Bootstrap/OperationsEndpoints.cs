@@ -992,7 +992,7 @@ public static class OperationsEndpoints
                 var failing = workloadDtos.Count(w => w.HealthStatus is "failed" or "degraded");
                 var deploying = workloadDtos.Count(w => w.HealthStatus == "deploying");
                 var preview = workloadDtos.Count(w => w.IsEphemeral);
-                var readiness = ResolveMachineReadiness(vm.status, failing, deploying, workloads.Count);
+                var readiness = ResolveMachineReadiness(vm, failing, deploying, workloads.Count);
 
                 return new MachineOverviewDto(
                     vm.id,
@@ -1006,6 +1006,10 @@ public static class OperationsEndpoints
                     deploying,
                     preview,
                     vm.acceptsPreviews,
+                    vm.containerRuntime,
+                    vm.totalMemoryBytes,
+                    vm.rootDiskTotalBytes,
+                    vm.rootDiskAvailableBytes,
                     vm.lastConnectedAt,
                     vm.lastSeenAt,
                     vm.updatedAt,
@@ -1235,7 +1239,7 @@ public static class OperationsEndpoints
             var workloads = snapshot.Instances.Where(i => string.Equals(i.targetVmId, vm.id, StringComparison.Ordinal)).ToList();
             var workloadDtos = workloads.Select(i => ToAppEnvironment(i, snapshot, vms)).ToList();
             var readiness = ResolveMachineReadiness(
-                vm.status,
+                vm,
                 workloadDtos.Count(w => w.HealthStatus is "failed" or "degraded"),
                 workloadDtos.Count(w => w.HealthStatus == "deploying"),
                 workloads.Count);
@@ -1370,7 +1374,7 @@ public static class OperationsEndpoints
             var workloads = snapshot.Instances.Where(i => string.Equals(i.targetVmId, vm.id, StringComparison.Ordinal)).ToList();
             var workloadDtos = workloads.Select(i => ToAppEnvironment(i, snapshot, vms)).ToList();
             var readiness = ResolveMachineReadiness(
-                vm.status,
+                vm,
                 workloadDtos.Count(w => w.HealthStatus is "failed" or "degraded"),
                 workloadDtos.Count(w => w.HealthStatus == "deploying"),
                 workloads.Count);
@@ -1888,6 +1892,10 @@ public static class OperationsEndpoints
                 v.Slug.Value,
                 v.Status.ToString(),
                 v.AcceptsPreviews,
+                v.ContainerRuntime,
+                v.TotalMemoryBytes,
+                v.RootDiskTotalBytes,
+                v.RootDiskAvailableBytes,
                 v.LastConnectedAt,
                 v.LastSeenAt,
                 v.UpdatedAt))
@@ -2502,9 +2510,9 @@ public static class OperationsEndpoints
             _ => 1,
         };
 
-    private static MachineReadiness ResolveMachineReadiness(string status, int failingWorkloads, int deployingWorkloads, int workloadCount)
+    private static MachineReadiness ResolveMachineReadiness(VmRow vm, int failingWorkloads, int deployingWorkloads, int workloadCount)
     {
-        if (status.Equals("Disconnected", StringComparison.OrdinalIgnoreCase))
+        if (vm.status.Equals("Disconnected", StringComparison.OrdinalIgnoreCase))
         {
             return new MachineReadiness("offline", workloadCount == 0
                 ? "Satellite disconnected; no workloads assigned."
@@ -2518,13 +2526,25 @@ public static class OperationsEndpoints
         {
             return new MachineReadiness("busy", $"{deployingWorkloads} deployment(s) in progress.");
         }
-        if (status.Equals("Connected", StringComparison.OrdinalIgnoreCase))
+        if (vm.status.Equals("Connected", StringComparison.OrdinalIgnoreCase))
         {
+            if (string.IsNullOrWhiteSpace(vm.containerRuntime))
+            {
+                return new MachineReadiness("degraded", "Satellite connected but container runtime is unknown.");
+            }
+            if (vm.rootDiskTotalBytes is > 0 && vm.rootDiskAvailableBytes is not null)
+            {
+                var availableRatio = (double)vm.rootDiskAvailableBytes.Value / vm.rootDiskTotalBytes.Value;
+                if (availableRatio < 0.10)
+                {
+                    return new MachineReadiness("degraded", "Satellite connected but root disk has less than 10% free.");
+                }
+            }
             return new MachineReadiness("ready", workloadCount == 0
                 ? "Satellite connected; no workloads assigned."
                 : "Satellite connected and workloads are healthy.");
         }
-        return new MachineReadiness("unknown", $"Machine status is {status}.");
+        return new MachineReadiness("unknown", $"Machine status is {vm.status}.");
     }
 
     private static int ReadinessRank(string readiness)
@@ -2556,7 +2576,19 @@ public static class OperationsEndpoints
     }
     private sealed record DeploymentRow(string id, string buildId, string instanceId, string status, DateTimeOffset createdAt, DateTimeOffset? startedAt, DateTimeOffset? finishedAt, string newImageRef, string? errorCode, string? errorMessage);
     private sealed record MonitorRow(string id, string name, string url, string? instanceId, string? projectId, bool enabled, string status, DateTimeOffset? lastCheckedAt);
-    private sealed record VmRow(string id, string name, string slug, string status, bool acceptsPreviews, DateTimeOffset? lastConnectedAt, DateTimeOffset? lastSeenAt, DateTimeOffset updatedAt);
+    private sealed record VmRow(
+        string id,
+        string name,
+        string slug,
+        string status,
+        bool acceptsPreviews,
+        string? containerRuntime,
+        long? totalMemoryBytes,
+        long? rootDiskTotalBytes,
+        long? rootDiskAvailableBytes,
+        DateTimeOffset? lastConnectedAt,
+        DateTimeOffset? lastSeenAt,
+        DateTimeOffset updatedAt);
     private sealed record RouteRow(
         string id,
         string hostname,
@@ -2837,6 +2869,10 @@ public static class OperationsEndpoints
         int DeployingAppEnvironmentCount,
         int PreviewAppEnvironmentCount,
         bool AcceptsPreviews,
+        string? ContainerRuntime,
+        long? TotalMemoryBytes,
+        long? RootDiskTotalBytes,
+        long? RootDiskAvailableBytes,
         DateTimeOffset? LastConnectedAt,
         DateTimeOffset? LastSeenAt,
         DateTimeOffset UpdatedAt,

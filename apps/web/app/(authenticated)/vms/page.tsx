@@ -194,6 +194,15 @@ export default async function VmsPage({
                       <Stat label="Previews" value={machine.previewAppEnvironmentCount.toString()} />
                     </div>
 
+                    <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                      <Stat label="Runtime" value={machine.containerRuntime ?? "unknown"} />
+                      <Stat label="Memory" value={formatBytes(machine.totalMemoryBytes)} />
+                      <Stat
+                        label="Root disk free"
+                        value={formatDiskFree(machine.rootDiskAvailableBytes, machine.rootDiskTotalBytes)}
+                      />
+                    </div>
+
                     <div className="flex flex-wrap gap-2">
                       <Badge variant={machine.acceptsPreviews ? "info" : "outline"}>
                         {machine.acceptsPreviews ? "Preview pool" : "No previews"}
@@ -292,6 +301,24 @@ function formatDate(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatBytes(value: number | null) {
+  if (!value || value <= 0) return "-";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let unit = 0;
+  let size = value;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toFixed(size >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function formatDiskFree(available: number | null, total: number | null) {
+  if (!available || !total || total <= 0) return "-";
+  const percent = Math.round((available / total) * 100);
+  return `${formatBytes(available)} (${percent}%)`;
 }
 
 function buildQuery(filters: MachineFilters) {

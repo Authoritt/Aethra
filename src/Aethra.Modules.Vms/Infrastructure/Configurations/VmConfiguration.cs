@@ -43,6 +43,9 @@ internal sealed class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.CpuModel).HasColumnName("cpu_model").HasMaxLength(255);
         builder.Property(v => v.CpuCores).HasColumnName("cpu_cores");
         builder.Property(v => v.TotalMemoryBytes).HasColumnName("total_memory_bytes");
+        builder.Property(v => v.ContainerRuntime).HasColumnName("container_runtime").HasMaxLength(32);
+        builder.Property(v => v.RootDiskTotalBytes).HasColumnName("root_disk_total_bytes");
+        builder.Property(v => v.RootDiskAvailableBytes).HasColumnName("root_disk_available_bytes");
 
         // F11.4 — campos de instalación remota del satélite.
         builder.Property(v => v.SshCredentialsCipher).HasColumnName("ssh_credentials_cipher");

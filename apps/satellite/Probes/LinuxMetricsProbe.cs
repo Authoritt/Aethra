@@ -32,6 +32,7 @@ public sealed class LinuxMetricsProbe : IMetricsProbe
             .Count(l => l.StartsWith("processor", StringComparison.Ordinal));
         var kernel = TryRead("/proc/sys/kernel/osrelease")?.Trim() ?? Environment.OSVersion.VersionString;
         var totalMem = ReadMemInfoBytes("MemTotal");
+        var rootDisk = ReadRootDisk();
 
         return Task.FromResult(new SatelliteHandshake(
             Hostname: Environment.MachineName,
@@ -39,7 +40,9 @@ public sealed class LinuxMetricsProbe : IMetricsProbe
             CpuModel: cpuModel,
             CpuCores: cores > 0 ? cores : Environment.ProcessorCount,
             TotalMemoryBytes: totalMem,
-            AgentVersion: typeof(LinuxMetricsProbe).Assembly.GetName().Version?.ToString() ?? "0.0.0"));
+            AgentVersion: typeof(LinuxMetricsProbe).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+            RootDiskTotalBytes: rootDisk?.total,
+            RootDiskAvailableBytes: rootDisk?.available));
     }
 
     public Task<VmMetricSnapshot> SnapshotAsync(CancellationToken ct)
@@ -217,5 +220,19 @@ public sealed class LinuxMetricsProbe : IMetricsProbe
         var path = Path.Combine(_procPath, relPath.TrimStart('/').Replace("proc/", ""));
         try { return File.ReadAllText(path); }
         catch { return null; }
+    }
+
+    private static (long total, long available)? ReadRootDisk()
+    {
+        try
+        {
+            var root = DriveInfo.GetDrives()
+                .Where(d => d.IsReady && d.DriveType is DriveType.Fixed or DriveType.Ram)
+                .OrderByDescending(d => d.RootDirectory.FullName == "/" ? 1 : 0)
+                .FirstOrDefault();
+            return root is null ? null : (root.TotalSize, root.AvailableFreeSpace);
+        }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
     }
 }

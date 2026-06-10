@@ -79,7 +79,8 @@ public sealed class SatelliteHub(
             ?? throw new HubException($"VM {vmId} no existe.");
 
         vm.RecordConnected(info.Hostname, info.KernelVersion, info.CpuModel, info.CpuCores,
-            info.TotalMemoryBytes, info.AgentVersion, clock.UtcNow);
+            info.TotalMemoryBytes, info.AgentVersion, clock.UtcNow, info.ContainerRuntime,
+            info.RootDiskTotalBytes, info.RootDiskAvailableBytes);
         await db.SaveChangesAsync(Context.ConnectionAborted);
 
         await integrationBus.PublishAsync(new SatelliteConnectedEvent(

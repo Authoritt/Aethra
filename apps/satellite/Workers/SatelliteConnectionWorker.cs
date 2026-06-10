@@ -182,9 +182,11 @@ public sealed class SatelliteConnectionWorker(
         try
         {
             var info = await probe.HandshakeAsync(ct);
+            info = info with { ContainerRuntime = options.Value.ContainerRuntime };
             await _connection.InvokeAsync("Handshake", info, ct);
-            logger.LogInformation("Handshake enviado: host={Host} kernel={Kernel} cpu={Cpu} cores={Cores}",
-                info.Hostname, info.KernelVersion, info.CpuModel, info.CpuCores);
+            logger.LogInformation(
+                "Handshake enviado: host={Host} kernel={Kernel} cpu={Cpu} cores={Cores} runtime={Runtime}",
+                info.Hostname, info.KernelVersion, info.CpuModel, info.CpuCores, info.ContainerRuntime);
         }
         catch (Exception ex)
         {

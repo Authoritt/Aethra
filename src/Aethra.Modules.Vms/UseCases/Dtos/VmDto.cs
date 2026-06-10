@@ -18,4 +18,7 @@ public sealed record VmDto(
     int? CpuCores,
     long? TotalMemoryBytes,
     string? AgentVersion,
-    bool AcceptsPreviews = true);
+    bool AcceptsPreviews = true,
+    string? ContainerRuntime = null,
+    long? RootDiskTotalBytes = null,
+    long? RootDiskAvailableBytes = null);

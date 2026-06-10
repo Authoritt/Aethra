@@ -656,6 +656,7 @@ Estado actual de implementacion:
 - `/vms`/Machines ya soporta filtros server-side por busqueda, readiness y preview pool.
 - `/vms`, `/dashboard` y `/instances/{id}` ya muestran `readinessReason`, no solo el estado de la machine.
 - `/operational-issues` ya genera `machine.not_ready` para machines offline o con estado desconocido.
+- El handshake del Satellite ya reporta runtime de contenedores y disco raiz; `MachineOverview` muestra runtime, memoria, disco raiz libre y degrada readiness cuando el runtime es desconocido o queda menos de 10% de disco libre.
 - `GET /api/ops/data-services` ya existe como read model operacional de servicios gestionados y bindings por App Environment.
 - `/instances/{id}` ya muestra los Data Services consumidos por ese App Environment.
 - `/data-services` ya existe como vista operacional filtrable por busqueda, status y tipo, y `/services` queda como vista tecnica.
@@ -727,7 +728,8 @@ Estado de avance:
 - `GET /api/ops/machines` ya expone `readinessStatus` y `readinessReason`.
 - La razon se muestra en Machines, Dashboard y App Environment detail.
 - Operational Issues ya crea `machine.not_ready` para machines offline/unknown.
-- Pendiente: capability snapshot real del satelite (runtime instalado, disk, memoria, docker/podman, version de agente) para diferenciar not-ready de workload degraded.
+- El Satellite ya envia `containerRuntime`, `rootDiskTotalBytes` y `rootDiskAvailableBytes` en handshake; VMs persiste esos campos y Machines los usa para diferenciar not-ready de capacidad degradada.
+- Pendiente: ampliar capability snapshot con version real de Docker/Podman, espacio por volumen de datos y checks de permisos del socket/runtime.
 
 ### Fase 5: Reconciliation y estado deseado
 

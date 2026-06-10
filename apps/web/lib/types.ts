@@ -62,6 +62,9 @@ export interface VmDto {
   cpuCores: number | null;
   totalMemoryBytes: number | null;
   agentVersion: string | null;
+  containerRuntime?: string | null;
+  rootDiskTotalBytes?: number | null;
+  rootDiskAvailableBytes?: number | null;
   /** F12.3 — opt-in al pool de previews. Default true. Serializa como camelCase. */
   acceptsPreviews?: boolean;
 }
@@ -1459,6 +1462,10 @@ export interface MachineOverviewDto {
   deployingAppEnvironmentCount: number;
   previewAppEnvironmentCount: number;
   acceptsPreviews: boolean;
+  containerRuntime: string | null;
+  totalMemoryBytes: number | null;
+  rootDiskTotalBytes: number | null;
+  rootDiskAvailableBytes: number | null;
   lastConnectedAt: string | null;
   lastSeenAt: string | null;
   updatedAt: string;

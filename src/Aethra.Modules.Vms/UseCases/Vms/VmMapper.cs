@@ -23,5 +23,8 @@ internal static class VmMapper
         CpuCores: v.CpuCores,
         TotalMemoryBytes: v.TotalMemoryBytes,
         AgentVersion: v.Satellite.AgentVersion,
-        AcceptsPreviews: v.AcceptsPreviews);
+        AcceptsPreviews: v.AcceptsPreviews,
+        ContainerRuntime: v.ContainerRuntime,
+        RootDiskTotalBytes: v.RootDiskTotalBytes,
+        RootDiskAvailableBytes: v.RootDiskAvailableBytes);
 }
