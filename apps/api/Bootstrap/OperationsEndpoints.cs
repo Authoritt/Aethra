@@ -23,6 +23,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net.Http;
 
 namespace Aethra.Api.Bootstrap;
@@ -1254,7 +1255,12 @@ public static class OperationsEndpoints
                     env.PublicUrl ?? env.MachineName,
                     $"/instances/{env.Id}",
                     env.HealthStatus,
-                    env.Slug);
+                    env.Slug,
+                    new Dictionary<string, string?>
+                    {
+                        ["appEnvironmentId"] = env.Id,
+                        ["isEphemeral"] = env.IsEphemeral ? "true" : "false"
+                    });
             }
         }
 
@@ -1271,7 +1277,8 @@ public static class OperationsEndpoints
                     $"{release.GitRef} / {release.TargetCount} target(s)",
                     $"/releases/{release.Id}",
                     release.Status,
-                    release.Trigger);
+                    release.Trigger,
+                    BuildReleaseSearchMetadata(release));
             }
         }
 
@@ -2606,7 +2613,8 @@ public static class OperationsEndpoints
         string subtitle,
         string href,
         string? status,
-        string? badge)
+        string? badge,
+        IReadOnlyDictionary<string, string?>? metadata = null)
         => results.Add(new GlobalSearchResultDto(
             type,
             title,
@@ -2614,7 +2622,30 @@ public static class OperationsEndpoints
             href,
             status,
             badge,
-            SearchScore(query, title, subtitle, status, badge)));
+            SearchScore(query, title, subtitle, status, badge),
+            metadata ?? new Dictionary<string, string?>()));
+
+    private static Dictionary<string, string?> BuildReleaseSearchMetadata(ReleaseOverviewDto release)
+    {
+        var metadata = new Dictionary<string, string?>
+        {
+            ["releaseId"] = release.Id,
+            ["buildId"] = release.BuildId,
+            ["targetCount"] = release.TargetCount.ToString(CultureInfo.InvariantCulture),
+            ["status"] = release.Status,
+            ["buildStatus"] = release.BuildStatus
+        };
+
+        if (release.Targets.Count == 1)
+        {
+            var target = release.Targets[0];
+            metadata["deploymentId"] = target.DeploymentId;
+            metadata["appEnvironmentId"] = target.AppEnvironmentId;
+            metadata["deploymentStatus"] = target.Status;
+        }
+
+        return metadata;
+    }
 
     private static int SearchScore(string query, params string?[] values)
     {
@@ -3074,7 +3105,8 @@ public static class OperationsEndpoints
         string Href,
         string? Status,
         string? Badge,
-        int Score);
+        int Score,
+        IReadOnlyDictionary<string, string?> Metadata);
 
     public sealed record DataServiceOverviewDto(
         string Id,

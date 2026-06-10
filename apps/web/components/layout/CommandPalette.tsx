@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import type {
+  DeploymentSummary,
   GlobalSearchResultDto,
   PublicAccessReconcileResultDto,
   PublicAccessVerificationResultDto,
@@ -242,6 +243,65 @@ export function CommandPalette() {
     }
   }
 
+  async function runReleaseAction(
+    result: GlobalSearchResultDto,
+    action: "build-logs" | "deployment-logs" | "redeploy" | "rollback",
+  ) {
+    const metadata = result.metadata ?? {};
+    const buildId = metadata.buildId;
+    const deploymentId = metadata.deploymentId;
+    const appEnvironmentId = metadata.appEnvironmentId;
+
+    if (action === "build-logs" && buildId) {
+      navigateTo({ ...result, href: `/builds/${encodeURIComponent(buildId)}` });
+      return;
+    }
+    if (action === "deployment-logs" && deploymentId) {
+      navigateTo({ ...result, href: `/deployments/${encodeURIComponent(deploymentId)}` });
+      return;
+    }
+
+    if (action === "redeploy" && buildId && appEnvironmentId) {
+      const key = `redeploy:${buildId}:${appEnvironmentId}`;
+      setBusyAction(key);
+      try {
+        const response = await api<DeploymentSummary>(
+          `/api/deployments/builds/${encodeURIComponent(buildId)}/instances/${encodeURIComponent(appEnvironmentId)}/trigger`,
+          { method: "POST" },
+        );
+        toast.success("Redeploy encolado");
+        navigateTo({ ...result, href: `/deployments/${response.id}` });
+      } catch (e) {
+        toast.error(readApiError(e));
+      } finally {
+        setBusyAction(null);
+      }
+      return;
+    }
+
+    if (action === "rollback" && deploymentId) {
+      const confirmed = window.confirm(
+        "Rollback this App Environment to the selected completed deployment?",
+      );
+      if (!confirmed) return;
+
+      const key = `rollback:${deploymentId}`;
+      setBusyAction(key);
+      try {
+        const response = await api<DeploymentSummary>(
+          `/api/deployments/${encodeURIComponent(deploymentId)}/rollback`,
+          { method: "POST" },
+        );
+        toast.success("Rollback encolado");
+        navigateTo({ ...result, href: `/deployments/${response.id}` });
+      } catch (e) {
+        toast.error(readApiError(e));
+      } finally {
+        setBusyAction(null);
+      }
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <Button
@@ -289,7 +349,9 @@ export function CommandPalette() {
           ) : (
             <div className="py-2">
               {visibleResults.map((result) => {
-                const appEnvironmentId = parseAppEnvironmentId(result.href);
+                const appEnvironmentId =
+                  result.metadata?.appEnvironmentId ?? parseAppEnvironmentId(result.href);
+                const releaseActions = getReleaseActions(result);
                 return (
                   <div
                     key={`${result.type}:${result.href}`}
@@ -345,6 +407,19 @@ export function CommandPalette() {
                           label="Deploy"
                           onClick={() => runPublicAccessAction(appEnvironmentId, "deploy-native")}
                         />
+                      </div>
+                    ) : null}
+                    {releaseActions.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 px-3 pb-2">
+                        {releaseActions.map((action) => (
+                          <PaletteActionButton
+                            key={action.kind}
+                            busy={busyAction === action.busyKey}
+                            disabled={busyAction !== null}
+                            label={action.label}
+                            onClick={() => runReleaseAction(result, action.kind)}
+                          />
+                        ))}
                       </div>
                     ) : null}
                   </div>
@@ -407,6 +482,62 @@ function filterQuickCommands(query: string) {
 function parseAppEnvironmentId(href: string) {
   const match = /^\/instances\/([^/?#]+)/.exec(href);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function getReleaseActions(result: GlobalSearchResultDto): Array<{
+  kind: "build-logs" | "deployment-logs" | "redeploy" | "rollback";
+  label: string;
+  busyKey: string;
+}> {
+  if (result.type.toLowerCase() !== "release") return [];
+  const metadata = result.metadata ?? {};
+  const actions: Array<{
+    kind: "build-logs" | "deployment-logs" | "redeploy" | "rollback";
+    label: string;
+    busyKey: string;
+  }> = [];
+
+  if (metadata.buildId) {
+    actions.push({
+      kind: "build-logs",
+      label: "Build logs",
+      busyKey: `build-logs:${metadata.buildId}`,
+    });
+  }
+  if (metadata.deploymentId) {
+    actions.push({
+      kind: "deployment-logs",
+      label: "Deploy logs",
+      busyKey: `deployment-logs:${metadata.deploymentId}`,
+    });
+  }
+  if (metadata.buildId && metadata.appEnvironmentId) {
+    actions.push({
+      kind: "redeploy",
+      label: metadata.deploymentStatus?.toLowerCase() === "failed" ? "Retry" : "Redeploy",
+      busyKey: `redeploy:${metadata.buildId}:${metadata.appEnvironmentId}`,
+    });
+  }
+  if (metadata.deploymentId && metadata.deploymentStatus?.toLowerCase() === "completed") {
+    actions.push({
+      kind: "rollback",
+      label: "Rollback",
+      busyKey: `rollback:${metadata.deploymentId}`,
+    });
+  }
+
+  return actions;
+}
+
+function readApiError(e: unknown) {
+  return e instanceof ApiError
+    ? (e.body as { message?: string; detail?: string; Message?: string } | undefined)
+        ?.message ??
+      (e.body as { detail?: string } | undefined)?.detail ??
+      `Error ${e.status}`
+    : e instanceof Error
+      ? e.message
+      : "Error desconocido";
 }
 
 function PaletteActionButton({

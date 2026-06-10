@@ -1501,6 +1501,7 @@ export interface GlobalSearchResultDto {
   status: string | null;
   badge: string | null;
   score: number;
+  metadata?: Record<string, string | null>;
 }
 
 export interface DataServiceBindingOverviewDto {
