@@ -16,4 +16,5 @@ public enum DeploymentTrigger
     BuildAutomatic = 0,
     Manual = 1,
     Promote = 2,
+    Rollback = 3,
 }

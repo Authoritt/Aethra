@@ -711,7 +711,9 @@ Estado de avance:
 - `/releases` lista releases como unidad build + deploy fan-out.
 - `/releases/{id}` muestra detalle operacional y mantiene links a `/builds/{id}` y `/deployments/{id}` como soporte tecnico.
 - `/releases/{id}` permite `Retry`/`Redeploy` por App Environment reutilizando `POST /api/deployments/builds/{buildId}/instances/{instanceId}/trigger`.
-- Pendiente: rollback manual como comando explicito. El rollback actual existe como mecanismo automatico del orquestador cuando un deployment falla, no como accion de operador.
+- `POST /api/deployments/{deploymentId}/rollback` ya encola un deployment nuevo hacia el mismo App Environment reutilizando build/image de un deployment `Completed`.
+- `/releases/{id}` ya muestra `Rollback` para targets completados, ademas de `Retry`/`Redeploy`.
+- Pendiente: selector asistido de rollback desde App Environment detail, comparando version actual vs versiones historicas antes de confirmar.
 
 ### Fase 4: Machines y readiness
 

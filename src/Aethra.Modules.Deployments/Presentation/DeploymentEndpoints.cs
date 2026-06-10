@@ -87,6 +87,23 @@ public static class DeploymentEndpoints
         .RequireAuthorization(ScopeTrigger)
         .WithName("CancelDeployment");
 
+        group.MapPost("/{deploymentId}/rollback", async (
+            string deploymentId,
+            [FromBody] RollbackDeploymentRequest? body,
+            IMediator mediator,
+            CancellationToken ct) =>
+        {
+            var cmd = new RollbackDeploymentCommand(
+                SourceDeploymentId: deploymentId,
+                TriggeredBy: body?.TriggeredBy);
+            var r = await mediator.Send(cmd, ct).ConfigureAwait(false);
+            return r.IsSuccess
+                ? Results.Created($"/api/deployments/{r.Value.Id}", r.Value)
+                : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeTrigger)
+        .WithName("RollbackDeployment");
+
         group.MapPost("/{deploymentId}/promote/{toInstanceId}", async (
             string deploymentId,
             string toInstanceId,
@@ -120,6 +137,8 @@ public static class DeploymentEndpoints
     /// Payload del promote. <c>TriggeredBy</c> es informativo igual que en el trigger manual.
     /// </summary>
     public sealed record PromoteDeploymentRequest(string? TriggeredBy);
+
+    public sealed record RollbackDeploymentRequest(string? TriggeredBy);
 
     private static IResult ToResult<T>(Result<T> r)
         => r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);

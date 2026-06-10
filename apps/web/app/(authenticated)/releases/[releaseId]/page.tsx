@@ -277,6 +277,7 @@ export default async function ReleaseDetailPage({
                         </Button>
                         <ReleaseTargetActions
                           buildId={release.buildId}
+                          deploymentId={row.target.deploymentId}
                           instanceId={row.target.appEnvironmentId}
                           status={row.target.status}
                         />
