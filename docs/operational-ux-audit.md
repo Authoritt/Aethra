@@ -757,7 +757,8 @@ Estado de avance:
 - La UI de App Environment ya muestra botones `Dry run` y `Reconcile` en Public Access, con checks DNS/Tunnel/Route/TLS/Monitor.
 - La UI global de Public Access ya muestra las mismas acciones por hostname cuando el owner apunta a un App Environment, ademas de DNS target, target esperado y tunnel.
 - `POST /api/ops/public-access-states/{appEnvironmentId}/verify` ya ejecuta verificacion manual por cada `PathPrefix` publico, cada backend unico y Monitor cuando existe.
-- Pendiente: incorporar certificados/edge TLS, politicas de reconciliacion por ambiente y metadata de owner/origen persistida al mismo reconciler de alto nivel.
+- `PublicAccessState` ya expone `reconciliationPolicy` y `edgeTlsPolicy` por ambiente (`production` estricto, otros standard/flexible), y App Environment muestra esa politica junto al estado deseado.
+- Pendiente posterior: conectar esas politicas a un modulo explicito de certificados cuando exista gestion directa de certificados edge/origin.
 
 Contrato actual:
 

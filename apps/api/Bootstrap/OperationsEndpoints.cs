@@ -1717,6 +1717,11 @@ public static class OperationsEndpoints
     private static bool HasTunnelIngress(string hostname, PublicAccessInfraSnapshot infra)
         => infra.Tunnel?.Ingress.Any(r => string.Equals(r.Hostname, hostname, StringComparison.OrdinalIgnoreCase)) == true;
 
+    private static (string ReconciliationPolicy, string EdgeTlsPolicy) ResolvePublicAccessPolicy(string environment)
+        => environment.Equals("production", StringComparison.OrdinalIgnoreCase)
+            ? ("strict", "full_strict")
+            : ("standard", "flexible");
+
     private static PublicAccessStateDto BuildPublicAccessState(
         InstanceRow instance,
         OpsSnapshot snapshot,
@@ -1727,6 +1732,7 @@ public static class OperationsEndpoints
         var client = snapshot.Clients.GetValueOrDefault(instance.clientId);
         var desiredHostname = instance.customDomain ?? instance.autoHostname;
         var desiredSource = instance.customDomain is not null ? "custom_domain" : instance.autoHostname is not null ? "auto_hostname" : "none";
+        var (reconciliationPolicy, edgeTlsPolicy) = ResolvePublicAccessPolicy(instance.environment);
         var routes = desiredHostname is null ? [] : routesByHost.GetValueOrDefault(desiredHostname) ?? [];
         var monitor = desiredHostname is null ? null : snapshot.MonitorsByUrlHost.GetValueOrDefault(desiredHostname);
         var dnsRecord = desiredHostname is null ? null : FindDnsRecord(desiredHostname, publicInfra);
@@ -1821,6 +1827,8 @@ public static class OperationsEndpoints
             desiredHostname,
             desiredHostname is null ? null : $"https://{desiredHostname}",
             desiredSource,
+            reconciliationPolicy,
+            edgeTlsPolicy,
             health,
             nextAction,
             dnsRecord is not null,
@@ -2944,6 +2952,8 @@ public static class OperationsEndpoints
         string? DesiredHostname,
         string? DesiredUrl,
         string DesiredSource,
+        string ReconciliationPolicy,
+        string EdgeTlsPolicy,
         string HealthStatus,
         string NextAction,
         bool DnsConfigured,

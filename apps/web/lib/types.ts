@@ -1390,6 +1390,8 @@ export interface PublicAccessStateDto {
   desiredHostname: string | null;
   desiredUrl: string | null;
   desiredSource: string;
+  reconciliationPolicy: string;
+  edgeTlsPolicy: string;
   healthStatus: string;
   nextAction: string;
   dnsConfigured: boolean;

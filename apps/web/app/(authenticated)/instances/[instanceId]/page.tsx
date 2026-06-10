@@ -443,7 +443,7 @@ export default async function InstanceDetailPage({
                         ok={publicAccessState.monitorConfigured && publicAccessState.monitorStatus !== "Down"}
                       />
                     </div>
-                    <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-4">
                       <SmallStat
                         label="DNS target"
                         value={publicAccessState.dnsTarget ?? "-"}
@@ -453,6 +453,14 @@ export default async function InstanceDetailPage({
                         label="Expected target"
                         value={publicAccessState.expectedDnsTarget ?? "-"}
                         mono
+                      />
+                      <SmallStat
+                        label="Reconcile policy"
+                        value={publicAccessState.reconciliationPolicy}
+                      />
+                      <SmallStat
+                        label="Edge TLS"
+                        value={publicAccessState.edgeTlsPolicy}
                       />
                     </div>
                     <div className="flex flex-wrap gap-2">
