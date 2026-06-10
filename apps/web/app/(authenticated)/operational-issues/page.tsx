@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,7 @@ export default async function OperationalIssuesPage({
   }
   const issues = Array.isArray(data) ? data : [];
   const apps = Array.isArray(appsData) ? appsData : [];
-  const resourceTypes = Array.from(new Set(["AppEnvironment", "Release", "PublicEndpoint", ...issues.map((i) => i.resourceType)]));
+  const resourceTypes = Array.from(new Set(["AppEnvironment", "Release", "PublicEndpoint", "Machine", ...issues.map((i) => i.resourceType)]));
   const hasFilters = Object.values(filters).some((value) => Boolean(value));
 
   return (
@@ -55,7 +56,21 @@ export default async function OperationalIssuesPage({
       />
 
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="space-y-4 p-4">
+          <div className="flex flex-wrap gap-2">
+            <QuickFilter href="/operational-issues?severity=critical" active={filters.severity === "critical"}>
+              Critical
+            </QuickFilter>
+            <QuickFilter href="/operational-issues?resourceType=PublicEndpoint" active={filters.resourceType === "PublicEndpoint"}>
+              Public Access
+            </QuickFilter>
+            <QuickFilter href="/operational-issues?resourceType=Machine" active={filters.resourceType === "Machine"}>
+              Machines
+            </QuickFilter>
+            <QuickFilter href="/operational-issues?q=config." active={filters.q === "config."}>
+              Config drift
+            </QuickFilter>
+          </div>
           <form method="get" className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <Label htmlFor="q">Buscar</Label>
@@ -201,6 +216,22 @@ export default async function OperationalIssuesPage({
 function SeverityBadge({ severity }: { severity: string }) {
   const variant = severity === "critical" ? "destructive" : severity === "warning" ? "warning" : "outline";
   return <Badge variant={variant} className="font-mono text-[10px] uppercase">{severity}</Badge>;
+}
+
+function QuickFilter({
+  active,
+  children,
+  href,
+}: {
+  active: boolean;
+  children: ReactNode;
+  href: string;
+}) {
+  return (
+    <Button asChild size="sm" variant={active ? "default" : "outline"}>
+      <Link href={href}>{children}</Link>
+    </Button>
+  );
 }
 
 function buildQuery(filters: IssueFilters) {

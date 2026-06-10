@@ -650,6 +650,7 @@ Estado actual de implementacion:
 - `/public-access` y `/instances/{id}` ya exponen `Verify` para comprobar rutas publicas por `PathPrefix`, backends deduplicados y Monitor manual en una sola accion operacional.
 - `/operational-issues` ya soporta filtros server-side por busqueda, severidad, tipo de recurso y app.
 - `/operational-issues` ya muestra accion sugerida y destino operacional por issue, para saltar a App Environment, Build o Public Access sin interpretar codigos tecnicos.
+- `/operational-issues` ya tiene quick filters para Critical, Public Access, Machines y Config drift.
 - `/operational-issues` ya genera `config.key_type_conflict` cuando una key efectiva existe como env var y secret en el mismo App Environment.
 - `/operational-issues` ya genera `config.changed_since_last_deploy` cuando variables o secretos efectivos cambiaron despues del ultimo deployment exitoso.
 - `/vms`/Machines ya soporta filtros server-side por busqueda, readiness y preview pool.
@@ -787,6 +788,7 @@ Resultado:
 - Command palette.
 - MCP de alto nivel.
 - Policies simples.
+- Quick filters/Saved views para listas operacionales.
 
 ## Backlog priorizado
 
@@ -812,7 +814,7 @@ Resultado:
 - Config & Secrets drift/redeploy guidance.
 - Notes/Facts contextuales.
 - MCP actions de alto nivel.
-- Saved views para listas grandes.
+- Saved views persistentes para listas grandes.
 
 ### P3
 
