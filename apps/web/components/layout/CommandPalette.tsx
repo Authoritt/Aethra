@@ -182,7 +182,7 @@ export function CommandPalette() {
 
   async function runPublicAccessAction(
     appEnvironmentId: string,
-    action: "verify" | "dry-run" | "reconcile" | "deploy-native",
+    action: "verify" | "dry-run" | "reconcile" | "deploy-native" | "delete-preview",
   ) {
     const key = `${action}:${appEnvironmentId}`;
     setBusyAction(key);
@@ -209,6 +209,17 @@ export function CommandPalette() {
         toast.success(
           `Deploy nativo OK · ${result.services.length} servicio(s)${result.healthy ? " · healthy" : ""}`,
         );
+      } else if (action === "delete-preview") {
+        const confirmed = window.confirm("Delete this preview App Environment?");
+        if (!confirmed) return;
+        await api(`/api/instances/${encodeURIComponent(appEnvironmentId)}`, {
+          method: "DELETE",
+        });
+        toast.success("Preview eliminado");
+        setOpen(false);
+        setQuery("");
+        setResults([]);
+        router.push("/app-environments?ephemeral=true");
       } else {
         const dryRun = action === "dry-run";
         const result = await api<PublicAccessReconcileResultDto>(
@@ -407,6 +418,14 @@ export function CommandPalette() {
                           label="Deploy"
                           onClick={() => runPublicAccessAction(appEnvironmentId, "deploy-native")}
                         />
+                        {result.metadata?.isEphemeral === "true" ? (
+                          <PaletteActionButton
+                            busy={busyAction === `delete-preview:${appEnvironmentId}`}
+                            disabled={busyAction !== null}
+                            label="Delete preview"
+                            onClick={() => runPublicAccessAction(appEnvironmentId, "delete-preview")}
+                          />
+                        ) : null}
                       </div>
                     ) : null}
                     {releaseActions.length > 0 ? (
