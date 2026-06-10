@@ -286,6 +286,9 @@ export default async function Dashboard() {
                       {machine.appEnvironmentCount} app envs
                       {machine.previewAppEnvironmentCount > 0 ? ` / ${machine.previewAppEnvironmentCount} previews` : ""}
                     </p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {machine.readinessReason}
+                    </p>
                   </div>
                   <div className="shrink-0 text-right">
                     <StatusBadge status={machine.readinessStatus} />

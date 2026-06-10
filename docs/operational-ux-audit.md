@@ -653,6 +653,8 @@ Estado actual de implementacion:
 - `/operational-issues` ya genera `config.key_type_conflict` cuando una key efectiva existe como env var y secret en el mismo App Environment.
 - `/operational-issues` ya genera `config.changed_since_last_deploy` cuando variables o secretos efectivos cambiaron despues del ultimo deployment exitoso.
 - `/vms`/Machines ya soporta filtros server-side por busqueda, readiness y preview pool.
+- `/vms`, `/dashboard` y `/instances/{id}` ya muestran `readinessReason`, no solo el estado de la machine.
+- `/operational-issues` ya genera `machine.not_ready` para machines offline o con estado desconocido.
 - `GET /api/ops/data-services` ya existe como read model operacional de servicios gestionados y bindings por App Environment.
 - `/instances/{id}` ya muestra los Data Services consumidos por ese App Environment.
 - `/data-services` ya existe como vista operacional filtrable por busqueda, status y tipo, y `/services` queda como vista tecnica.
@@ -712,6 +714,13 @@ Estado de avance:
 - Mostrar readiness en Machines y App Environment.
 - Bloquear o advertir deploys cuando la maquina no este lista.
 - Crear issues de VM/satelite/runtime.
+
+Estado de avance:
+
+- `GET /api/ops/machines` ya expone `readinessStatus` y `readinessReason`.
+- La razon se muestra en Machines, Dashboard y App Environment detail.
+- Operational Issues ya crea `machine.not_ready` para machines offline/unknown.
+- Pendiente: capability snapshot real del satelite (runtime instalado, disk, memoria, docker/podman, version de agente) para diferenciar not-ready de workload degraded.
 
 ### Fase 5: Reconciliation y estado deseado
 

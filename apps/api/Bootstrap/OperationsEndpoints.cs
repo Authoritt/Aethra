@@ -964,14 +964,15 @@ public static class OperationsEndpoints
                 var failing = workloadDtos.Count(w => w.HealthStatus is "failed" or "degraded");
                 var deploying = workloadDtos.Count(w => w.HealthStatus == "deploying");
                 var preview = workloadDtos.Count(w => w.IsEphemeral);
-                var readiness = ResolveMachineReadiness(vm.status, failing, deploying);
+                var readiness = ResolveMachineReadiness(vm.status, failing, deploying, workloads.Count);
 
                 return new MachineOverviewDto(
                     vm.id,
                     vm.name,
                     vm.slug,
                     vm.status,
-                    readiness,
+                    readiness.Status,
+                    readiness.Reason,
                     workloadDtos.Count,
                     failing,
                     deploying,
@@ -1206,6 +1207,36 @@ public static class OperationsEndpoints
                     changedConfig.Max(c => c.UpdatedAt),
                     "Redeploy or review config",
                     $"/instances/{env.id}"));
+            }
+        }
+
+        foreach (var vm in vms.Values)
+        {
+            var workloads = snapshot.Instances.Where(i => string.Equals(i.targetVmId, vm.id, StringComparison.Ordinal)).ToList();
+            var workloadDtos = workloads.Select(i => ToAppEnvironment(i, snapshot, vms)).ToList();
+            var readiness = ResolveMachineReadiness(
+                vm.status,
+                workloadDtos.Count(w => w.HealthStatus is "failed" or "degraded"),
+                workloadDtos.Count(w => w.HealthStatus == "deploying"),
+                workloads.Count);
+
+            if (readiness.Status is "offline" or "unknown")
+            {
+                issues.Add(new OperationalIssueDto(
+                    $"machine:{vm.id}:not_ready",
+                    "machine.not_ready",
+                    readiness.Status == "offline" ? "critical" : "warning",
+                    $"{vm.name}: {readiness.Reason}",
+                    "Machine",
+                    vm.id,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    vm.updatedAt,
+                    readiness.Status == "offline" ? "Reconnect satellite" : "Check machine setup",
+                    $"/vms/{vm.id}"));
             }
         }
 
@@ -2092,6 +2123,7 @@ public static class OperationsEndpoints
             || Contains(row.Slug, q)
             || Contains(row.Status, q)
             || Contains(row.ReadinessStatus, q)
+            || Contains(row.ReadinessReason, q)
             || row.Workloads.Any(w => Contains(w.AppName, q) || Contains(w.TenantName, q) || Contains(w.Environment, q) || Contains(w.AppEnvironmentSlug, q));
     }
 
@@ -2242,25 +2274,29 @@ public static class OperationsEndpoints
             _ => 1,
         };
 
-    private static string ResolveMachineReadiness(string status, int failingWorkloads, int deployingWorkloads)
+    private static MachineReadiness ResolveMachineReadiness(string status, int failingWorkloads, int deployingWorkloads, int workloadCount)
     {
         if (status.Equals("Disconnected", StringComparison.OrdinalIgnoreCase))
         {
-            return "offline";
+            return new MachineReadiness("offline", workloadCount == 0
+                ? "Satellite disconnected; no workloads assigned."
+                : $"Satellite disconnected; {workloadCount} app environment(s) assigned.");
         }
         if (failingWorkloads > 0)
         {
-            return "degraded";
+            return new MachineReadiness("degraded", $"{failingWorkloads} app environment(s) failing or degraded.");
         }
         if (deployingWorkloads > 0)
         {
-            return "busy";
+            return new MachineReadiness("busy", $"{deployingWorkloads} deployment(s) in progress.");
         }
         if (status.Equals("Connected", StringComparison.OrdinalIgnoreCase))
         {
-            return "ready";
+            return new MachineReadiness("ready", workloadCount == 0
+                ? "Satellite connected; no workloads assigned."
+                : "Satellite connected and workloads are healthy.");
         }
-        return "unknown";
+        return new MachineReadiness("unknown", $"Machine status is {status}.");
     }
 
     private static int ReadinessRank(string readiness)
@@ -2296,6 +2332,7 @@ public static class OperationsEndpoints
     private sealed record RouteRow(string id, string hostname, string pathPrefix, string backendUrl, bool tlsEnabled);
     private sealed record EndpointOwnerDto(string instanceId, string instanceSlug, string? appId, string? appName, string? tenantId, string? tenantName, string environment, string machineId);
     private sealed record AppliedResource(string? resourceId, string? errorCode, string? errorMessage);
+    private sealed record MachineReadiness(string Status, string Reason);
     private sealed record EffectiveConfigScope(EnvScopeType ScopeType, string ScopeId, string Label, int Rank);
     private sealed record EffectiveConfigCandidate(
         string Kind,
@@ -2543,6 +2580,7 @@ public static class OperationsEndpoints
         string Slug,
         string Status,
         string ReadinessStatus,
+        string ReadinessReason,
         int AppEnvironmentCount,
         int FailingAppEnvironmentCount,
         int DeployingAppEnvironmentCount,

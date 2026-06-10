@@ -292,6 +292,9 @@ export default async function InstanceDetailPage({
               {machine?.name ?? operationalEnv?.machineName ?? instance.targetVmId}
             </Link>
             <StatusBadge status={machine?.readinessStatus ?? operationalEnv?.machineStatus ?? "unknown"} />
+            {machine?.readinessReason ? (
+              <p className="text-xs text-muted-foreground">{machine.readinessReason}</p>
+            ) : null}
           </CardContent>
         </Card>
       </section>

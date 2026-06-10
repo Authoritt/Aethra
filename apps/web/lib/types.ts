@@ -1444,6 +1444,7 @@ export interface MachineOverviewDto {
   slug: string;
   status: string;
   readinessStatus: string;
+  readinessReason: string;
   appEnvironmentCount: number;
   failingAppEnvironmentCount: number;
   deployingAppEnvironmentCount: number;
