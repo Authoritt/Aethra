@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
+import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { serverFetch } from "@/lib/server-fetch";
 import type { AppOverviewDto, OperationalIssueDto } from "@/lib/types";
 
@@ -53,6 +54,7 @@ export default async function OperationalIssuesPage({
       <PageHeader
         title="Operational Issues"
         description="Inbox accionable de problemas derivados de app environments, releases, machines y public access."
+        actions={<SavedViewsMenu storageKey="aethra.savedViews.operationalIssues" />}
       />
 
       <Card>

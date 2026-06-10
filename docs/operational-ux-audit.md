@@ -663,6 +663,7 @@ Estado actual de implementacion:
 - `/dashboard` ya funciona como Command Center con issues, releases, public access y machines.
 - `GET /api/ops/search` y `/search` ya permiten busqueda global de Apps, App Environments, Releases, Public Endpoints, Machines y Data Services.
 - El topbar ya incluye Command Palette con `Ctrl/Cmd+K` y `/`, reutilizando `GET /api/ops/search` para saltar desde cualquier pantalla a Apps, App Environments, Releases, Public Endpoints, Machines y Data Services.
+- App Environments, Releases, Public Access, Machines, Data Services y Operational Issues ya tienen saved views locales para persistir combinaciones de filtros por operador/navegador.
 - `Route` ya persiste `operational_owner_type`, `operational_owner_id` y `origin`; Public Access prefiere ese owner antes de inferirlo por hostname/backend y marca `route_owner_mismatch` cuando el hostname apunta a otro App Environment.
 - `/projects`, `/templates`, `/clients` y `/routes` quedan como compatibilidad/configuracion tecnica, no como camino principal.
 
@@ -803,6 +804,7 @@ Estado de avance:
 
 - Search global ya existe como endpoint operacional y pagina `/search`.
 - Command Palette ya existe como modal desde el topbar, con atajos `Ctrl/Cmd+K` y `/`, busqueda incremental y navegacion directa al recurso operacional.
+- Saved views locales ya existen para las listas operacionales de alto volumen: App Environments, Releases, Public Access, Machines, Data Services y Operational Issues.
 - Pendiente: convertir la Command Palette de buscador/navegador a operador de alto nivel: deploy, verify endpoint, retry release, rollback, open logs y create preview desde resultados contextualizados.
 
 ## Backlog priorizado

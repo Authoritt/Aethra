@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/layout/page-header";
+import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { serverFetch } from "@/lib/server-fetch";
 import type { DataServiceOverviewDto } from "@/lib/types";
 
@@ -42,9 +43,12 @@ export default async function DataServicesPage({
         title="Data Services"
         description="Servicios de datos y bindings vistos desde las apps y ambientes que los consumen."
         actions={
-          <Button asChild variant="outline">
-            <Link href="/services">Servicios tecnicos</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <SavedViewsMenu storageKey="aethra.savedViews.dataServices" />
+            <Button asChild variant="outline">
+              <Link href="/services">Servicios tecnicos</Link>
+            </Button>
+          </div>
         }
       />
 

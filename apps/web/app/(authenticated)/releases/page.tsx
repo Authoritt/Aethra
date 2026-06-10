@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
+import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { serverFetch } from "@/lib/server-fetch";
 import type { AppOverviewDto, ReleaseOverviewDto } from "@/lib/types";
 
@@ -50,6 +51,7 @@ export default async function ReleasesPage({
       <PageHeader
         title="Releases"
         description="Cada push o trigger manual como build + deploy fan-out + resultado."
+        actions={<SavedViewsMenu storageKey="aethra.savedViews.releases" />}
       />
 
       <Card>

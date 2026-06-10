@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/layout/page-header";
 import { KpiCard } from "@/components/aethra/kpi-card";
+import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { serverFetch } from "@/lib/server-fetch";
 import type { MachineOverviewDto } from "@/lib/types";
 
@@ -46,12 +47,15 @@ export default async function VmsPage({
         title="Machines"
         description="Capacidad real de despliegue: cada maquina muestra sus app environments, previews, salud y disponibilidad."
         actions={
-          <Button asChild>
-            <Link href="/vms/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Registrar machine
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <SavedViewsMenu storageKey="aethra.savedViews.machines" />
+            <Button asChild>
+              <Link href="/vms/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Registrar machine
+              </Link>
+            </Button>
+          </div>
         }
       />
 

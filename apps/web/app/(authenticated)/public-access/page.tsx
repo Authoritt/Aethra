@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { PublicAccessReconcileActions } from "@/components/aethra/PublicAccessReconcileActions";
 import { PublicAccessVerifyButton } from "@/components/aethra/PublicAccessVerifyButton";
+import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { PageHeader } from "@/components/layout/page-header";
 import { serverFetch } from "@/lib/server-fetch";
 import type { AppOverviewDto, PublicEndpointOverviewDto } from "@/lib/types";
@@ -67,9 +68,12 @@ export default async function PublicAccessPage({
         title="Public Access"
         description="Hosts publicos agrupados por owner operacional, rutas tecnicas, monitor y salud."
         actions={
-          <Button asChild variant="outline">
-            <Link href="/routes">Routes tecnicas</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <SavedViewsMenu storageKey="aethra.savedViews.publicAccess" />
+            <Button asChild variant="outline">
+              <Link href="/routes">Routes tecnicas</Link>
+            </Button>
+          </div>
         }
       />
 

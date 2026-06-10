@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
+import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   AppEnvironmentOverviewDto,
@@ -66,6 +67,7 @@ export default async function AppEnvironmentsPage({
       <PageHeader
         title="App Environments"
         description="Unidad operativa: app, tenant, ambiente, machine, release y URL publica."
+        actions={<SavedViewsMenu storageKey="aethra.savedViews.appEnvironments" />}
       />
 
       <Card>
