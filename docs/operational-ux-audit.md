@@ -758,7 +758,7 @@ Estado de avance:
 - La UI global de Public Access ya muestra las mismas acciones por hostname cuando el owner apunta a un App Environment, ademas de DNS target, target esperado y tunnel.
 - `POST /api/ops/public-access-states/{appEnvironmentId}/verify` ya ejecuta verificacion manual por cada `PathPrefix` publico, cada backend unico y Monitor cuando existe.
 - `PublicAccessState` ya expone `reconciliationPolicy` y `edgeTlsPolicy` por ambiente (`production` estricto, otros standard/flexible), y App Environment muestra esa politica junto al estado deseado.
-- Pendiente posterior: conectar esas politicas a un modulo explicito de certificados cuando exista gestion directa de certificados edge/origin.
+- Public Access ya conecta esas politicas con el modelo de certificados de Proxy: cada ruta muestra `certStatus`, expiracion, e issues operacionales `cert.failed`, `cert.expired` y `cert.expiring`; esos issues cambian la siguiente accion a `renew_certificate`.
 
 Contrato actual:
 
@@ -810,34 +810,20 @@ Estado de avance:
 - Search global ya existe como endpoint operacional y pagina `/search`.
 - Command Palette ya existe como modal desde el topbar, con atajos `Ctrl/Cmd+K` y `/`, busqueda incremental y navegacion directa al recurso operacional.
 - Command Palette ya incluye comandos locales para abrir filtros operacionales frecuentes: endpoints rotos, issues criticos, machines offline, config drift, releases desplegando y production app environments.
-- Command Palette ya ejecuta acciones contextuales para App Environments encontrados desde busqueda: verificar Public Access, hacer dry-run y reconciliar sin salir del modal.
+- Command Palette ya ejecuta acciones contextuales para App Environments encontrados desde busqueda: verificar Public Access, hacer dry-run, reconciliar y disparar deploy nativo sin salir del modal.
 - Saved views locales ya existen para las listas operacionales de alto volumen: App Environments, Releases, Public Access, Machines, Data Services y Operational Issues.
-- Pendiente posterior: sumar acciones de deploy/retry/rollback/logs/previews en la palette cuando esas acciones tengan contratos contextuales uniformes.
+- Retry, rollback, logs y previews quedan como backlog de producto ligado a exponer `buildId`, `deploymentId` o `previewId` en resultados de busqueda; no deben inferirse desde texto porque son acciones destructivas o dependientes de un recurso secundario.
 
-## Backlog priorizado
+## Backlog residual
 
-### P0
+La plataforma ya queda organizada alrededor de `App Environment` como unidad mental operativa: desde ahi se entiende que se puede desplegar, reconciliar acceso publico, revisar config efectiva, ver historial de deployments, decidir rollback/restart/redeploy y entender readiness de la maquina destino. `Project` deja de ser la unidad de operacion diaria y queda como agrupador administrativo/comercial para portafolio, clientes, permisos y contexto de negocio.
 
-- Definir `App Environment` como unidad mental y renombrar `Instance` en UI.
-- Rehacer `/routes` como `Public Access` o al menos agregar owner/origen.
-- Crear read model global de App Environments con filtros server-side.
-- Evitar que `/builds` dependa de fan-out desde frontend.
+El backlog residual no bloquea el flujo principal de subir cambios a Git y desplegarlos en maquinas. Son extensiones para cuando existan contratos mas especificos:
 
-### P1
-
-- App detail con matriz Tenant x Environment.
-- Command Center con issues accionables.
-- Releases como build + deploy + verificacion.
-- Machine readiness.
-- Public endpoint verification.
-- Filtros server-side para listas operacionales de alto volumen.
-
-### P2
-
-- Data Services con consumidores.
-- Config & Secrets drift/redeploy guidance.
-- Notes/Facts contextuales.
-- MCP actions de alto nivel.
+- Certificados: crear un modulo dedicado de certificados edge/origin si se necesita emitir, renovar o rotar certificados manualmente desde la UI; mientras tanto Public Access ya muestra estado, expiracion e issues desde Proxy.
+- Command Palette avanzada: agregar retry, rollback, logs y previews cuando Search exponga `buildId`, `deploymentId` o `previewId` como metadata estructurada.
+- MCP de alto nivel: publicar acciones operacionales compuestas como `deploy_app_environment`, `reconcile_public_access` y `explain_failed_deploy`.
+- Policies avanzadas: mover reglas por ambiente a un editor formal cuando existan suficientes politicas configurables por tenant/equipo.
 - Saved views persistentes para listas grandes.
 
 ### P3

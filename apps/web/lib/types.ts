@@ -1349,6 +1349,8 @@ export interface PublicEndpointRouteDto {
   routeId: string;
   pathPrefix: string;
   backendUrl: string;
+  certStatus: CertStatus;
+  certExpiresAt: string | null;
   operationalOwnerType: string | null;
   operationalOwnerId: string | null;
   origin: string | null;

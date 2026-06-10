@@ -280,6 +280,7 @@ export default async function PublicAccessPage({
                     <TableRow>
                       <TableHead>Path</TableHead>
                       <TableHead>Backend</TableHead>
+                      <TableHead>Cert</TableHead>
                       <TableHead>Owner</TableHead>
                       <TableHead>Origin</TableHead>
                       <TableHead>Route</TableHead>
@@ -290,6 +291,18 @@ export default async function PublicAccessPage({
                       <TableRow key={route.routeId}>
                         <TableCell className="font-mono text-xs">{route.pathPrefix}</TableCell>
                         <TableCell className="font-mono text-xs">{route.backendUrl}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant={route.certStatus === "issued" ? "success" : route.certStatus === "failed" ? "destructive" : "outline"} className="w-fit font-mono text-[10px]">
+                              {route.certStatus}
+                            </Badge>
+                            {route.certExpiresAt ? (
+                              <span className="text-[11px] text-muted-foreground">
+                                exp {formatDate(route.certExpiresAt)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </TableCell>
                         <TableCell className="font-mono text-xs">
                           {route.operationalOwnerType && route.operationalOwnerId
                             ? `${route.operationalOwnerType}:${route.operationalOwnerId}`
@@ -349,6 +362,12 @@ function SmallStat({
       </p>
     </div>
   );
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("es-CO", {
+    dateStyle: "medium",
+  }).format(new Date(value));
 }
 
 function buildQuery(filters: PublicAccessFilters) {

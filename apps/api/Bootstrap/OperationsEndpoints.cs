@@ -11,6 +11,7 @@ using Aethra.Modules.Monitoring.Infrastructure;
 using Aethra.Modules.Monitoring.UseCases.Commands;
 using Aethra.Modules.Projects.Domain.EnvVars;
 using Aethra.Modules.Projects.Infrastructure;
+using Aethra.Modules.Proxy.Domain;
 using Aethra.Modules.Proxy.Infrastructure;
 using Aethra.Modules.Proxy.UseCases.Routes.Commands;
 using Aethra.Modules.Services.Infrastructure;
@@ -470,30 +471,12 @@ public static class OperationsEndpoints
     {
         var snapshot = await LoadSnapshot(projectsDb, null, monitoringDb, ct);
         var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
-        // Hostname es un value object (value-converted): ordenar/proyectar .Value no se traduce a SQL.
-        // Materializamos las entidades y proyectamos + ordenamos en memoria (el set de rutas es chico).
-        var routeEntities = await proxyDb.Routes.AsNoTracking()
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-        var routes = routeEntities
-            .Select(r => new RouteRow(
-                r.Id.ToString(),
-                r.Hostname.Value,
-                r.PathPrefix,
-                r.BackendUrl,
-                r.TlsEnabled,
-                r.OperationalOwnerType,
-                r.OperationalOwnerId,
-                r.Origin))
-            .OrderBy(r => r.hostname, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(r => r.pathPrefix, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var groups = routes
-            .GroupBy(r => r.hostname, StringComparer.OrdinalIgnoreCase)
-            .Select(g =>
+        var routesByHost = await LoadRoutesByHost(proxyDb, ct);
+        var groups = routesByHost
+            .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(kvp =>
             {
-                return BuildPublicEndpoint(g.Key, g.ToList(), snapshot, publicInfra);
+                return BuildPublicEndpoint(kvp.Key, kvp.Value, snapshot, publicInfra);
             })
             .Where(e => MatchesPublicEndpointFilters(e, q, health, appId, environment, dns, tunnel, monitor))
             .OrderBy(e => e.HealthStatus == "healthy")
@@ -1503,22 +1486,11 @@ public static class OperationsEndpoints
                 $"/builds/{build.id}"));
         }
 
-        var routes = await proxyDb.Routes.AsNoTracking()
-            .Select(r => new RouteRow(
-                r.Id.ToString(),
-                r.Hostname.Value,
-                r.PathPrefix,
-                r.BackendUrl,
-                r.TlsEnabled,
-                r.OperationalOwnerType,
-                r.OperationalOwnerId,
-                r.Origin))
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var routesByHost = await LoadRoutesByHost(proxyDb, ct);
         var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
-        foreach (var group in routes.GroupBy(r => r.hostname, StringComparer.OrdinalIgnoreCase))
+        foreach (var (hostname, routes) in routesByHost)
         {
-            var endpoint = BuildPublicEndpoint(group.Key, group.ToList(), snapshot, publicInfra);
+            var endpoint = BuildPublicEndpoint(hostname, routes, snapshot, publicInfra);
             foreach (var code in endpoint.Issues)
             {
                 issues.Add(new OperationalIssueDto(
@@ -1572,19 +1544,46 @@ public static class OperationsEndpoints
         var routeEntities = await proxyDb.Routes.AsNoTracking()
             .ToListAsync(ct)
             .ConfigureAwait(false);
+        var certificates = await proxyDb.Certificates.AsNoTracking()
+            .ToDictionaryAsync(c => c.Id, ct)
+            .ConfigureAwait(false);
 
         return routeEntities
-            .Select(r => new RouteRow(
-                r.Id.ToString(),
-                r.Hostname.Value,
-                r.PathPrefix,
-                r.BackendUrl,
-                r.TlsEnabled,
-                r.OperationalOwnerType,
-                r.OperationalOwnerId,
-                r.Origin))
+            .Select(r => ToRouteRow(r, certificates))
             .GroupBy(r => r.hostname, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static RouteRow ToRouteRow(
+        Aethra.Modules.Proxy.Domain.Route route,
+        Dictionary<CertificateId, Certificate> certificates)
+    {
+        var certStatus = "none";
+        DateTimeOffset? certExpiresAt = null;
+        if (route.TlsEnabled)
+        {
+            if (route.CertificateId is { } certId && certificates.TryGetValue(certId, out var cert))
+            {
+                certStatus = cert.Status.ToString().ToLowerInvariant();
+                certExpiresAt = cert.NotAfter;
+            }
+            else
+            {
+                certStatus = "pending";
+            }
+        }
+
+        return new RouteRow(
+            route.Id.ToString(),
+            route.Hostname.Value,
+            route.PathPrefix,
+            route.BackendUrl,
+            route.TlsEnabled,
+            certStatus,
+            certExpiresAt,
+            route.OperationalOwnerType,
+            route.OperationalOwnerId,
+            route.Origin);
     }
 
     private static async Task<List<OperationalConfigRow>> LoadOperationalConfigRows(ProjectsDbContext db, CancellationToken ct)
@@ -1722,6 +1721,23 @@ public static class OperationsEndpoints
             ? ("strict", "full_strict")
             : ("standard", "flexible");
 
+    private static void AddCertificateIssues(IReadOnlyList<RouteRow> routes, List<string> issues)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (routes.Any(r => r.certStatus == "failed"))
+        {
+            issues.Add("cert.failed");
+        }
+        if (routes.Any(r => r.certExpiresAt is not null && r.certExpiresAt <= now))
+        {
+            issues.Add("cert.expired");
+        }
+        if (routes.Any(r => r.certExpiresAt is not null && r.certExpiresAt > now && r.certExpiresAt <= now.AddDays(14)))
+        {
+            issues.Add("cert.expiring");
+        }
+    }
+
     private static PublicAccessStateDto BuildPublicAccessState(
         InstanceRow instance,
         OpsSnapshot snapshot,
@@ -1780,6 +1796,7 @@ public static class OperationsEndpoints
         {
             issues.Add("tls_missing");
         }
+        AddCertificateIssues(routes, issues);
         if (desiredHostname is not null && monitor is null)
         {
             issues.Add("monitor_missing");
@@ -1791,7 +1808,7 @@ public static class OperationsEndpoints
 
         var health = issues.Count == 0
             ? "healthy"
-            : issues.Any(i => i is "desired_hostname_missing" or "dns_zone_missing" or "dns_record_missing" or "dns_target_mismatch" or "tunnel_missing" or "tunnel_ingress_missing" or "route_missing" or "route_owner_mismatch" or "monitor_down")
+            : issues.Any(i => i is "desired_hostname_missing" or "dns_zone_missing" or "dns_record_missing" or "dns_target_mismatch" or "tunnel_missing" or "tunnel_ingress_missing" or "route_missing" or "route_owner_mismatch" or "cert.failed" or "cert.expired" or "monitor_down")
                 ? "broken"
                 : "degraded";
         var nextAction = issues.Contains("desired_hostname_missing", StringComparer.Ordinal)
@@ -1810,11 +1827,13 @@ public static class OperationsEndpoints
                                     ? "reconcile_route_owner"
                                     : issues.Contains("tls_missing", StringComparer.Ordinal)
                                         ? "enable_tls"
-                                        : issues.Contains("monitor_missing", StringComparer.Ordinal)
-                                            ? "create_monitor"
-                                            : issues.Contains("monitor_down", StringComparer.Ordinal)
-                                                ? "fix_monitor"
-                                                : "none";
+                                        : issues.Any(i => i is "cert.failed" or "cert.expired" or "cert.expiring")
+                                            ? "renew_certificate"
+                                            : issues.Contains("monitor_missing", StringComparer.Ordinal)
+                                                ? "create_monitor"
+                                                : issues.Contains("monitor_down", StringComparer.Ordinal)
+                                                    ? "fix_monitor"
+                                                    : "none";
 
         return new PublicAccessStateDto(
             instance.id,
@@ -2187,6 +2206,7 @@ public static class OperationsEndpoints
         {
             issues.Add("route.metadata_missing");
         }
+        AddCertificateIssues(routeRows, issues);
         if (FindZoneForHostname(hostname, publicInfra) is null)
         {
             issues.Add("endpoint.dns_zone_missing");
@@ -2217,7 +2237,7 @@ public static class OperationsEndpoints
         }
         var health = issues.Count == 0
             ? "healthy"
-            : issues.Any(i => i is "route.owner_missing" or "endpoint.dns_zone_missing" or "endpoint.dns_missing" or "endpoint.dns_target_mismatch" or "endpoint.tunnel_missing" or "endpoint.tunnel_ingress_missing" or "monitor.down")
+            : issues.Any(i => i is "route.owner_missing" or "endpoint.dns_zone_missing" or "endpoint.dns_missing" or "endpoint.dns_target_mismatch" or "endpoint.tunnel_missing" or "endpoint.tunnel_ingress_missing" or "cert.failed" or "cert.expired" or "monitor.down")
                 ? "broken"
                 : "degraded";
 
@@ -2728,6 +2748,8 @@ public static class OperationsEndpoints
         string pathPrefix,
         string backendUrl,
         bool tlsEnabled,
+        string certStatus,
+        DateTimeOffset? certExpiresAt,
         string? operationalOwnerType,
         string? operationalOwnerId,
         string? origin);
@@ -2921,6 +2943,8 @@ public static class OperationsEndpoints
             route.id,
             route.pathPrefix,
             route.backendUrl,
+            route.certStatus,
+            route.certExpiresAt,
             route.operationalOwnerType,
             route.operationalOwnerId,
             route.origin);
@@ -2929,6 +2953,8 @@ public static class OperationsEndpoints
         string RouteId,
         string PathPrefix,
         string BackendUrl,
+        string CertStatus,
+        DateTimeOffset? CertExpiresAt,
         string? OperationalOwnerType,
         string? OperationalOwnerId,
         string? Origin);

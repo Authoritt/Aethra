@@ -181,7 +181,7 @@ export function CommandPalette() {
 
   async function runPublicAccessAction(
     appEnvironmentId: string,
-    action: "verify" | "dry-run" | "reconcile",
+    action: "verify" | "dry-run" | "reconcile" | "deploy-native",
   ) {
     const key = `${action}:${appEnvironmentId}`;
     setBusyAction(key);
@@ -196,6 +196,17 @@ export function CommandPalette() {
           failed.length > 0
             ? `${failed.length} check(s) fallaron`
             : `${result.checks.length} check(s) OK`,
+        );
+      } else if (action === "deploy-native") {
+        const result = await api<{ healthy: boolean; services: string[] }>(
+          `/api/instances/${encodeURIComponent(appEnvironmentId)}/deploy-native`,
+          {
+            method: "POST",
+            body: JSON.stringify({}),
+          },
+        );
+        toast.success(
+          `Deploy nativo OK · ${result.services.length} servicio(s)${result.healthy ? " · healthy" : ""}`,
         );
       } else {
         const dryRun = action === "dry-run";
@@ -327,6 +338,12 @@ export function CommandPalette() {
                           disabled={busyAction !== null}
                           label="Reconcile"
                           onClick={() => runPublicAccessAction(appEnvironmentId, "reconcile")}
+                        />
+                        <PaletteActionButton
+                          busy={busyAction === `deploy-native:${appEnvironmentId}`}
+                          disabled={busyAction !== null}
+                          label="Deploy"
+                          onClick={() => runPublicAccessAction(appEnvironmentId, "deploy-native")}
                         />
                       </div>
                     ) : null}
