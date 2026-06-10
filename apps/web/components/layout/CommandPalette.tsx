@@ -25,7 +25,65 @@ const TYPE_LABELS: Record<string, string> = {
   public_endpoint: "Public Endpoint",
   machine: "Machine",
   data_service: "Data Service",
+  command: "Command",
 };
+
+const QUICK_COMMANDS: GlobalSearchResultDto[] = [
+  {
+    type: "command",
+    title: "Broken public endpoints",
+    subtitle: "Open Public Access filtered by broken health.",
+    href: "/public-access?health=broken",
+    status: "filter",
+    badge: "Public Access",
+    score: 100,
+  },
+  {
+    type: "command",
+    title: "Critical operational issues",
+    subtitle: "Open the issues inbox filtered by critical severity.",
+    href: "/operational-issues?severity=critical",
+    status: "filter",
+    badge: "Issues",
+    score: 100,
+  },
+  {
+    type: "command",
+    title: "Offline machines",
+    subtitle: "Open Machines filtered by offline readiness.",
+    href: "/vms?readiness=offline",
+    status: "filter",
+    badge: "Machines",
+    score: 100,
+  },
+  {
+    type: "command",
+    title: "Config drift",
+    subtitle: "Open issues caused by effective config changes.",
+    href: "/operational-issues?q=config.",
+    status: "filter",
+    badge: "Config",
+    score: 100,
+  },
+  {
+    type: "command",
+    title: "Deploying releases",
+    subtitle: "Open Releases filtered by active deployments.",
+    href: "/releases?status=deploying",
+    status: "filter",
+    badge: "Releases",
+    score: 100,
+  },
+  {
+    type: "command",
+    title: "Production app environments",
+    subtitle: "Open App Environments filtered by production.",
+    href: "/app-environments?environment=production",
+    status: "filter",
+    badge: "App Environments",
+    score: 100,
+  },
+];
 
 export function CommandPalette() {
   const router = useRouter();
@@ -37,6 +95,14 @@ export function CommandPalette() {
   const [error, setError] = useState<string | null>(null);
 
   const trimmedQuery = useMemo(() => query.trim(), [query]);
+  const quickCommands = useMemo(
+    () => filterQuickCommands(trimmedQuery),
+    [trimmedQuery],
+  );
+  const visibleResults = useMemo(
+    () => [...quickCommands, ...results].slice(0, 10),
+    [quickCommands, results],
+  );
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -147,13 +213,13 @@ export function CommandPalette() {
             <p className="px-3 py-8 text-center text-sm text-destructive">
               {error}
             </p>
-          ) : results.length === 0 && !loading ? (
+          ) : visibleResults.length === 0 && !loading ? (
             <p className="px-3 py-8 text-center text-sm text-muted-foreground">
               No results found.
             </p>
           ) : (
             <div className="py-2">
-              {results.map((result) => (
+              {visibleResults.map((result) => (
                 <button
                   key={`${result.type}:${result.href}`}
                   type="button"
@@ -190,17 +256,46 @@ export function CommandPalette() {
 
 function CommandPaletteHint() {
   return (
-    <div className="grid gap-3 px-3 py-6 text-sm text-muted-foreground sm:grid-cols-2">
-      <div className="rounded-md border bg-muted/30 p-3">
-        <p className="font-medium text-foreground">Jump to operations</p>
-        <p className="mt-1 text-xs">
-          Find an App Environment, release, machine, endpoint or data service.
-        </p>
+    <div className="space-y-3 px-3 py-4 text-sm text-muted-foreground">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-md border bg-muted/30 p-3">
+          <p className="font-medium text-foreground">Jump to operations</p>
+          <p className="mt-1 text-xs">
+            Find an App Environment, release, machine, endpoint or data service.
+          </p>
+        </div>
+        <div className="rounded-md border bg-muted/30 p-3">
+          <p className="font-medium text-foreground">Shortcuts</p>
+          <p className="mt-1 text-xs">Press Ctrl/Command+K or / from anywhere.</p>
+        </div>
       </div>
-      <div className="rounded-md border bg-muted/30 p-3">
-        <p className="font-medium text-foreground">Shortcuts</p>
-        <p className="mt-1 text-xs">Press Ctrl/Command+K or / from anywhere.</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {QUICK_COMMANDS.slice(0, 4).map((command) => (
+          <div key={command.href} className="rounded-md border px-3 py-2">
+            <p className="truncate text-xs font-medium text-foreground">
+              {command.title}
+            </p>
+            <p className="mt-1 truncate text-[11px]">{command.subtitle}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
+}
+
+function filterQuickCommands(query: string) {
+  if (query.length < MIN_QUERY_LENGTH) return [];
+  return QUICK_COMMANDS.filter((command) => {
+    const haystack = [
+      command.title,
+      command.subtitle,
+      command.href,
+      command.status,
+      command.badge,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(query.toLowerCase());
+  });
 }

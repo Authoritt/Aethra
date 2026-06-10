@@ -804,6 +804,7 @@ Estado de avance:
 
 - Search global ya existe como endpoint operacional y pagina `/search`.
 - Command Palette ya existe como modal desde el topbar, con atajos `Ctrl/Cmd+K` y `/`, busqueda incremental y navegacion directa al recurso operacional.
+- Command Palette ya incluye comandos locales para abrir filtros operacionales frecuentes: endpoints rotos, issues criticos, machines offline, config drift, releases desplegando y production app environments.
 - Saved views locales ya existen para las listas operacionales de alto volumen: App Environments, Releases, Public Access, Machines, Data Services y Operational Issues.
 - Pendiente: convertir la Command Palette de buscador/navegador a operador de alto nivel: deploy, verify endpoint, retry release, rollback, open logs y create preview desde resultados contextualizados.
 
