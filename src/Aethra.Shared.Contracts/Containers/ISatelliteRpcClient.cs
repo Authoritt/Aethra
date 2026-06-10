@@ -30,6 +30,9 @@ public interface ISatelliteRpcClient
     /// <summary>Detiene un contenedor en la VM indicada.</summary>
     Task SendStopAsync(string vmId, string containerNameOrId, CancellationToken ct);
 
+    /// <summary>Reinicia un contenedor en la VM indicada.</summary>
+    Task SendRestartAsync(string vmId, string containerNameOrId, CancellationToken ct);
+
     /// <summary>Elimina un contenedor en la VM indicada.</summary>
     Task SendRemoveAsync(string vmId, string containerNameOrId, bool force, CancellationToken ct);
 

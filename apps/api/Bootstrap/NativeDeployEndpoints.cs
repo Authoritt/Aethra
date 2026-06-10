@@ -38,6 +38,21 @@ public static class NativeDeployEndpoints
         .WithName("DeployInstanceNative")
         .WithTags("Deployments");
 
+
+        app.MapPost("/api/instances/{instanceId}/restart-native", async (
+            string instanceId,
+            NativeDeployRunner runner,
+            CancellationToken ct) =>
+        {
+            var r = await runner.RestartAsync(instanceId, ct);
+            return r.Success
+                ? Results.Ok(new { instanceId, services = r.Services })
+                : Results.Problem(r.Error);
+        })
+        .RequireAuthorization("scope:projects:write")
+        .WithName("RestartInstanceNative")
+        .WithTags("Deployments");
+
         // F13.6 — upsert de env vars runtime a nivel Instance. Permite sacar los valores por-ambiente
         // (BD, host público, Cors) del svc.Env del template (compartido) y ponerlos por instancia, de
         // modo que cada Instance del mismo template apunta a su propia BD/host sin clonar el template.

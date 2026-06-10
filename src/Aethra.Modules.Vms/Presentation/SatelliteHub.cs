@@ -145,6 +145,12 @@ public sealed class SatelliteHub(
         return Task.CompletedTask;
     }
 
+    public Task RestartContainerAck(string correlationId)
+    {
+        rpcCallbacks.CompleteRequest(correlationId, new object());
+        return Task.CompletedTask;
+    }
+
     public Task RemoveContainerAck(string correlationId)
     {
         rpcCallbacks.CompleteRequest(correlationId, new object());

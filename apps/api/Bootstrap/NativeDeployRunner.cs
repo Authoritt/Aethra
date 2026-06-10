@@ -22,6 +22,11 @@ public sealed record NativeDeployResult(
     IReadOnlyList<string> Services,
     IReadOnlyList<string> Routes);
 
+public sealed record NativeRestartResult(
+    bool Success,
+    string? Error,
+    IReadOnlyList<string> Services);
+
 /// <summary>
 /// F13 — orquestación reutilizable del deploy nativo multi-contenedor de una Instance.
 /// La usan tanto el endpoint manual (<c>POST /api/instances/{id}/deploy-native</c>) como el
@@ -178,6 +183,36 @@ public sealed class NativeDeployRunner(
 
         log.LogInformation("native-deploy {Inst} OK (healthy={H}, {N} servicios)", instance.Slug, healthy, deployedServices.Count);
         return new NativeDeployResult(true, null, hostname, healthy, deployedServices, routes);
+    }
+
+    public async Task<NativeRestartResult> RestartAsync(string instanceId, CancellationToken ct)
+    {
+        var instance = await instanceLookup.GetByIdAsync(instanceId, ct).ConfigureAwait(false);
+        if (instance is null)
+        {
+            return RestartFail($"Instance '{instanceId}' no existe.");
+        }
+        var template = await templateLookup.GetByIdAsync(instance.TemplateId, ct).ConfigureAwait(false);
+        if (template is null)
+        {
+            return RestartFail("Template de la instance no existe.");
+        }
+        var services = template.Services ?? [];
+        if (services.Count == 0)
+        {
+            return RestartFail("El template no define servicios (Services).");
+        }
+
+        var restarted = new List<string>();
+        foreach (var svc in services)
+        {
+            var containerName = $"{instance.Slug}-{svc.Name}";
+            await satellite.SendRestartAsync(instance.TargetVmId, containerName, ct).ConfigureAwait(false);
+            restarted.Add(containerName);
+        }
+
+        log.LogInformation("native-restart {Inst} OK ({N} servicios)", instance.Slug, restarted.Count);
+        return new NativeRestartResult(true, null, restarted);
     }
 
     /// <summary>
@@ -346,4 +381,7 @@ public sealed class NativeDeployRunner(
 
     private static NativeDeployResult Fail(string error, string? hostname = null)
         => new(false, error, hostname, false, [], []);
+
+    private static NativeRestartResult RestartFail(string error)
+        => new(false, error, []);
 }

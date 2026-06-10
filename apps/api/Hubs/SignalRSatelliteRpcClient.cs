@@ -95,6 +95,14 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
             new StopContainerRequest(correlationId, containerNameOrId), _defaultTimeout, ct).ConfigureAwait(false);
     }
 
+    public async Task SendRestartAsync(string vmId, string containerNameOrId, CancellationToken ct)
+    {
+        var correlationId = NewCorrelationId();
+        await SendAndAwaitAsync<object>(
+            vmId, correlationId, "RestartContainer",
+            new RestartContainerRequest(correlationId, containerNameOrId), _defaultTimeout, ct).ConfigureAwait(false);
+    }
+
     public async Task SendRemoveAsync(
         string vmId, string containerNameOrId, bool force, CancellationToken ct)
     {

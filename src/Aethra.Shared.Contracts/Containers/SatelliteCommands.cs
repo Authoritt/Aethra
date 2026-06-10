@@ -25,6 +25,10 @@ public sealed record RunContainerResponse(string CorrelationId, RunResult Result
 /// <param name="ContainerNameOrId">Nombre o ID del contenedor a detener.</param>
 public sealed record StopContainerRequest(string CorrelationId, string ContainerNameOrId);
 
+/// <param name="CorrelationId">Identificador unico del job/request.</param>
+/// <param name="ContainerNameOrId">Nombre o ID del contenedor a reiniciar.</param>
+public sealed record RestartContainerRequest(string CorrelationId, string ContainerNameOrId);
+
 /// <param name="CorrelationId">Identificador único del job/request.</param>
 /// <param name="ContainerNameOrId">Nombre o ID del contenedor a eliminar.</param>
 /// <param name="Force">Si true, fuerza la eliminación aunque el contenedor esté corriendo.</param>

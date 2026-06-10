@@ -28,6 +28,9 @@ public interface IContainerRuntime
     /// <summary>Detiene gracefully un contenedor (SIGTERM → timeout → SIGKILL).</summary>
     Task StopContainerAsync(string nameOrId, CancellationToken ct);
 
+    /// <summary>Reinicia un contenedor manteniendo imagen, env y volumenes actuales.</summary>
+    Task RestartContainerAsync(string nameOrId, CancellationToken ct);
+
     /// <summary>Elimina un contenedor. Si <paramref name="force"/> es true, también lo mata si está corriendo.</summary>
     Task RemoveContainerAsync(string nameOrId, bool force, CancellationToken ct);
 

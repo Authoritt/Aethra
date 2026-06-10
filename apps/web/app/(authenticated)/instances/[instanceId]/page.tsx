@@ -49,6 +49,7 @@ import { CustomDomainForm } from "./CustomDomainForm";
 import { DeployBuildButton } from "./DeployBuildButton";
 import { DeployNativeButton } from "./DeployNativeButton";
 import { TrackedRefEditor, DeleteInstanceButton } from "./InstanceAdmin";
+import { RestartNativeButton } from "./RestartNativeButton";
 
 export const dynamic = "force-dynamic";
 
@@ -156,6 +157,11 @@ export default async function InstanceDetailPage({
       ? templateResult
       : null;
   const hasServices = (template?.services?.length ?? 0) > 0;
+  const changedConfigItems = effectiveConfig?.items.filter((item) => item.changedSinceLastDeploy) ?? [];
+  const canRestartForConfigDrift =
+    hasServices &&
+    changedConfigItems.length > 0 &&
+    changedConfigItems.every((item) => item.changeAction === "restart");
   const pageTitle = operationalEnv
     ? `${operationalEnv.appName} / ${operationalEnv.tenantName} / ${operationalEnv.environment}`
     : instance.slug;
@@ -564,7 +570,9 @@ export default async function InstanceDetailPage({
             <EffectiveConfigPanel
               config={effectiveConfig}
               action={
-                hasServices ? (
+                canRestartForConfigDrift ? (
+                  <RestartNativeButton instanceId={instance.id} />
+                ) : hasServices ? (
                   <DeployNativeButton instanceId={instance.id} hostname={effectiveHost} />
                 ) : currentRelease ? (
                   <DeployBuildButton

@@ -378,6 +378,16 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
         }
     }
 
+    public async Task RestartContainerAsync(string nameOrId, CancellationToken ct)
+    {
+        var (exitCode, _, stderr) = await RunPodmanAsync(["restart", nameOrId], ct);
+        if (exitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"podman restart {nameOrId} salio con codigo {exitCode.ToString(CultureInfo.InvariantCulture)}: {stderr}");
+        }
+    }
+
     public async Task RemoveContainerAsync(string nameOrId, bool force, CancellationToken ct)
     {
         var args = new List<string> { "rm" };

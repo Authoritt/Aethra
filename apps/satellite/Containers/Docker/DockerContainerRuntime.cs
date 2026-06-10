@@ -411,6 +411,14 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
             ct);
     }
 
+    public async Task RestartContainerAsync(string nameOrId, CancellationToken ct)
+    {
+        await _client.Containers.RestartContainerAsync(
+            nameOrId,
+            new ContainerRestartParameters { WaitBeforeKillSeconds = 30 },
+            ct);
+    }
+
     public async Task RemoveContainerAsync(string nameOrId, bool force, CancellationToken ct)
     {
         await _client.Containers.RemoveContainerAsync(

@@ -89,6 +89,19 @@ public sealed class SatelliteCommandHandler(
             });
         });
 
+        // RestartContainer: ack vacio en exito.
+        connection.On<RestartContainerRequest>("RestartContainer", async (req) =>
+        {
+            await HandleAsync(connection, req.CorrelationId, "RestartContainer", async () =>
+            {
+                logger.LogInformation("Central -> RestartContainer (corr={Corr}, name={Name})",
+                    req.CorrelationId, req.ContainerNameOrId);
+                await runtime.RestartContainerAsync(req.ContainerNameOrId, CancellationToken.None);
+                await connection.InvokeAsync(
+                    "RestartContainerAck", req.CorrelationId, CancellationToken.None);
+            });
+        });
+
         // RemoveContainer: ack vacío en éxito.
         connection.On<RemoveContainerRequest>("RemoveContainer", async (req) =>
         {
