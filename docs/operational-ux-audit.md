@@ -661,6 +661,7 @@ Estado actual de implementacion:
 - `/data-services` ya existe como vista operacional filtrable por busqueda, status y tipo, y `/services` queda como vista tecnica.
 - `/dashboard` ya funciona como Command Center con issues, releases, public access y machines.
 - `GET /api/ops/search` y `/search` ya permiten busqueda global de Apps, App Environments, Releases, Public Endpoints, Machines y Data Services.
+- El topbar ya incluye Command Palette con `Ctrl/Cmd+K` y `/`, reutilizando `GET /api/ops/search` para saltar desde cualquier pantalla a Apps, App Environments, Releases, Public Endpoints, Machines y Data Services.
 - `/projects`, `/templates`, `/clients` y `/routes` quedan como compatibilidad/configuracion tecnica, no como camino principal.
 
 ### Fase 1: Reencuadre sin romper modelo
@@ -794,8 +795,8 @@ Resultado:
 Estado de avance:
 
 - Search global ya existe como endpoint operacional y pagina `/search`.
-- El topbar ya tiene acceso directo a Search.
-- Pendiente: command palette modal con atajos y acciones, reutilizando `/api/ops/search`.
+- Command Palette ya existe como modal desde el topbar, con atajos `Ctrl/Cmd+K` y `/`, busqueda incremental y navegacion directa al recurso operacional.
+- Pendiente: convertir la Command Palette de buscador/navegador a operador de alto nivel: deploy, verify endpoint, retry release, rollback, open logs y create preview desde resultados contextualizados.
 
 ## Backlog priorizado
 

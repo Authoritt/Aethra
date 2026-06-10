@@ -11,7 +11,6 @@ import {
   Monitor,
   Moon,
   Palette,
-  Search,
   Sun,
   User,
 } from "lucide-react";
@@ -31,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { API_URL } from "@/lib/api";
 import { Breadcrumbs } from "./breadcrumbs";
+import { CommandPalette } from "./CommandPalette";
 import { LanguageToggle } from "./language-toggle";
 
 interface AppTopbarProps {
@@ -108,11 +108,7 @@ export function AppTopbar({ onOpenSidebar }: AppTopbarProps) {
       </div>
 
       <div className="flex items-center gap-1">
-        <Button asChild variant="ghost" size="icon" aria-label="Search">
-          <Link href="/search">
-            <Search className="size-4" />
-          </Link>
-        </Button>
+        <CommandPalette />
         <LanguageToggle />
         <ThemeToggle />
         <UserMenu
