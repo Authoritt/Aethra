@@ -770,6 +770,7 @@ Estado de avance:
 - `POST /api/ops/public-access-states/{appEnvironmentId}/verify` ya ejecuta verificacion manual por cada `PathPrefix` publico, cada backend unico y Monitor cuando existe.
 - `PublicAccessState` ya expone `reconciliationPolicy` y `edgeTlsPolicy` por ambiente (`production` estricto, otros standard/flexible), y App Environment muestra esa politica junto al estado deseado.
 - Public Access ya conecta esas politicas con el modelo de certificados de Proxy: cada ruta muestra `certStatus`, expiracion, e issues operacionales `cert.failed`, `cert.expired` y `cert.expiring`; esos issues cambian la siguiente accion a `renew_certificate`.
+- Proxy ya expone `/api/proxy/certificates` para listar certificados, solicitar emision por hostname y renovar manualmente certificados existentes. Public Access resuelve certificados por `certificate_id` o por hostname cuando la ruta no tiene el id directo.
 
 Contrato actual:
 
@@ -834,7 +835,7 @@ La plataforma ya queda organizada alrededor de `App Environment` como unidad men
 
 El backlog residual no bloquea el flujo principal de subir cambios a Git y desplegarlos en maquinas. Son extensiones para cuando existan contratos mas especificos:
 
-- Certificados: crear un modulo dedicado de certificados edge/origin si se necesita emitir, renovar o rotar certificados manualmente desde la UI; mientras tanto Public Access ya muestra estado, expiracion e issues desde Proxy.
+- Certificados UI: agregar pagina dedicada si se requiere operacion frecuente; el contrato REST de listar/emitir/renovar y el estado en Public Access ya existen.
 - Preview lifecycle avanzado: agregar expiracion/extend desde Command Palette cuando existan contratos UI para esas mutaciones; delete preview ya esta cubierto.
 - MCP Public Access: exponer `aethra_reconcile_public_access` como wrapper directo del reconciler cuando esa logica salga del endpoint host a un servicio reutilizable.
 - Policies avanzadas: mover reglas por ambiente a un editor formal cuando existan suficientes politicas configurables por tenant/equipo.

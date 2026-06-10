@@ -42,6 +42,7 @@ public static class ProxyModule
     public static IEndpointRouteBuilder MapProxyModuleEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapRoutesEndpoints();
+        app.MapCertificateEndpoints();
         app.MapAcmeChallengeEndpoint();
         return app;
     }

@@ -1554,22 +1554,29 @@ public static class OperationsEndpoints
         var certificates = await proxyDb.Certificates.AsNoTracking()
             .ToDictionaryAsync(c => c.Id, ct)
             .ConfigureAwait(false);
+        var certificatesByHostname = certificates.Values
+            .GroupBy(c => c.Hostname.Value, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.NotAfter).First(), StringComparer.OrdinalIgnoreCase);
 
         return routeEntities
-            .Select(r => ToRouteRow(r, certificates))
+            .Select(r => ToRouteRow(r, certificates, certificatesByHostname))
             .GroupBy(r => r.hostname, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
     }
 
     private static RouteRow ToRouteRow(
         Aethra.Modules.Proxy.Domain.Route route,
-        Dictionary<CertificateId, Certificate> certificates)
+        Dictionary<CertificateId, Certificate> certificates,
+        Dictionary<string, Certificate> certificatesByHostname)
     {
         var certStatus = "none";
         DateTimeOffset? certExpiresAt = null;
         if (route.TlsEnabled)
         {
-            if (route.CertificateId is { } certId && certificates.TryGetValue(certId, out var cert))
+            var cert = route.CertificateId is { } certId && certificates.TryGetValue(certId, out var byId)
+                ? byId
+                : certificatesByHostname.GetValueOrDefault(route.Hostname.Value);
+            if (cert is not null)
             {
                 certStatus = cert.Status.ToString().ToLowerInvariant();
                 certExpiresAt = cert.NotAfter;
