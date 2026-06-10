@@ -71,6 +71,7 @@ internal sealed class DeploymentCompletedHandler(
         if (existing is not null)
         {
             existing.UpdateBackend(backendUrl, clock.UtcNow);
+            existing.SetOperationalOwner("app_environment", notification.InstanceId, "deployment_completed", clock.UtcNow);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             configService.Reload();
             logger.LogInformation(
@@ -110,6 +111,7 @@ internal sealed class DeploymentCompletedHandler(
         // (RequestCertificateCommand) cuando el operador lo confirme. F9.4 puede preconfigurar
         // tls=true si BaseDomain.WildcardConfigured es true (cert wildcard ya disponible).
         var route = Route.Create(hostnameResult.Value, backendUrl, tlsEnabled: false, clock.UtcNow);
+        route.SetOperationalOwner("app_environment", notification.InstanceId, "deployment_completed", clock.UtcNow);
         db.Routes.Add(route);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         configService.Reload();

@@ -13,6 +13,9 @@ internal static class RouteMapper
         TlsEnabled: r.TlsEnabled,
         CertStatus: certStatus,
         CertExpiresAt: certExpiresAt,
+        OperationalOwnerType: r.OperationalOwnerType,
+        OperationalOwnerId: r.OperationalOwnerId,
+        Origin: r.Origin,
         CreatedAt: r.CreatedAt,
         UpdatedAt: r.UpdatedAt);
 }

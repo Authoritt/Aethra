@@ -176,6 +176,9 @@ export interface RouteDto {
   tlsEnabled: boolean;
   certStatus: CertStatus;
   certExpiresAt: string | null;
+  operationalOwnerType: string | null;
+  operationalOwnerId: string | null;
+  origin: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -185,6 +188,9 @@ export interface CreateRouteRequest {
   pathPrefix?: string;
   backendUrl: string;
   tlsEnabled: boolean;
+  operationalOwnerType?: string | null;
+  operationalOwnerId?: string | null;
+  origin?: string | null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1335,6 +1341,9 @@ export interface PublicEndpointRouteDto {
   routeId: string;
   pathPrefix: string;
   backendUrl: string;
+  operationalOwnerType: string | null;
+  operationalOwnerId: string | null;
+  origin: string | null;
 }
 
 export interface PublicEndpointOverviewDto {

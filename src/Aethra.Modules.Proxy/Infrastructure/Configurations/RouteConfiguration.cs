@@ -46,6 +46,17 @@ internal sealed class RouteConfiguration : IEntityTypeConfiguration<Route>
                 id => id == null ? null : id.Value.ToString(),
                 s => string.IsNullOrEmpty(s) ? null : ParseCertificateId(s)))
             .HasMaxLength(64);
+        builder.Property(r => r.OperationalOwnerType)
+            .HasColumnName("operational_owner_type")
+            .HasMaxLength(64);
+        builder.Property(r => r.OperationalOwnerId)
+            .HasColumnName("operational_owner_id")
+            .HasMaxLength(128);
+        builder.Property(r => r.Origin)
+            .HasColumnName("origin")
+            .HasMaxLength(64);
+        builder.HasIndex(r => new { r.OperationalOwnerType, r.OperationalOwnerId })
+            .HasDatabaseName("ix_routes_operational_owner");
         builder.Property(r => r.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(r => r.UpdatedAt).HasColumnName("updated_at").IsRequired();
 

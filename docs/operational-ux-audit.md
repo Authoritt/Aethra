@@ -662,6 +662,7 @@ Estado actual de implementacion:
 - `/dashboard` ya funciona como Command Center con issues, releases, public access y machines.
 - `GET /api/ops/search` y `/search` ya permiten busqueda global de Apps, App Environments, Releases, Public Endpoints, Machines y Data Services.
 - El topbar ya incluye Command Palette con `Ctrl/Cmd+K` y `/`, reutilizando `GET /api/ops/search` para saltar desde cualquier pantalla a Apps, App Environments, Releases, Public Endpoints, Machines y Data Services.
+- `Route` ya persiste `operational_owner_type`, `operational_owner_id` y `origin`; Public Access prefiere ese owner antes de inferirlo por hostname/backend y marca `route_owner_mismatch` cuando el hostname apunta a otro App Environment.
 - `/projects`, `/templates`, `/clients` y `/routes` quedan como compatibilidad/configuracion tecnica, no como camino principal.
 
 ### Fase 1: Reencuadre sin romper modelo
@@ -693,7 +694,8 @@ Estado de avance:
 - `GET /api/ops/public-access-states` ya calcula estado deseado vs real por App Environment.
 - `POST /api/ops/public-access-states/{appEnvironmentId}/reconcile` ya repara DNS, Tunnel ingress, Route/TLS y Monitor cuando hay suficiente configuracion.
 - `POST /api/ops/public-access-states/{appEnvironmentId}/verify` ya valida cada path publico expuesto por YARP, cada backend unico y el Monitor asociado; los checks devuelven `label` y `target` para que el fallo sea localizable.
-- Pendiente: persistir owner/origen de Route como metadata propia, no solo inferida por backend URL.
+- `Route` ya persiste owner/origen operacional. InstanceProvisioned, DeploymentCompleted, NativeDeploy, MCP attach-domain y Public Access Reconcile escriben `app_environment:{id}` con origen del flujo; rutas manuales quedan como `manual` o `unknown`.
+- Pendiente: backfill de owner/origen para rutas historicas existentes antes de esta migracion.
 
 ### Fase 3: Releases
 
@@ -741,6 +743,7 @@ Estado de avance:
 - El reconciler actual crea o repara CNAME proxied hacia `NativeDeploy:TunnelCname` cuando hay zona Cloudflare registrada.
 - El reconciler actual asegura ingress en Cloudflare Tunnel remoto mediante `EnsureTunnelHostnameCommand` cuando hay tunnel gestionado registrado.
 - El reconciler actual crea Route faltante, actualiza backend/TLS de Route existente, crea Monitor faltante y dispara check manual si el Monitor esta `Down`.
+- El reconciler actual corrige tambien owner/origen de Route cuando el hostname deseado existe pero su metadata apunta a otro App Environment.
 - Si falta hostname, zona DNS, tunnel gestionado, CNAME esperado o puerto primario, la operacion devuelve accion `blocked` para ese tramo en vez de asumir configuracion insegura.
 - La UI de App Environment ya muestra botones `Dry run` y `Reconcile` en Public Access, con checks DNS/Tunnel/Route/TLS/Monitor.
 - La UI global de Public Access ya muestra las mismas acciones por hostname cuando el owner apunta a un App Environment, ademas de DNS target, target esperado y tunnel.

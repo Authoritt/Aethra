@@ -3,6 +3,7 @@ using System;
 using Aethra.Modules.Proxy.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Aethra.Modules.Proxy.Infrastructure.Migrations
 {
     [DbContext(typeof(ProxyDbContext))]
-    partial class ProxyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260610014940_RouteOperationalOwner")]
+    partial class RouteOperationalOwner
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

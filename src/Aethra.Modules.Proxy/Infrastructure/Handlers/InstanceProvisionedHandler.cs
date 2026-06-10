@@ -60,6 +60,7 @@ internal sealed class InstanceProvisionedHandler(
         if (existing is not null)
         {
             existing.UpdateBackend(backendUrl, clock.UtcNow);
+            existing.SetOperationalOwner("app_environment", notification.InstanceId, "instance_provisioned", clock.UtcNow);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             config.Reload();
             logger.LogInformation(
@@ -75,6 +76,7 @@ internal sealed class InstanceProvisionedHandler(
         try
         {
             route = Route.Create(hostname, backendUrl, tlsEnabled: true, clock.UtcNow);
+            route.SetOperationalOwner("app_environment", notification.InstanceId, "instance_provisioned", clock.UtcNow);
         }
         catch (ArgumentException ex)
         {

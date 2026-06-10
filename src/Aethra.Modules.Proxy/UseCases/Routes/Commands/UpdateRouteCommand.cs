@@ -15,7 +15,13 @@ namespace Aethra.Modules.Proxy.UseCases.Routes.Commands;
 /// Actualiza el backend y el flag TLS de una ruta existente. Hostname/pathPrefix son inmutables
 /// (identifican la ruta) — para cambiarlos hay que borrar y recrear.
 /// </summary>
-public sealed record UpdateRouteCommand(string RouteId, string BackendUrl, bool TlsEnabled) : ICommand;
+public sealed record UpdateRouteCommand(
+    string RouteId,
+    string BackendUrl,
+    bool TlsEnabled,
+    string? OperationalOwnerType = null,
+    string? OperationalOwnerId = null,
+    string? Origin = null) : ICommand;
 
 public sealed class UpdateRouteValidator : AbstractValidator<UpdateRouteCommand>
 {
@@ -53,6 +59,10 @@ internal sealed class UpdateRouteHandler(ProxyDbContext db, IClock clock, IProxy
         }
         // null cert: el TLS por LE se resuelve por DNS-01 wildcard; no atamos cert específico acá.
         route.SetTls(request.TlsEnabled, null, now);
+        if (request.OperationalOwnerType is not null || request.OperationalOwnerId is not null || request.Origin is not null)
+        {
+            route.SetOperationalOwner(request.OperationalOwnerType, request.OperationalOwnerId, request.Origin, now);
+        }
 
         await db.SaveChangesAsync(cancellationToken);
 

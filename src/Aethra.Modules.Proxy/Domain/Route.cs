@@ -21,6 +21,9 @@ public sealed class Route : AggregateRoot<RouteId>
     public string BackendUrl { get; private set; }
     public bool TlsEnabled { get; private set; }
     public CertificateId? CertificateId { get; private set; }
+    public string? OperationalOwnerType { get; private set; }
+    public string? OperationalOwnerId { get; private set; }
+    public string? Origin { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -51,6 +54,14 @@ public sealed class Route : AggregateRoot<RouteId>
         var route = new Route(RouteId.New(), hostname, NormalizePathPrefix(pathPrefix), backendUrl.Trim(), tlsEnabled, now);
         route.Raise(new RouteAddedEvent(route.Id, hostname.Value, route.BackendUrl, tlsEnabled));
         return route;
+    }
+
+    public void SetOperationalOwner(string? ownerType, string? ownerId, string? origin, DateTimeOffset now)
+    {
+        OperationalOwnerType = NormalizeOptional(ownerType);
+        OperationalOwnerId = NormalizeOptional(ownerId);
+        Origin = NormalizeOptional(origin);
+        UpdatedAt = now;
     }
 
     /// <summary>
@@ -97,4 +108,10 @@ public sealed class Route : AggregateRoot<RouteId>
 
     // EF Core
     private Route() : base() { BackendUrl = string.Empty; }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
 }

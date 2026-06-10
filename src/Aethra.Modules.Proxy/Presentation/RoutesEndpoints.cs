@@ -26,7 +26,14 @@ public static class RoutesEndpoints
 
         group.MapPost("/", async ([FromBody] CreateRouteRequest body, IMediator mediator, CancellationToken ct) =>
         {
-            var cmd = new CreateRouteCommand(body.Hostname, body.BackendUrl, body.TlsEnabled, body.PathPrefix);
+            var cmd = new CreateRouteCommand(
+                body.Hostname,
+                body.BackendUrl,
+                body.TlsEnabled,
+                body.PathPrefix,
+                body.OperationalOwnerType,
+                body.OperationalOwnerId,
+                body.Origin ?? "manual");
             var r = await mediator.Send(cmd, ct);
             return r.IsSuccess ? Results.Created($"/api/proxy/routes/{r.Value.Id}", r.Value) : MapError(r.Error);
         })
@@ -52,7 +59,14 @@ public static class RoutesEndpoints
         return app;
     }
 
-    public sealed record CreateRouteRequest(string Hostname, string BackendUrl, bool TlsEnabled, string? PathPrefix = null);
+    public sealed record CreateRouteRequest(
+        string Hostname,
+        string BackendUrl,
+        bool TlsEnabled,
+        string? PathPrefix = null,
+        string? OperationalOwnerType = null,
+        string? OperationalOwnerId = null,
+        string? Origin = null);
 
     public sealed record UpdateRouteRequest(string BackendUrl, bool TlsEnabled);
 

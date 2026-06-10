@@ -471,7 +471,15 @@ public static class OperationsEndpoints
             .ToListAsync(ct)
             .ConfigureAwait(false);
         var routes = routeEntities
-            .Select(r => new RouteRow(r.Id.ToString(), r.Hostname.Value, r.PathPrefix, r.BackendUrl, r.TlsEnabled))
+            .Select(r => new RouteRow(
+                r.Id.ToString(),
+                r.Hostname.Value,
+                r.PathPrefix,
+                r.BackendUrl,
+                r.TlsEnabled,
+                r.OperationalOwnerType,
+                r.OperationalOwnerId,
+                r.Origin))
             .OrderBy(r => r.hostname, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.pathPrefix, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -688,13 +696,23 @@ public static class OperationsEndpoints
                 $"Crear Route {desiredHostname} -> {backendUrl}.",
                 async () =>
                 {
-                    var result = await mediator.Send(new CreateRouteCommand(desiredHostname, backendUrl, TlsEnabled: true, PathPrefix: "/"), ct).ConfigureAwait(false);
+                    var result = await mediator.Send(new CreateRouteCommand(
+                        desiredHostname,
+                        backendUrl,
+                        TlsEnabled: true,
+                        PathPrefix: "/",
+                        OperationalOwnerType: "app_environment",
+                        OperationalOwnerId: instance.id,
+                        Origin: "public_access_reconcile"), ct).ConfigureAwait(false);
                     return result.IsSuccess
                         ? new AppliedResource(result.Value.Id, null, null)
                         : new AppliedResource(null, result.Error.Code, result.Error.Message);
                 });
         }
-        else if (!string.Equals(mainRoute.backendUrl, backendUrl, StringComparison.OrdinalIgnoreCase) || !mainRoute.tlsEnabled)
+        else if (!string.Equals(mainRoute.backendUrl, backendUrl, StringComparison.OrdinalIgnoreCase)
+            || !mainRoute.tlsEnabled
+            || !string.Equals(mainRoute.operationalOwnerType, "app_environment", StringComparison.Ordinal)
+            || !string.Equals(mainRoute.operationalOwnerId, instance.id, StringComparison.Ordinal))
         {
             await ApplyAction(
                 actions,
@@ -703,7 +721,13 @@ public static class OperationsEndpoints
                 $"Actualizar Route {mainRoute.id} -> {backendUrl} con TLS activo.",
                 async () =>
                 {
-                    var result = await mediator.Send(new UpdateRouteCommand(mainRoute.id, backendUrl, TlsEnabled: true), ct).ConfigureAwait(false);
+                    var result = await mediator.Send(new UpdateRouteCommand(
+                        mainRoute.id,
+                        backendUrl,
+                        TlsEnabled: true,
+                        OperationalOwnerType: "app_environment",
+                        OperationalOwnerId: instance.id,
+                        Origin: "public_access_reconcile"), ct).ConfigureAwait(false);
                     return result.IsSuccess
                         ? new AppliedResource(mainRoute.id, null, null)
                         : new AppliedResource(null, result.Error.Code, result.Error.Message);
@@ -1399,7 +1423,15 @@ public static class OperationsEndpoints
         }
 
         var routes = await proxyDb.Routes.AsNoTracking()
-            .Select(r => new RouteRow(r.Id.ToString(), r.Hostname.Value, r.PathPrefix, r.BackendUrl, r.TlsEnabled))
+            .Select(r => new RouteRow(
+                r.Id.ToString(),
+                r.Hostname.Value,
+                r.PathPrefix,
+                r.BackendUrl,
+                r.TlsEnabled,
+                r.OperationalOwnerType,
+                r.OperationalOwnerId,
+                r.Origin))
             .ToListAsync(ct)
             .ConfigureAwait(false);
         var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
@@ -1461,7 +1493,15 @@ public static class OperationsEndpoints
             .ConfigureAwait(false);
 
         return routeEntities
-            .Select(r => new RouteRow(r.Id.ToString(), r.Hostname.Value, r.PathPrefix, r.BackendUrl, r.TlsEnabled))
+            .Select(r => new RouteRow(
+                r.Id.ToString(),
+                r.Hostname.Value,
+                r.PathPrefix,
+                r.BackendUrl,
+                r.TlsEnabled,
+                r.OperationalOwnerType,
+                r.OperationalOwnerId,
+                r.Origin))
             .GroupBy(r => r.hostname, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
     }
@@ -1643,6 +1683,12 @@ public static class OperationsEndpoints
         {
             issues.Add("route_missing");
         }
+        if (routes.Any(r => r.operationalOwnerType == "app_environment"
+            && r.operationalOwnerId is not null
+            && !string.Equals(r.operationalOwnerId, instance.id, StringComparison.Ordinal)))
+        {
+            issues.Add("route_owner_mismatch");
+        }
         if (routes.Count > 0 && !routes.Any(r => r.tlsEnabled))
         {
             issues.Add("tls_missing");
@@ -1658,7 +1704,7 @@ public static class OperationsEndpoints
 
         var health = issues.Count == 0
             ? "healthy"
-            : issues.Any(i => i is "desired_hostname_missing" or "dns_zone_missing" or "dns_record_missing" or "dns_target_mismatch" or "tunnel_missing" or "tunnel_ingress_missing" or "route_missing" or "monitor_down")
+            : issues.Any(i => i is "desired_hostname_missing" or "dns_zone_missing" or "dns_record_missing" or "dns_target_mismatch" or "tunnel_missing" or "tunnel_ingress_missing" or "route_missing" or "route_owner_mismatch" or "monitor_down")
                 ? "broken"
                 : "degraded";
         var nextAction = issues.Contains("desired_hostname_missing", StringComparer.Ordinal)
@@ -1673,13 +1719,15 @@ public static class OperationsEndpoints
                             ? "ensure_tunnel"
                             : issues.Contains("route_missing", StringComparer.Ordinal)
                                 ? "create_route"
-                                : issues.Contains("tls_missing", StringComparer.Ordinal)
-                                    ? "enable_tls"
-                                    : issues.Contains("monitor_missing", StringComparer.Ordinal)
-                                        ? "create_monitor"
-                                        : issues.Contains("monitor_down", StringComparer.Ordinal)
-                                            ? "fix_monitor"
-                                            : "none";
+                                : issues.Contains("route_owner_mismatch", StringComparer.Ordinal)
+                                    ? "reconcile_route_owner"
+                                    : issues.Contains("tls_missing", StringComparer.Ordinal)
+                                        ? "enable_tls"
+                                        : issues.Contains("monitor_missing", StringComparer.Ordinal)
+                                            ? "create_monitor"
+                                            : issues.Contains("monitor_down", StringComparer.Ordinal)
+                                                ? "fix_monitor"
+                                                : "none";
 
         return new PublicAccessStateDto(
             instance.id,
@@ -1703,7 +1751,7 @@ public static class OperationsEndpoints
             routes.Any(r => r.tlsEnabled),
             monitor is not null,
             monitor?.status,
-            routes.Select(r => new PublicEndpointRouteDto(r.id, r.pathPrefix, r.backendUrl)).ToList(),
+            routes.Select(ToPublicEndpointRouteDto).ToList(),
             issues);
     }
 
@@ -1988,7 +2036,13 @@ public static class OperationsEndpoints
 
     private static EndpointOwnerDto? ResolveEndpointOwner(string hostname, IReadOnlyList<RouteRow> routes, OpsSnapshot snapshot)
     {
-        var byHost = snapshot.Instances.FirstOrDefault(i =>
+        var persistedOwnerId = routes
+            .Select(r => r.operationalOwnerType == "app_environment" ? r.operationalOwnerId : null)
+            .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
+        var byPersistedOwner = persistedOwnerId is null
+            ? null
+            : snapshot.Instances.FirstOrDefault(i => string.Equals(i.id, persistedOwnerId, StringComparison.Ordinal));
+        var byHost = byPersistedOwner ?? snapshot.Instances.FirstOrDefault(i =>
             string.Equals(i.customDomain, hostname, StringComparison.OrdinalIgnoreCase)
             || string.Equals(i.autoHostname, hostname, StringComparison.OrdinalIgnoreCase));
         var instance = byHost ?? snapshot.Instances.FirstOrDefault(i =>
@@ -2023,7 +2077,7 @@ public static class OperationsEndpoints
         var dnsTargetConfigured = string.IsNullOrWhiteSpace(publicInfra.TunnelCname)
             || string.Equals(dnsRecord?.content, publicInfra.TunnelCname, StringComparison.OrdinalIgnoreCase);
         var tunnelConfigured = HasTunnelIngress(hostname, publicInfra);
-        var routeDtos = routeRows.Select(r => new PublicEndpointRouteDto(r.id, r.pathPrefix, r.backendUrl)).ToList();
+        var routeDtos = routeRows.Select(ToPublicEndpointRouteDto).ToList();
         var issues = new List<string>();
         if (owner is null)
         {
@@ -2503,7 +2557,15 @@ public static class OperationsEndpoints
     private sealed record DeploymentRow(string id, string buildId, string instanceId, string status, DateTimeOffset createdAt, DateTimeOffset? startedAt, DateTimeOffset? finishedAt, string newImageRef, string? errorCode, string? errorMessage);
     private sealed record MonitorRow(string id, string name, string url, string? instanceId, string? projectId, bool enabled, string status, DateTimeOffset? lastCheckedAt);
     private sealed record VmRow(string id, string name, string slug, string status, bool acceptsPreviews, DateTimeOffset? lastConnectedAt, DateTimeOffset? lastSeenAt, DateTimeOffset updatedAt);
-    private sealed record RouteRow(string id, string hostname, string pathPrefix, string backendUrl, bool tlsEnabled);
+    private sealed record RouteRow(
+        string id,
+        string hostname,
+        string pathPrefix,
+        string backendUrl,
+        bool tlsEnabled,
+        string? operationalOwnerType,
+        string? operationalOwnerId,
+        string? origin);
     private sealed record EndpointOwnerDto(string instanceId, string instanceSlug, string? appId, string? appName, string? tenantId, string? tenantName, string environment, string machineId);
     private sealed record AppliedResource(string? resourceId, string? errorCode, string? errorMessage);
     private sealed record MachineReadiness(string Status, string Reason);
@@ -2688,7 +2750,22 @@ public static class OperationsEndpoints
         IReadOnlyList<string> Issues,
         IReadOnlyList<PublicEndpointRouteDto> Routes);
 
-    public sealed record PublicEndpointRouteDto(string RouteId, string PathPrefix, string BackendUrl);
+    private static PublicEndpointRouteDto ToPublicEndpointRouteDto(RouteRow route)
+        => new(
+            route.id,
+            route.pathPrefix,
+            route.backendUrl,
+            route.operationalOwnerType,
+            route.operationalOwnerId,
+            route.origin);
+
+    public sealed record PublicEndpointRouteDto(
+        string RouteId,
+        string PathPrefix,
+        string BackendUrl,
+        string? OperationalOwnerType,
+        string? OperationalOwnerId,
+        string? Origin);
 
     public sealed record PublicAccessStateDto(
         string AppEnvironmentId,

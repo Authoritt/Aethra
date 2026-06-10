@@ -12,7 +12,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aethra.Modules.Proxy.UseCases.Routes.Commands;
 
-public sealed record CreateRouteCommand(string Hostname, string BackendUrl, bool TlsEnabled, string? PathPrefix = null) : ICommand<RouteDto>;
+public sealed record CreateRouteCommand(
+    string Hostname,
+    string BackendUrl,
+    bool TlsEnabled,
+    string? PathPrefix = null,
+    string? OperationalOwnerType = null,
+    string? OperationalOwnerId = null,
+    string? Origin = null) : ICommand<RouteDto>;
 
 public sealed class CreateRouteValidator : AbstractValidator<CreateRouteCommand>
 {
@@ -45,6 +52,7 @@ internal sealed class CreateRouteHandler(ProxyDbContext db, IClock clock, IProxy
         try
         {
             route = Route.Create(hostname, pathPrefix, request.BackendUrl, request.TlsEnabled, clock.UtcNow);
+            route.SetOperationalOwner(request.OperationalOwnerType, request.OperationalOwnerId, request.Origin, clock.UtcNow);
         }
         catch (ArgumentException ex)
         {

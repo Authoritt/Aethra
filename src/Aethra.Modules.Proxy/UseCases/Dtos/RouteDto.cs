@@ -8,5 +8,8 @@ public sealed record RouteDto(
     bool TlsEnabled,
     string CertStatus,                  // "none" | "pending" | "issued" | "failed" | "renewing"
     DateTimeOffset? CertExpiresAt,
+    string? OperationalOwnerType,
+    string? OperationalOwnerId,
+    string? Origin,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);

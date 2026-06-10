@@ -269,6 +269,8 @@ export default async function PublicAccessPage({
                     <TableRow>
                       <TableHead>Path</TableHead>
                       <TableHead>Backend</TableHead>
+                      <TableHead>Owner</TableHead>
+                      <TableHead>Origin</TableHead>
                       <TableHead>Route</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -277,6 +279,14 @@ export default async function PublicAccessPage({
                       <TableRow key={route.routeId}>
                         <TableCell className="font-mono text-xs">{route.pathPrefix}</TableCell>
                         <TableCell className="font-mono text-xs">{route.backendUrl}</TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {route.operationalOwnerType && route.operationalOwnerId
+                            ? `${route.operationalOwnerType}:${route.operationalOwnerId}`
+                            : "manual/unknown"}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {route.origin ?? "unknown"}
+                        </TableCell>
                         <TableCell>
                           <Link href={`/routes/${route.routeId}`} className="text-sm text-primary">
                             Ver route

@@ -229,7 +229,14 @@ public sealed class NativeDeployRunner(
             foreach (var prefix in svc.PathPrefixes)
             {
                 var backend = $"http://{slug}-{svc.Name}:{svc.Port}";
-                var r = await mediator.Send(new CreateRouteCommand(hostname, backend, false, prefix), ct).ConfigureAwait(false);
+                var r = await mediator.Send(new CreateRouteCommand(
+                    hostname,
+                    backend,
+                    false,
+                    prefix,
+                    "app_environment",
+                    instanceId,
+                    "native_deploy"), ct).ConfigureAwait(false);
                 routes.Add(r.IsSuccess ? $"{prefix} → {backend}" : $"{prefix} (ya existía)");
             }
         }

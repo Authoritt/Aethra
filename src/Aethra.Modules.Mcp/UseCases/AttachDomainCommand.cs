@@ -100,7 +100,13 @@ internal sealed class AttachDomainHandler(
 
         // -------- Paso 2: Route YARP --------
         var backendUrl = BuildBackendUrl(instance);
-        var routeCmd = new CreateRouteCommand(hostname, backendUrl, TlsEnabled: true);
+        var routeCmd = new CreateRouteCommand(
+            hostname,
+            backendUrl,
+            TlsEnabled: true,
+            OperationalOwnerType: "app_environment",
+            OperationalOwnerId: instance.InstanceId,
+            Origin: "mcp_attach_domain");
         var routeResult = await mediator.Send(routeCmd, cancellationToken).ConfigureAwait(false);
         var routeStep = routeResult.IsSuccess
             ? new AttachDomainStepResult(false, true, routeResult.Value.Id, null, null)
