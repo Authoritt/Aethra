@@ -697,7 +697,8 @@ Estado de avance:
 - `POST /api/ops/public-access-states/{appEnvironmentId}/reconcile` ya repara DNS, Tunnel ingress, Route/TLS y Monitor cuando hay suficiente configuracion.
 - `POST /api/ops/public-access-states/{appEnvironmentId}/verify` ya valida cada path publico expuesto por YARP, cada backend unico y el Monitor asociado; los checks devuelven `label` y `target` para que el fallo sea localizable.
 - `Route` ya persiste owner/origen operacional. InstanceProvisioned, DeploymentCompleted, NativeDeploy, MCP attach-domain y Public Access Reconcile escriben `app_environment:{id}` con origen del flujo; rutas manuales quedan como `manual` o `unknown`.
-- Pendiente: backfill de owner/origen para rutas historicas existentes antes de esta migracion.
+- La migracion `RouteOperationalOwnerBackfill` asigna owner/origen a rutas historicas por hostname (`customDomain`/`autoHostname`) y por backend (`containerName` o prefijo multi-servicio `{slug}-`).
+- Pendiente: exponer una auditoria de rutas que sigan quedando `manual/unknown` despues del backfill.
 
 ### Fase 3: Releases
 
