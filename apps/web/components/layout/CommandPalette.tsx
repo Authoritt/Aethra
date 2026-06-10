@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Search } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -13,8 +14,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api";
-import type { GlobalSearchResultDto } from "@/lib/types";
+import { ApiError, api } from "@/lib/api";
+import type {
+  GlobalSearchResultDto,
+  PublicAccessReconcileResultDto,
+  PublicAccessVerificationResultDto,
+} from "@/lib/types";
 
 const MIN_QUERY_LENGTH = 2;
 
@@ -92,6 +97,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GlobalSearchResultDto[]>([]);
   const [loading, setLoading] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const trimmedQuery = useMemo(() => query.trim(), [query]);
@@ -173,6 +179,58 @@ export function CommandPalette() {
     router.push(result.href);
   }
 
+  async function runPublicAccessAction(
+    appEnvironmentId: string,
+    action: "verify" | "dry-run" | "reconcile",
+  ) {
+    const key = `${action}:${appEnvironmentId}`;
+    setBusyAction(key);
+    try {
+      if (action === "verify") {
+        const result = await api<PublicAccessVerificationResultDto>(
+          `/api/ops/public-access-states/${encodeURIComponent(appEnvironmentId)}/verify`,
+          { method: "POST" },
+        );
+        const failed = result.checks.filter((check) => check.status === "failed");
+        toast[failed.length > 0 ? "error" : "success"](
+          failed.length > 0
+            ? `${failed.length} check(s) fallaron`
+            : `${result.checks.length} check(s) OK`,
+        );
+      } else {
+        const dryRun = action === "dry-run";
+        const result = await api<PublicAccessReconcileResultDto>(
+          `/api/ops/public-access-states/${encodeURIComponent(appEnvironmentId)}/reconcile`,
+          {
+            method: "POST",
+            body: JSON.stringify({ dryRun }),
+          },
+        );
+        const failed = result.actions.filter((item) => item.status === "failed" || item.status === "blocked");
+        const changed = result.actions.filter((item) => item.status === "applied" || item.status === "planned");
+        toast[failed.length > 0 ? "error" : "success"](
+          failed.length > 0
+            ? failed.map((item) => item.errorMessage ?? item.message).join(" | ")
+            : `${changed.length} accion(es) ${dryRun ? "planeadas" : "reconciliadas"}`,
+        );
+      }
+      router.refresh();
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string; detail?: string; Message?: string } | undefined)
+              ?.message ??
+            (e.body as { detail?: string } | undefined)?.detail ??
+            `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : "Error desconocido";
+      toast.error(msg);
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <Button
@@ -219,33 +277,62 @@ export function CommandPalette() {
             </p>
           ) : (
             <div className="py-2">
-              {visibleResults.map((result) => (
-                <button
-                  key={`${result.type}:${result.href}`}
-                  type="button"
-                  onClick={() => navigateTo(result)}
-                  className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {result.title}
+              {visibleResults.map((result) => {
+                const appEnvironmentId = parseAppEnvironmentId(result.href);
+                return (
+                  <div
+                    key={`${result.type}:${result.href}`}
+                    className="rounded-md transition hover:bg-accent focus-within:bg-accent"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => navigateTo(result)}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left focus-visible:outline-none"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-sm font-medium">
+                            {result.title}
+                          </span>
+                          {result.status ? (
+                            <Badge variant="outline" className="shrink-0 text-[10px]">
+                              {result.status}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {result.subtitle}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {TYPE_LABELS[result.type] ?? result.type}
                       </span>
-                      {result.status ? (
-                        <Badge variant="outline" className="shrink-0 text-[10px]">
-                          {result.status}
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
-                      {result.subtitle}
-                    </p>
+                    </button>
+                    {appEnvironmentId ? (
+                      <div className="flex flex-wrap gap-2 px-3 pb-2">
+                        <PaletteActionButton
+                          busy={busyAction === `verify:${appEnvironmentId}`}
+                          disabled={busyAction !== null}
+                          label="Verify"
+                          onClick={() => runPublicAccessAction(appEnvironmentId, "verify")}
+                        />
+                        <PaletteActionButton
+                          busy={busyAction === `dry-run:${appEnvironmentId}`}
+                          disabled={busyAction !== null}
+                          label="Dry run"
+                          onClick={() => runPublicAccessAction(appEnvironmentId, "dry-run")}
+                        />
+                        <PaletteActionButton
+                          busy={busyAction === `reconcile:${appEnvironmentId}`}
+                          disabled={busyAction !== null}
+                          label="Reconcile"
+                          onClick={() => runPublicAccessAction(appEnvironmentId, "reconcile")}
+                        />
+                      </div>
+                    ) : null}
                   </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {TYPE_LABELS[result.type] ?? result.type}
-                  </span>
-                </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -298,4 +385,35 @@ function filterQuickCommands(query: string) {
       .toLowerCase();
     return haystack.includes(query.toLowerCase());
   });
+}
+
+function parseAppEnvironmentId(href: string) {
+  const match = /^\/instances\/([^/?#]+)/.exec(href);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function PaletteActionButton({
+  busy,
+  disabled,
+  label,
+  onClick,
+}: {
+  busy: boolean;
+  disabled: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="h-7 px-2 text-[11px]"
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {busy ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : null}
+      {label}
+    </Button>
+  );
 }
