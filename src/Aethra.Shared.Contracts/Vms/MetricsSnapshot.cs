@@ -13,6 +13,7 @@ public sealed record SatelliteHandshake(
     long TotalMemoryBytes,
     string AgentVersion,
     string? ContainerRuntime = null,
+    string? ContainerRuntimeVersion = null,
     long? RootDiskTotalBytes = null,
     long? RootDiskAvailableBytes = null);
 

@@ -20,5 +20,6 @@ public sealed record VmDto(
     string? AgentVersion,
     bool AcceptsPreviews = true,
     string? ContainerRuntime = null,
+    string? ContainerRuntimeVersion = null,
     long? RootDiskTotalBytes = null,
     long? RootDiskAvailableBytes = null);

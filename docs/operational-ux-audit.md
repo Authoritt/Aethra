@@ -732,8 +732,8 @@ Estado de avance:
 - `GET /api/ops/machines` ya expone `readinessStatus` y `readinessReason`.
 - La razon se muestra en Machines, Dashboard y App Environment detail.
 - Operational Issues ya crea `machine.not_ready` para machines offline/unknown.
-- El Satellite ya envia `containerRuntime`, `rootDiskTotalBytes` y `rootDiskAvailableBytes` en handshake; VMs persiste esos campos y Machines los usa para diferenciar not-ready de capacidad degradada.
-- Pendiente: ampliar capability snapshot con version real de Docker/Podman, espacio por volumen de datos y checks de permisos del socket/runtime.
+- El Satellite ya envia `containerRuntime`, `containerRuntimeVersion`, `rootDiskTotalBytes` y `rootDiskAvailableBytes` en handshake; VMs persiste esos campos y Machines los usa para diferenciar not-ready de capacidad degradada.
+- Pendiente: ampliar capability snapshot con espacio por volumen de datos y checks de permisos del socket/runtime.
 
 ### Fase 5: Reconciliation y estado deseado
 

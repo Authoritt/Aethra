@@ -44,6 +44,7 @@ internal sealed class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.CpuCores).HasColumnName("cpu_cores");
         builder.Property(v => v.TotalMemoryBytes).HasColumnName("total_memory_bytes");
         builder.Property(v => v.ContainerRuntime).HasColumnName("container_runtime").HasMaxLength(32);
+        builder.Property(v => v.ContainerRuntimeVersion).HasColumnName("container_runtime_version").HasMaxLength(128);
         builder.Property(v => v.RootDiskTotalBytes).HasColumnName("root_disk_total_bytes");
         builder.Property(v => v.RootDiskAvailableBytes).HasColumnName("root_disk_available_bytes");
 

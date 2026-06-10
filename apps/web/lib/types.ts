@@ -63,6 +63,7 @@ export interface VmDto {
   totalMemoryBytes: number | null;
   agentVersion: string | null;
   containerRuntime?: string | null;
+  containerRuntimeVersion?: string | null;
   rootDiskTotalBytes?: number | null;
   rootDiskAvailableBytes?: number | null;
   /** F12.3 — opt-in al pool de previews. Default true. Serializa como camelCase. */
@@ -1463,6 +1464,7 @@ export interface MachineOverviewDto {
   previewAppEnvironmentCount: number;
   acceptsPreviews: boolean;
   containerRuntime: string | null;
+  containerRuntimeVersion: string | null;
   totalMemoryBytes: number | null;
   rootDiskTotalBytes: number | null;
   rootDiskAvailableBytes: number | null;

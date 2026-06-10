@@ -25,6 +25,7 @@ internal static class VmMapper
         AgentVersion: v.Satellite.AgentVersion,
         AcceptsPreviews: v.AcceptsPreviews,
         ContainerRuntime: v.ContainerRuntime,
+        ContainerRuntimeVersion: v.ContainerRuntimeVersion,
         RootDiskTotalBytes: v.RootDiskTotalBytes,
         RootDiskAvailableBytes: v.RootDiskAvailableBytes);
 }

@@ -32,6 +32,7 @@ public sealed class Vm : AggregateRoot<VmId>
     public int? CpuCores { get; private set; }
     public long? TotalMemoryBytes { get; private set; }
     public string? ContainerRuntime { get; private set; }
+    public string? ContainerRuntimeVersion { get; private set; }
     public long? RootDiskTotalBytes { get; private set; }
     public long? RootDiskAvailableBytes { get; private set; }
 
@@ -103,7 +104,7 @@ public sealed class Vm : AggregateRoot<VmId>
 
     public void RecordConnected(string hostname, string kernelVersion, string cpuModel, int cpuCores,
         long totalMemoryBytes, string agentVersion, DateTimeOffset now, string? containerRuntime = null,
-        long? rootDiskTotalBytes = null, long? rootDiskAvailableBytes = null)
+        string? containerRuntimeVersion = null, long? rootDiskTotalBytes = null, long? rootDiskAvailableBytes = null)
     {
         Hostname = hostname;
         KernelVersion = kernelVersion;
@@ -111,6 +112,7 @@ public sealed class Vm : AggregateRoot<VmId>
         CpuCores = cpuCores;
         TotalMemoryBytes = totalMemoryBytes;
         ContainerRuntime = string.IsNullOrWhiteSpace(containerRuntime) ? null : containerRuntime.Trim();
+        ContainerRuntimeVersion = string.IsNullOrWhiteSpace(containerRuntimeVersion) ? null : containerRuntimeVersion.Trim();
         RootDiskTotalBytes = rootDiskTotalBytes;
         RootDiskAvailableBytes = rootDiskAvailableBytes;
         Satellite.RecordHandshake(agentVersion, now);

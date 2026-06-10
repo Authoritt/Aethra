@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Aethra.Satellite.Buffer;
 using Aethra.Satellite.Probes;
 using Aethra.Shared.Contracts.Vms;
@@ -182,7 +183,12 @@ public sealed class SatelliteConnectionWorker(
         try
         {
             var info = await probe.HandshakeAsync(ct);
-            info = info with { ContainerRuntime = options.Value.ContainerRuntime };
+            var runtime = options.Value.ContainerRuntime;
+            info = info with
+            {
+                ContainerRuntime = runtime,
+                ContainerRuntimeVersion = await DetectRuntimeVersion(runtime, ct),
+            };
             await _connection.InvokeAsync("Handshake", info, ct);
             logger.LogInformation(
                 "Handshake enviado: host={Host} kernel={Kernel} cpu={Cpu} cores={Cores} runtime={Runtime}",
@@ -191,6 +197,32 @@ public sealed class SatelliteConnectionWorker(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Handshake falló");
+        }
+    }
+
+    private static async Task<string?> DetectRuntimeVersion(string runtime, CancellationToken ct)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = runtime,
+                ArgumentList = { "--version" },
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            });
+            if (process is null)
+            {
+                return null;
+            }
+            var output = await process.StandardOutput.ReadLineAsync(ct);
+            await process.WaitForExitAsync(ct);
+            return string.IsNullOrWhiteSpace(output) ? null : output.Trim();
+        }
+        catch
+        {
+            return null;
         }
     }
 

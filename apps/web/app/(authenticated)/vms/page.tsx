@@ -199,7 +199,7 @@ export default async function VmsPage({
                     </div>
 
                     <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-                      <Stat label="Runtime" value={machine.containerRuntime ?? "unknown"} />
+                      <Stat label="Runtime" value={formatRuntime(machine)} />
                       <Stat label="Memory" value={formatBytes(machine.totalMemoryBytes)} />
                       <Stat
                         label="Root disk free"
@@ -317,6 +317,12 @@ function formatBytes(value: number | null) {
     unit += 1;
   }
   return `${size.toFixed(size >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function formatRuntime(machine: MachineOverviewDto) {
+  if (!machine.containerRuntime) return "unknown";
+  if (!machine.containerRuntimeVersion) return machine.containerRuntime;
+  return machine.containerRuntimeVersion;
 }
 
 function formatDiskFree(available: number | null, total: number | null) {
