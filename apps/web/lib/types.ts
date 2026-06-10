@@ -1284,6 +1284,7 @@ export interface EffectiveConfigItemDto {
   isRuntime: boolean;
   updatedAt: string;
   changedSinceLastDeploy: boolean;
+  changeAction: "redeploy" | "restart" | "review" | string;
   winningScopeType: string;
   winningScopeId: string;
   winningScopeLabel: string;

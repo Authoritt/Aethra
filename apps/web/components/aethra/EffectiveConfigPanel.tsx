@@ -117,7 +117,7 @@ export function EffectiveConfigPanel({
                   </TableCell>
                   <TableCell>
                     {item.changedSinceLastDeploy ? (
-                      <Badge variant="warning">requiere redeploy</Badge>
+                      <Badge variant="warning">{renderChangeAction(item.changeAction)}</Badge>
                     ) : (
                       <Badge variant="outline">ok</Badge>
                     )}
@@ -145,6 +145,16 @@ function renderValue(item: EffectiveConfigItemDto) {
     return item.hasValue ? "********" : "sin valor";
   }
   return item.value ?? "";
+}
+
+function renderChangeAction(action: EffectiveConfigItemDto["changeAction"]) {
+  if (action === "redeploy") {
+    return "requiere redeploy";
+  }
+  if (action === "restart") {
+    return "requiere restart";
+  }
+  return "revisar";
 }
 
 function formatDate(value: string) {

@@ -256,6 +256,7 @@ public static class OperationsEndpoints
                     winner.IsRuntime,
                     winner.UpdatedAt,
                     lastDeployedAt != default && winner.UpdatedAt > lastDeployedAt,
+                    ResolveEffectiveConfigChangeAction(winner),
                     winner.ScopeType,
                     winner.ScopeId,
                     scopeLabels.GetValueOrDefault((winner.ScopeType, winner.ScopeId)) ?? winner.ScopeId,
@@ -2404,6 +2405,26 @@ public static class OperationsEndpoints
         return scopes;
     }
 
+    private static string ResolveEffectiveConfigChangeAction(EffectiveConfigCandidate winner)
+    {
+        if (winner.IsBuildTime)
+        {
+            return "redeploy";
+        }
+
+        if (winner.Source?.StartsWith("binding:", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return "restart";
+        }
+
+        if (winner.IsRuntime)
+        {
+            return "restart";
+        }
+
+        return "review";
+    }
+
     private static string BuildPublicRouteUrl(string hostname, string pathPrefix)
         => pathPrefix == "/"
             ? $"https://{hostname}/"
@@ -2714,6 +2735,7 @@ public static class OperationsEndpoints
         bool IsRuntime,
         DateTimeOffset UpdatedAt,
         bool ChangedSinceLastDeploy,
+        string ChangeAction,
         string WinningScopeType,
         string WinningScopeId,
         string WinningScopeLabel,

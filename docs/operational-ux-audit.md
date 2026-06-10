@@ -487,8 +487,9 @@ Estado de avance:
 - `GET /api/ops/app-environments/{appEnvironmentId}/effective-config` ya resuelve la precedencia `Instance > Client > Template > Project`.
 - La pestaña Config de `/instances/{id}` ya muestra un inspector efectivo con variables, secretos enmascarados, scope ganador, uso build/runtime, overrides ocultos y drift frente al ultimo deploy exitoso.
 - Cuando hay drift, el inspector ya ofrece accion directa de deploy/redeploy desde la misma tarjeta.
+- El inspector efectivo ya diferencia el tipo de accion requerida por cambio: `redeploy` para variables de build, `restart` para secretos/runtime y bindings, y `review` cuando no hay suficiente metadata.
 - `/operational-issues` ya genera `config.changed_since_last_deploy` cuando config efectiva cambio despues del ultimo deploy exitoso.
-- Pendiente: detectar rotacion semantica de secretos por binding y diferenciar redeploy vs restart.
+- Pendiente: conectar una accion mutante de restart cuando el drift no requiere reconstruir ni redeployar.
 
 ## Operational Issues
 
