@@ -383,12 +383,21 @@ Backend recomendado:
 ## Releases: unir Builds y Deployments
 
 Para el usuario, un push no es "un build" y luego "varios deployments". Es un intento de liberar una version.
+Pero el flujo no puede depender solo de GitHub Runner/GHCR o de un registry externo: en una plataforma autoalojada debe existir tambien un carril **local build**.
 
 La vista debe ser **Releases**:
 
 ```text
 Git event -> Release -> Build artifact -> Deployments -> Containers -> Public endpoints -> Health checks -> Issues
 ```
+
+Carriles de ejecucion recomendados:
+
+- **Remote artifact**: GitHub/webhook/CI construye o publica imagen, Aethra la consume y despliega. Es util cuando el equipo ya tiene pipeline externo.
+- **Local build**: Aethra clona el repo, empaqueta el contexto y construye la imagen en un satelite conectado con Docker/Podman. Evita esperar GitHub Runner/GHCR y permite operar todo self-hosted.
+- **Native build+deploy**: para App Environments nativos con servicios `git`, el deploy compila cada servicio en la maquina destino y lo reemplaza en sitio.
+
+Regla de UX: el usuario debe elegir entre **usar artefacto remoto**, **construir localmente** o **construir y desplegar ahora** desde App Environment/Release, viendo maquina destino, commit, logs y resultado. Si el satelite no esta listo para build, la accion debe bloquearse con motivo claro.
 
 Cada Release debe mostrar:
 
@@ -715,6 +724,8 @@ Estado de avance:
 - `ReleaseOverview` existe en `/api/ops/releases`.
 - `/releases` lista releases como unidad build + deploy fan-out.
 - `/releases/{id}` muestra detalle operacional y mantiene links a `/builds/{id}` y `/deployments/{id}` como soporte tecnico.
+- `/builds/new` ya funciona como carril de build local manual: clona Git, arma contexto y construye la imagen en un satelite conectado sin push a registry externo.
+- `Deploy nativo` ya funciona como carril build+deploy local para servicios `git`: compila en la maquina destino y recrea contenedores del App Environment.
 - `/releases/{id}` permite `Retry`/`Redeploy` por App Environment reutilizando `POST /api/deployments/builds/{buildId}/instances/{instanceId}/trigger`.
 - `POST /api/deployments/{deploymentId}/rollback` ya encola un deployment nuevo hacia el mismo App Environment reutilizando build/image de un deployment `Completed`.
 - `/releases/{id}` ya muestra `Rollback` para targets completados, ademas de `Retry`/`Redeploy`.

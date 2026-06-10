@@ -1180,18 +1180,20 @@
       "content_hint_txt": "Free text. SPF/DKIM/etc."
     },
     "builds_new": {
-      "breadcrumb": "Manual build",
-      "title": "Trigger manual build",
-      "description": "Build a specific branch or commit without waiting for the webhook.",
+      "breadcrumb": "Local build",
+      "title": "Local build on machine",
+      "description": "Build a specific branch or commit on a connected satellite without waiting for GitHub Runner or GHCR.",
+      "local_info_title": "Build executed by Aethra",
+      "local_info_description": "Aethra clones the repo, packages the context and builds the image on the satellite machine. The image stays local so it can be deployed from the App Environment.",
       "label_template": "Template *",
       "placeholder_template": "Select a template",
       "label_git_ref": "Git ref *",
       "placeholder_git_ref": "main, v1.2.0, sha...",
-      "label_commit": "Commit SHA",
-      "help_commit": "Optional. If empty, the HEAD of the ref is resolved.",
+      "label_commit": "Commit SHA *",
+      "help_commit": "Use the exact SHA to build. Automatic HEAD resolution is a later improvement.",
       "cancel": "Cancel",
-      "submit": "Trigger build",
-      "toast_triggered": "Build triggered",
+      "submit": "Start local build",
+      "toast_triggered": "Local build started",
       "error_unknown": "Unknown error"
     },
     "settings_integrations": {

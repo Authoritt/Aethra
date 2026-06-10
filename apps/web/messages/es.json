@@ -1180,18 +1180,20 @@
       "content_hint_txt": "Texto libre. SPF/DKIM/etc."
     },
     "builds_new": {
-      "breadcrumb": "Build manual",
-      "title": "Disparar build manual",
-      "description": "Compilá una rama o commit específico sin esperar al webhook.",
+      "breadcrumb": "Build local",
+      "title": "Build local en maquina",
+      "description": "Compila una rama o commit especifico en un satelite conectado, sin esperar GitHub Runner ni GHCR.",
+      "local_info_title": "Build ejecutado por Aethra",
+      "local_info_description": "Aethra clona el repo, empaqueta el contexto y construye la imagen en la maquina con satelite. La imagen queda local para desplegarla desde App Environment.",
       "label_template": "Template *",
       "placeholder_template": "Selecciona un template",
       "label_git_ref": "Git ref *",
       "placeholder_git_ref": "main, v1.2.0, sha...",
-      "label_commit": "Commit SHA",
-      "help_commit": "Opcional. Si está vacío, se resuelve el HEAD de la ref.",
+      "label_commit": "Commit SHA *",
+      "help_commit": "Debe ser el SHA exacto a construir. La resolucion automatica del HEAD queda para una mejora posterior.",
       "cancel": "Cancelar",
-      "submit": "Disparar build",
-      "toast_triggered": "Build disparado",
+      "submit": "Iniciar build local",
+      "toast_triggered": "Build local iniciado",
       "error_unknown": "Error desconocido"
     },
     "settings_integrations": {

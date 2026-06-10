@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
@@ -71,9 +71,13 @@ export function TriggerBuildForm({
       gitRef: defaultTemplate ? `refs/heads/${defaultTemplate.branch}` : "",
     },
   });
+  const selectedTemplateId = useWatch({
+    control: form.control,
+    name: "templateId",
+  });
 
   const selectedTemplate = templates.find(
-    (tpl) => tpl.id === form.watch("templateId"),
+    (tpl) => tpl.id === selectedTemplateId,
   );
 
   async function onSubmit(values: FormValues) {
@@ -114,6 +118,13 @@ export function TriggerBuildForm({
             onSubmit={form.handleSubmit(onSubmit)}
             className="flex flex-col gap-5"
           >
+            <div className="rounded-md border bg-muted/30 p-4 text-sm">
+              <p className="font-medium">{t("local_info_title")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("local_info_description")}
+              </p>
+            </div>
+
             <FormField
               control={form.control}
               name="templateId"
