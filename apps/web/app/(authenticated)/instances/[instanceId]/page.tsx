@@ -28,6 +28,7 @@ import { PublicAccessReconcileActions } from "@/components/aethra/PublicAccessRe
 import { PublicAccessVerifyButton } from "@/components/aethra/PublicAccessVerifyButton";
 import { ScopedEnvVarsPanel } from "@/components/aethra/ScopedEnvVarsPanel";
 import { AutoHostnameInfo } from "@/app/_components/AutoHostnameInfo";
+import { RollbackDeploymentButton } from "./RollbackDeploymentButton";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   AppEnvironmentOverviewDto,
@@ -595,6 +596,7 @@ export default async function InstanceDetailPage({
                     <TableHead>{t("col_trigger")}</TableHead>
                     <TableHead>{t("col_build")}</TableHead>
                     <TableHead>{t("col_created")}</TableHead>
+                    <TableHead className="text-right">{t("col_action")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -618,6 +620,12 @@ export default async function InstanceDetailPage({
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {formatDate(d.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <RollbackDeploymentButton
+                          deploymentId={d.id}
+                          disabled={d.status.toLowerCase() !== "completed"}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}

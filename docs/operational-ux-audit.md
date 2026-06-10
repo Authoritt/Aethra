@@ -716,7 +716,8 @@ Estado de avance:
 - `/releases/{id}` permite `Retry`/`Redeploy` por App Environment reutilizando `POST /api/deployments/builds/{buildId}/instances/{instanceId}/trigger`.
 - `POST /api/deployments/{deploymentId}/rollback` ya encola un deployment nuevo hacia el mismo App Environment reutilizando build/image de un deployment `Completed`.
 - `/releases/{id}` ya muestra `Rollback` para targets completados, ademas de `Retry`/`Redeploy`.
-- Pendiente: selector asistido de rollback desde App Environment detail, comparando version actual vs versiones historicas antes de confirmar.
+- `/instances/{id}` ya ofrece rollback desde el historial de deployments completados del App Environment, con confirmacion antes de encolar el deployment de rollback.
+- Pendiente: enriquecer el selector con comparacion visible entre version actual, version seleccionada y cambios de config posteriores.
 
 ### Fase 4: Machines y readiness
 
