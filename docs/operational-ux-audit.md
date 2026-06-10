@@ -826,6 +826,7 @@ Estado de avance:
 - Search ya entrega metadata estructurada para Releases (`buildId`, `deploymentId`, `appEnvironmentId` cuando el fan-out es unico), y Command Palette usa esa metadata para abrir build/deploy logs, retry/redeploy y rollback sin inferir IDs desde texto.
 - Search ya marca App Environments ephemerals y Command Palette permite borrar previews desde el resultado correcto, con confirmacion.
 - MCP ya expone herramientas operacionales de alto nivel: `aethra_deploy_app_environment` para disparar deploy desde la unidad mental correcta y `aethra_explain_failed_deploy` para explicar fallos con error, etapa, build y logs recientes.
+- `/api/ops/policies` ya expone el catalogo efectivo de politicas operacionales: Public Access por ambiente, readiness de maquina y reglas de acciones de Release/Command Palette.
 - Saved views locales ya existen para las listas operacionales de alto volumen: App Environments, Releases, Public Access, Machines, Data Services y Operational Issues.
 - Preview actions en Command Palette quedan ligadas a exponer `previewId`/lifecycle actions en Search; no deben inferirse desde texto.
 
@@ -838,7 +839,7 @@ El backlog residual no bloquea el flujo principal de subir cambios a Git y despl
 - Certificados UI: agregar pagina dedicada si se requiere operacion frecuente; el contrato REST de listar/emitir/renovar y el estado en Public Access ya existen.
 - Preview lifecycle avanzado: agregar expiracion/extend desde Command Palette cuando existan contratos UI para esas mutaciones; delete preview ya esta cubierto.
 - MCP Public Access: exponer `aethra_reconcile_public_access` como wrapper directo del reconciler cuando esa logica salga del endpoint host a un servicio reutilizable.
-- Policies avanzadas: mover reglas por ambiente a un editor formal cuando existan suficientes politicas configurables por tenant/equipo.
+- Policies UI: agregar editor formal cuando estas reglas dejen de ser catalogo efectivo y pasen a ser configurables por tenant/equipo.
 - Saved views persistentes para listas grandes.
 
 ### P3

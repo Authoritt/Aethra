@@ -94,12 +94,37 @@ public static class OperationsEndpoints
             .RequireAuthorization("scope:projects:read")
             .WithName("ListOperationalIssues");
 
+        group.MapGet("/policies", ListOperationalPolicies)
+            .RequireAuthorization("scope:projects:read")
+            .WithName("ListOperationalPolicies");
+
         group.MapGet("/search", GlobalSearch)
             .RequireAuthorization("scope:projects:read")
             .WithName("GlobalOperationalSearch");
 
         return app;
     }
+
+    private static IResult ListOperationalPolicies()
+        => Results.Ok(new OperationalPoliciesDto(
+            PublicAccess:
+            [
+                new EnvironmentPolicyDto("production", "strict", "full_strict", true, "Production exige DNS/tunnel/route/TLS/monitor reconciliados."),
+                new EnvironmentPolicyDto("staging", "standard", "flexible", true, "Staging permite TLS flexible mientras se valida acceso publico."),
+                new EnvironmentPolicyDto("preview", "standard", "flexible", true, "Previews priorizan velocidad y cleanup sobre enforcement estricto."),
+                new EnvironmentPolicyDto("default", "standard", "flexible", true, "Ambientes no production usan politica standard.")
+            ],
+            MachineReadiness:
+            [
+                new OperationalThresholdDto("runtime_socket_accessible", "required", "Docker/Podman debe responder para build/deploy/restart."),
+                new OperationalThresholdDto("root_disk_free_percent", "10", "Menos de 10% libre degrada readiness de la maquina."),
+                new OperationalThresholdDto("data_volume_free_percent", "10", "Menos de 10% libre degrada readiness del volumen de datos configurado.")
+            ],
+            Release:
+            [
+                new OperationalThresholdDto("rollback_requires_completed_deployment", "true", "Rollback solo se ofrece sobre deployments completados."),
+                new OperationalThresholdDto("command_palette_single_target_actions", "true", "Acciones destructivas desde Search requieren IDs estructurados y fan-out unico.")
+            ]));
 
     private static async Task<IResult> ListApps(
         ProjectsDbContext projectsDb,
@@ -3064,6 +3089,23 @@ public static class OperationsEndpoints
         int? LatencyMs,
         string? ResponseSnippet,
         string? ErrorMessage);
+
+    public sealed record OperationalPoliciesDto(
+        IReadOnlyList<EnvironmentPolicyDto> PublicAccess,
+        IReadOnlyList<OperationalThresholdDto> MachineReadiness,
+        IReadOnlyList<OperationalThresholdDto> Release);
+
+    public sealed record EnvironmentPolicyDto(
+        string Environment,
+        string ReconciliationPolicy,
+        string EdgeTlsPolicy,
+        bool MonitorRequired,
+        string Description);
+
+    public sealed record OperationalThresholdDto(
+        string Key,
+        string Value,
+        string Description);
 
     public sealed record MachineOverviewDto(
         string Id,
