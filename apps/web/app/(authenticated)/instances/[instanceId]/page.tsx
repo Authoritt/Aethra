@@ -162,6 +162,8 @@ export default async function InstanceDetailPage({
     hasServices &&
     changedConfigItems.length > 0 &&
     changedConfigItems.every((item) => item.changeAction === "restart");
+  const currentDeployment =
+    deployments.find((deployment) => deployment.status.toLowerCase() === "completed") ?? null;
   const pageTitle = operationalEnv
     ? `${operationalEnv.appName} / ${operationalEnv.tenantName} / ${operationalEnv.environment}`
     : instance.slug;
@@ -604,39 +606,71 @@ export default async function InstanceDetailPage({
                     <TableHead>{t("col_trigger")}</TableHead>
                     <TableHead>{t("col_build")}</TableHead>
                     <TableHead>{t("col_created")}</TableHead>
+                    <TableHead>Comparacion</TableHead>
                     <TableHead className="text-right">{t("col_action")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {deployments.map((d) => (
-                    <TableRow key={d.id}>
-                      <TableCell>
-                        <Link href={`/deployments/${d.id}`}>
-                          <DeploymentStatusPill status={d.status} />
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {d.trigger}
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/builds/${d.buildId}`}
-                          className="font-mono text-[11px] hover:text-primary"
-                        >
-                          {d.buildId.slice(0, 8)}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(d.createdAt)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RollbackDeploymentButton
-                          deploymentId={d.id}
-                          disabled={d.status.toLowerCase() !== "completed"}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {deployments.map((d) => {
+                    const configChangedAfter = countConfigChangesAfter(
+                      effectiveConfig,
+                      d.finishedAt ?? d.createdAt,
+                    );
+                    const isCurrent = currentDeployment?.id === d.id;
+                    return (
+                      <TableRow key={d.id}>
+                        <TableCell>
+                          <Link href={`/deployments/${d.id}`}>
+                            <DeploymentStatusPill status={d.status} />
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {d.trigger}
+                        </TableCell>
+                        <TableCell>
+                          <Link
+                            href={`/builds/${d.buildId}`}
+                            className="font-mono text-[11px] hover:text-primary"
+                          >
+                            {d.buildId.slice(0, 8)}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {formatDate(d.createdAt)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex max-w-sm flex-col gap-1 text-xs">
+                            <div className="flex flex-wrap gap-1">
+                              {isCurrent ? (
+                                <Badge variant="success">actual</Badge>
+                              ) : d.status.toLowerCase() === "completed" ? (
+                                <Badge variant="outline">rollback target</Badge>
+                              ) : (
+                                <Badge variant="outline">no elegible</Badge>
+                              )}
+                              {configChangedAfter > 0 ? (
+                                <Badge variant="warning">{configChangedAfter} config posterior</Badge>
+                              ) : (
+                                <Badge variant="outline">config igual</Badge>
+                              )}
+                            </div>
+                            <span className="font-mono text-muted-foreground">
+                              actual {shortImage(currentDeployment?.newImageRef)}
+                            </span>
+                            <span className="font-mono text-muted-foreground">
+                              seleccion {shortImage(d.newImageRef)}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RollbackDeploymentButton
+                            deploymentId={d.id}
+                            disabled={d.status.toLowerCase() !== "completed"}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </Card>
@@ -711,6 +745,26 @@ function formatDate(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function countConfigChangesAfter(
+  config: AppEnvironmentEffectiveConfigDto | null,
+  baseline: string,
+) {
+  if (!config) {
+    return 0;
+  }
+  const baselineTime = new Date(baseline).getTime();
+  return config.items.filter((item) => new Date(item.updatedAt).getTime() > baselineTime).length;
+}
+
+function shortImage(value?: string | null) {
+  if (!value) {
+    return "-";
+  }
+  const [image, tag] = value.split(":");
+  const imageName = image.split("/").at(-1) ?? image;
+  return tag ? `${imageName}:${tag.slice(0, 12)}` : imageName;
 }
 
 function StatusBadge({ status }: { status: string }) {

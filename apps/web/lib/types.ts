@@ -1042,19 +1042,22 @@ export interface DeploymentSummary {
   buildId: string;
   instanceId: string;
   trigger: string;
+  triggeredBy: string | null;
   status: string;
   createdAt: string;
+  startedAt: string | null;
   finishedAt: string | null;
-}
-
-export interface DeploymentDetail extends DeploymentSummary {
-  newImageRef: string;
-  oldImageRef: string | null;
-  newContainerId: string | null;
+  durationSeconds: number | null;
   oldContainerId: string | null;
+  newContainerId: string | null;
+  oldImageRef: string | null;
+  newImageRef: string;
   errorCode: string | null;
   errorMessage: string | null;
+  failedAtStage: string | null;
 }
+
+export type DeploymentDetail = DeploymentSummary;
 
 /* -------------------------------------------------------------------------- */
 /* Notifications (F11.3A)                                                     */
