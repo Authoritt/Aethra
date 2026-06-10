@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { AssignInferredRouteOwnersButton } from "@/components/aethra/AssignInferredRouteOwnersButton";
 import { PublicAccessReconcileActions } from "@/components/aethra/PublicAccessReconcileActions";
 import { PublicAccessVerifyButton } from "@/components/aethra/PublicAccessVerifyButton";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
@@ -61,6 +62,11 @@ export default async function PublicAccessPage({
     ]),
   ).sort((a, b) => a.localeCompare(b));
   const hasFilters = Object.values(filters).some((value) => Boolean(value));
+  const inferredOwnerCandidateCount = endpoints.filter(
+    (endpoint) =>
+      Boolean(endpoint.appEnvironmentId) &&
+      endpoint.issues.includes("route.metadata_missing"),
+  ).length;
 
   return (
     <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
@@ -69,6 +75,7 @@ export default async function PublicAccessPage({
         description="Hosts publicos agrupados por owner operacional, rutas tecnicas, monitor y salud."
         actions={
           <div className="flex flex-wrap gap-2">
+            <AssignInferredRouteOwnersButton count={inferredOwnerCandidateCount} />
             <SavedViewsMenu storageKey="aethra.savedViews.publicAccess" />
             <Button asChild variant="outline">
               <Link href="/routes">Routes tecnicas</Link>

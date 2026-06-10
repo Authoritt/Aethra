@@ -61,6 +61,10 @@ public static class OperationsEndpoints
             .RequireAuthorization("scope:proxy:read")
             .WithName("ListOperationalPublicEndpoints");
 
+        group.MapPost("/public-endpoints/assign-inferred-owners", AssignInferredPublicEndpointOwners)
+            .RequireAuthorization("scope:proxy:write")
+            .WithName("AssignInferredPublicEndpointOwners");
+
         group.MapGet("/public-access-states", ListPublicAccessStates)
             .RequireAuthorization("scope:proxy:read")
             .WithName("ListOperationalPublicAccessStates");
@@ -497,6 +501,73 @@ public static class OperationsEndpoints
             .ToList();
 
         return Results.Ok(groups);
+    }
+
+    private static async Task<IResult> AssignInferredPublicEndpointOwners(
+        [FromBody] PublicEndpointOwnerAssignmentRequest? request,
+        ProjectsDbContext projectsDb,
+        ProxyDbContext proxyDb,
+        MonitoringDbContext monitoringDb,
+        IMediator mediator,
+        CancellationToken ct)
+    {
+        var dryRun = request?.DryRun ?? true;
+        var snapshot = await LoadSnapshot(projectsDb, null, monitoringDb, ct);
+        var routesByHost = await LoadRoutesByHost(proxyDb, ct);
+        var actions = new List<PublicAccessReconcileActionDto>();
+        var endpointCount = 0;
+        var routeCount = 0;
+
+        foreach (var (hostname, routes) in routesByHost.OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var owner = ResolveEndpointOwner(hostname, routes, snapshot);
+            if (owner?.instanceId is null)
+            {
+                continue;
+            }
+
+            var candidates = routes
+                .Where(route =>
+                    !string.Equals(route.operationalOwnerType, "app_environment", StringComparison.Ordinal)
+                    || !string.Equals(route.operationalOwnerId, owner.instanceId, StringComparison.Ordinal)
+                    || string.IsNullOrWhiteSpace(route.origin))
+                .OrderBy(route => route.pathPrefix, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (candidates.Count == 0)
+            {
+                continue;
+            }
+
+            endpointCount++;
+            foreach (var route in candidates)
+            {
+                routeCount++;
+                await ApplyAction(
+                    actions,
+                    dryRun,
+                    "assign_route_owner",
+                    $"Asignar owner {owner.instanceSlug} a Route {route.id} ({hostname}{route.pathPrefix}).",
+                    async () =>
+                    {
+                        var result = await mediator.Send(new UpdateRouteCommand(
+                            route.id,
+                            route.backendUrl,
+                            route.tlsEnabled,
+                            OperationalOwnerType: "app_environment",
+                            OperationalOwnerId: owner.instanceId,
+                            Origin: "bulk_owner_assignment"), ct).ConfigureAwait(false);
+                        return result.IsSuccess
+                            ? new AppliedResource(route.id, null, null)
+                            : new AppliedResource(null, result.Error.Code, result.Error.Message);
+                    }).ConfigureAwait(false);
+            }
+        }
+
+        return Results.Ok(new PublicEndpointOwnerAssignmentResultDto(
+            dryRun,
+            endpointCount,
+            routeCount,
+            actions));
     }
 
     private static async Task<IResult> ListPublicAccessStates(
@@ -2829,6 +2900,14 @@ public static class OperationsEndpoints
         string? OperationalOwnerType,
         string? OperationalOwnerId,
         string? Origin);
+
+    public sealed record PublicEndpointOwnerAssignmentRequest(bool? DryRun);
+
+    public sealed record PublicEndpointOwnerAssignmentResultDto(
+        bool DryRun,
+        int EndpointCount,
+        int RouteCount,
+        IReadOnlyList<PublicAccessReconcileActionDto> Actions);
 
     public sealed record PublicAccessStateDto(
         string AppEnvironmentId,

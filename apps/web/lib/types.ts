@@ -1419,6 +1419,13 @@ export interface PublicAccessReconcileResultDto {
   state: PublicAccessStateDto;
 }
 
+export interface PublicEndpointOwnerAssignmentResultDto {
+  dryRun: boolean;
+  endpointCount: number;
+  routeCount: number;
+  actions: PublicAccessReconcileActionDto[];
+}
+
 export interface PublicAccessVerificationCheckDto {
   kind: string;
   status: "passed" | "failed" | "blocked" | string;

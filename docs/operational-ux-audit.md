@@ -700,7 +700,7 @@ Estado de avance:
 - `Route` ya persiste owner/origen operacional. InstanceProvisioned, DeploymentCompleted, NativeDeploy, MCP attach-domain y Public Access Reconcile escriben `app_environment:{id}` con origen del flujo; rutas manuales quedan como `manual` o `unknown`.
 - La migracion `RouteOperationalOwnerBackfill` asigna owner/origen a rutas historicas por hostname (`customDomain`/`autoHostname`) y por backend (`containerName` o prefijo multi-servicio `{slug}-`).
 - Public Access marca `route.metadata_missing` cuando alguna ruta del hostname sigue sin owner/origen persistido despues del backfill.
-- Pendiente: accion masiva para revisar o asignar owner a rutas manuales legitimas.
+- Public Access ya ofrece accion masiva para revisar y asignar owners inferidos a rutas con metadata faltante, usando `dryRun` antes de aplicar.
 
 ### Fase 3: Releases
 
