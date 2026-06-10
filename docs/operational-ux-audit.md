@@ -698,7 +698,8 @@ Estado de avance:
 - `POST /api/ops/public-access-states/{appEnvironmentId}/verify` ya valida cada path publico expuesto por YARP, cada backend unico y el Monitor asociado; los checks devuelven `label` y `target` para que el fallo sea localizable.
 - `Route` ya persiste owner/origen operacional. InstanceProvisioned, DeploymentCompleted, NativeDeploy, MCP attach-domain y Public Access Reconcile escriben `app_environment:{id}` con origen del flujo; rutas manuales quedan como `manual` o `unknown`.
 - La migracion `RouteOperationalOwnerBackfill` asigna owner/origen a rutas historicas por hostname (`customDomain`/`autoHostname`) y por backend (`containerName` o prefijo multi-servicio `{slug}-`).
-- Pendiente: exponer una auditoria de rutas que sigan quedando `manual/unknown` despues del backfill.
+- Public Access marca `route.metadata_missing` cuando alguna ruta del hostname sigue sin owner/origen persistido despues del backfill.
+- Pendiente: accion masiva para revisar o asignar owner a rutas manuales legitimas.
 
 ### Fase 3: Releases
 

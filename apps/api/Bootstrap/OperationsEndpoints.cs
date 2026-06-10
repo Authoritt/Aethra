@@ -2091,6 +2091,12 @@ public static class OperationsEndpoints
         {
             issues.Add("route.owner_missing");
         }
+        if (routeRows.Any(r => string.IsNullOrWhiteSpace(r.operationalOwnerType)
+            || string.IsNullOrWhiteSpace(r.operationalOwnerId)
+            || string.IsNullOrWhiteSpace(r.origin)))
+        {
+            issues.Add("route.metadata_missing");
+        }
         if (FindZoneForHostname(hostname, publicInfra) is null)
         {
             issues.Add("endpoint.dns_zone_missing");
