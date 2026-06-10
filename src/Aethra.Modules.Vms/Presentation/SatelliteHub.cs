@@ -80,7 +80,9 @@ public sealed class SatelliteHub(
 
         vm.RecordConnected(info.Hostname, info.KernelVersion, info.CpuModel, info.CpuCores,
             info.TotalMemoryBytes, info.AgentVersion, clock.UtcNow, info.ContainerRuntime,
-            info.ContainerRuntimeVersion, info.RootDiskTotalBytes, info.RootDiskAvailableBytes);
+            info.ContainerRuntimeVersion, info.RootDiskTotalBytes, info.RootDiskAvailableBytes,
+            info.RuntimeSocketAccessible, info.DataVolumePath, info.DataVolumeTotalBytes,
+            info.DataVolumeAvailableBytes);
         await db.SaveChangesAsync(Context.ConnectionAborted);
 
         await integrationBus.PublishAsync(new SatelliteConnectedEvent(

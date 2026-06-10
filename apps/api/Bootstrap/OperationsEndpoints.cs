@@ -1083,6 +1083,10 @@ public static class OperationsEndpoints
                     vm.totalMemoryBytes,
                     vm.rootDiskTotalBytes,
                     vm.rootDiskAvailableBytes,
+                    vm.runtimeSocketAccessible,
+                    vm.dataVolumePath,
+                    vm.dataVolumeTotalBytes,
+                    vm.dataVolumeAvailableBytes,
                     vm.lastConnectedAt,
                     vm.lastSeenAt,
                     vm.updatedAt,
@@ -1970,6 +1974,10 @@ public static class OperationsEndpoints
                 v.TotalMemoryBytes,
                 v.RootDiskTotalBytes,
                 v.RootDiskAvailableBytes,
+                v.RuntimeSocketAccessible,
+                v.DataVolumePath,
+                v.DataVolumeTotalBytes,
+                v.DataVolumeAvailableBytes,
                 v.LastConnectedAt,
                 v.LastSeenAt,
                 v.UpdatedAt))
@@ -2632,12 +2640,24 @@ public static class OperationsEndpoints
             {
                 return new MachineReadiness("degraded", "Satellite connected but container runtime is unknown.");
             }
+            if (vm.runtimeSocketAccessible == false)
+            {
+                return new MachineReadiness("degraded", "Satellite connected but container runtime socket is not accessible.");
+            }
             if (vm.rootDiskTotalBytes is > 0 && vm.rootDiskAvailableBytes is not null)
             {
                 var availableRatio = (double)vm.rootDiskAvailableBytes.Value / vm.rootDiskTotalBytes.Value;
                 if (availableRatio < 0.10)
                 {
                     return new MachineReadiness("degraded", "Satellite connected but root disk has less than 10% free.");
+                }
+            }
+            if (vm.dataVolumeTotalBytes is > 0 && vm.dataVolumeAvailableBytes is not null)
+            {
+                var availableRatio = (double)vm.dataVolumeAvailableBytes.Value / vm.dataVolumeTotalBytes.Value;
+                if (availableRatio < 0.10)
+                {
+                    return new MachineReadiness("degraded", "Satellite connected but data volume has less than 10% free.");
                 }
             }
             return new MachineReadiness("ready", workloadCount == 0
@@ -2687,6 +2707,10 @@ public static class OperationsEndpoints
         long? totalMemoryBytes,
         long? rootDiskTotalBytes,
         long? rootDiskAvailableBytes,
+        bool? runtimeSocketAccessible,
+        string? dataVolumePath,
+        long? dataVolumeTotalBytes,
+        long? dataVolumeAvailableBytes,
         DateTimeOffset? lastConnectedAt,
         DateTimeOffset? lastSeenAt,
         DateTimeOffset updatedAt);
@@ -2984,6 +3008,10 @@ public static class OperationsEndpoints
         long? TotalMemoryBytes,
         long? RootDiskTotalBytes,
         long? RootDiskAvailableBytes,
+        bool? RuntimeSocketAccessible,
+        string? DataVolumePath,
+        long? DataVolumeTotalBytes,
+        long? DataVolumeAvailableBytes,
         DateTimeOffset? LastConnectedAt,
         DateTimeOffset? LastSeenAt,
         DateTimeOffset UpdatedAt,

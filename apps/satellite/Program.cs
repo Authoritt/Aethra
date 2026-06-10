@@ -43,6 +43,8 @@ builder.Services.Configure<SatelliteOptions>(opts =>
     opts.ContainerRuntime = (Environment.GetEnvironmentVariable("AETHRA_CONTAINER_RUNTIME")
         ?? section["ContainerRuntime"]
         ?? "docker").ToLowerInvariant();
+    opts.DataVolumePath = Environment.GetEnvironmentVariable("AETHRA_DATA_VOLUME_PATH")
+        ?? section["DataVolumePath"];
 });
 
 // Elegimos probe según OS. Linux → /proc real; otros → BCL cross-platform (Windows dev).

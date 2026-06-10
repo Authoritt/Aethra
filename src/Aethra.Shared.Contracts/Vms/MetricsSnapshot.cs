@@ -15,7 +15,11 @@ public sealed record SatelliteHandshake(
     string? ContainerRuntime = null,
     string? ContainerRuntimeVersion = null,
     long? RootDiskTotalBytes = null,
-    long? RootDiskAvailableBytes = null);
+    long? RootDiskAvailableBytes = null,
+    bool? RuntimeSocketAccessible = null,
+    string? DataVolumePath = null,
+    long? DataVolumeTotalBytes = null,
+    long? DataVolumeAvailableBytes = null);
 
 public sealed record VmMetricSnapshot(
     DateTimeOffset Timestamp,

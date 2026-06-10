@@ -198,12 +198,17 @@ export default async function VmsPage({
                       <Stat label="Previews" value={machine.previewAppEnvironmentCount.toString()} />
                     </div>
 
-                    <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-5">
                       <Stat label="Runtime" value={formatRuntime(machine)} />
+                      <Stat label="Socket" value={formatRuntimeSocket(machine)} />
                       <Stat label="Memory" value={formatBytes(machine.totalMemoryBytes)} />
                       <Stat
                         label="Root disk free"
                         value={formatDiskFree(machine.rootDiskAvailableBytes, machine.rootDiskTotalBytes)}
+                      />
+                      <Stat
+                        label="Data volume free"
+                        value={formatDiskFree(machine.dataVolumeAvailableBytes, machine.dataVolumeTotalBytes)}
                       />
                     </div>
 
@@ -211,6 +216,11 @@ export default async function VmsPage({
                       <Badge variant={machine.acceptsPreviews ? "info" : "outline"}>
                         {machine.acceptsPreviews ? "Preview pool" : "No previews"}
                       </Badge>
+                      {machine.dataVolumePath ? (
+                        <Badge variant="outline" className="font-mono">
+                          data {machine.dataVolumePath}
+                        </Badge>
+                      ) : null}
                       <Badge variant="outline">Last seen {formatDate(machine.lastSeenAt ?? machine.updatedAt)}</Badge>
                     </div>
 
@@ -323,6 +333,11 @@ function formatRuntime(machine: MachineOverviewDto) {
   if (!machine.containerRuntime) return "unknown";
   if (!machine.containerRuntimeVersion) return machine.containerRuntime;
   return machine.containerRuntimeVersion;
+}
+
+function formatRuntimeSocket(machine: MachineOverviewDto) {
+  if (machine.runtimeSocketAccessible === null) return "unknown";
+  return machine.runtimeSocketAccessible ? "accessible" : "blocked";
 }
 
 function formatDiskFree(available: number | null, total: number | null) {

@@ -27,5 +27,9 @@ internal static class VmMapper
         ContainerRuntime: v.ContainerRuntime,
         ContainerRuntimeVersion: v.ContainerRuntimeVersion,
         RootDiskTotalBytes: v.RootDiskTotalBytes,
-        RootDiskAvailableBytes: v.RootDiskAvailableBytes);
+        RootDiskAvailableBytes: v.RootDiskAvailableBytes,
+        RuntimeSocketAccessible: v.RuntimeSocketAccessible,
+        DataVolumePath: v.DataVolumePath,
+        DataVolumeTotalBytes: v.DataVolumeTotalBytes,
+        DataVolumeAvailableBytes: v.DataVolumeAvailableBytes);
 }

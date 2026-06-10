@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using Aethra.Satellite.Buffer;
 using Aethra.Satellite.Probes;
 using Aethra.Shared.Contracts.Vms;
@@ -184,10 +185,15 @@ public sealed class SatelliteConnectionWorker(
         {
             var info = await probe.HandshakeAsync(ct);
             var runtime = options.Value.ContainerRuntime;
+            var dataVolume = ReadDiskForPath(options.Value.DataVolumePath);
             info = info with
             {
                 ContainerRuntime = runtime,
                 ContainerRuntimeVersion = await DetectRuntimeVersion(runtime, ct),
+                RuntimeSocketAccessible = await DetectRuntimeSocketAccessible(runtime, ct),
+                DataVolumePath = dataVolume?.path,
+                DataVolumeTotalBytes = dataVolume?.total,
+                DataVolumeAvailableBytes = dataVolume?.available,
             };
             await _connection.InvokeAsync("Handshake", info, ct);
             logger.LogInformation(
@@ -219,6 +225,58 @@ public sealed class SatelliteConnectionWorker(
             var output = await process.StandardOutput.ReadLineAsync(ct);
             await process.WaitForExitAsync(ct);
             return string.IsNullOrWhiteSpace(output) ? null : output.Trim();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static async Task<bool> DetectRuntimeSocketAccessible(string runtime, CancellationToken ct)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = runtime,
+                ArgumentList = { "info" },
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            });
+            if (process is null)
+            {
+                return false;
+            }
+            await process.WaitForExitAsync(ct);
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static (string path, long total, long available)? ReadDiskForPath(string? configuredPath)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return null;
+        }
+        try
+        {
+            var fullPath = Path.GetFullPath(configuredPath);
+            var probePath = Directory.Exists(fullPath)
+                ? fullPath
+                : Directory.GetParent(fullPath)?.FullName ?? Path.GetPathRoot(fullPath);
+            if (string.IsNullOrWhiteSpace(probePath))
+            {
+                return null;
+            }
+            var drive = new DriveInfo(probePath);
+            return drive.IsReady
+                ? (fullPath, drive.TotalSize, drive.AvailableFreeSpace)
+                : null;
         }
         catch
         {

@@ -1479,6 +1479,10 @@ export interface MachineOverviewDto {
   totalMemoryBytes: number | null;
   rootDiskTotalBytes: number | null;
   rootDiskAvailableBytes: number | null;
+  runtimeSocketAccessible: boolean | null;
+  dataVolumePath: string | null;
+  dataVolumeTotalBytes: number | null;
+  dataVolumeAvailableBytes: number | null;
   lastConnectedAt: string | null;
   lastSeenAt: string | null;
   updatedAt: string;

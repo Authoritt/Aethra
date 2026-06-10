@@ -35,6 +35,10 @@ public sealed class Vm : AggregateRoot<VmId>
     public string? ContainerRuntimeVersion { get; private set; }
     public long? RootDiskTotalBytes { get; private set; }
     public long? RootDiskAvailableBytes { get; private set; }
+    public bool? RuntimeSocketAccessible { get; private set; }
+    public string? DataVolumePath { get; private set; }
+    public long? DataVolumeTotalBytes { get; private set; }
+    public long? DataVolumeAvailableBytes { get; private set; }
 
     // F11.4 — Auto-instalación del satélite vía SSH.
     /// <summary>
@@ -104,7 +108,9 @@ public sealed class Vm : AggregateRoot<VmId>
 
     public void RecordConnected(string hostname, string kernelVersion, string cpuModel, int cpuCores,
         long totalMemoryBytes, string agentVersion, DateTimeOffset now, string? containerRuntime = null,
-        string? containerRuntimeVersion = null, long? rootDiskTotalBytes = null, long? rootDiskAvailableBytes = null)
+        string? containerRuntimeVersion = null, long? rootDiskTotalBytes = null, long? rootDiskAvailableBytes = null,
+        bool? runtimeSocketAccessible = null, string? dataVolumePath = null,
+        long? dataVolumeTotalBytes = null, long? dataVolumeAvailableBytes = null)
     {
         Hostname = hostname;
         KernelVersion = kernelVersion;
@@ -115,6 +121,10 @@ public sealed class Vm : AggregateRoot<VmId>
         ContainerRuntimeVersion = string.IsNullOrWhiteSpace(containerRuntimeVersion) ? null : containerRuntimeVersion.Trim();
         RootDiskTotalBytes = rootDiskTotalBytes;
         RootDiskAvailableBytes = rootDiskAvailableBytes;
+        RuntimeSocketAccessible = runtimeSocketAccessible;
+        DataVolumePath = string.IsNullOrWhiteSpace(dataVolumePath) ? null : dataVolumePath.Trim();
+        DataVolumeTotalBytes = dataVolumeTotalBytes;
+        DataVolumeAvailableBytes = dataVolumeAvailableBytes;
         Satellite.RecordHandshake(agentVersion, now);
         Status = VmStatus.Connected;
         LastConnectedAt = now;

@@ -22,4 +22,8 @@ public sealed record VmDto(
     string? ContainerRuntime = null,
     string? ContainerRuntimeVersion = null,
     long? RootDiskTotalBytes = null,
-    long? RootDiskAvailableBytes = null);
+    long? RootDiskAvailableBytes = null,
+    bool? RuntimeSocketAccessible = null,
+    string? DataVolumePath = null,
+    long? DataVolumeTotalBytes = null,
+    long? DataVolumeAvailableBytes = null);
