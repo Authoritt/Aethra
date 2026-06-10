@@ -89,6 +89,24 @@ const QUICK_COMMANDS: GlobalSearchResultDto[] = [
     badge: "App Environments",
     score: 100,
   },
+  {
+    type: "command",
+    title: "Certificates",
+    subtitle: "Open TLS certificate operations.",
+    href: "/certificates",
+    status: "operations",
+    badge: "Proxy",
+    score: 100,
+  },
+  {
+    type: "command",
+    title: "Policies",
+    subtitle: "Open effective operational policies.",
+    href: "/policies",
+    status: "operations",
+    badge: "Operations",
+    score: 100,
+  },
 ];
 
 export function CommandPalette() {

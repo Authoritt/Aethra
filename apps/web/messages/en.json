@@ -78,7 +78,9 @@
     "users": "Users",
     "open_menu": "Open menu",
     "env_production": "Production",
-    "env_development": "Development"
+    "env_development": "Development",
+    "certificates": "Certificates",
+    "policies": "Policies"
   },
   "topbar": {
     "theme_toggle_aria": "Change theme",

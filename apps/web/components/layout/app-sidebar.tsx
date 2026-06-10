@@ -18,6 +18,7 @@ import {
   Rocket,
   Server,
   Settings,
+  ShieldCheck,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -50,6 +51,8 @@ const navGroups: NavGroup[] = [
       { href: "/app-environments", labelKey: "app_environments", icon: Boxes },
       { href: "/releases", labelKey: "releases", icon: Rocket },
       { href: "/public-access", labelKey: "public_access", icon: Network },
+      { href: "/certificates", labelKey: "certificates", icon: ShieldCheck },
+      { href: "/policies", labelKey: "policies", icon: ShieldCheck },
       { href: "/data-services", labelKey: "data_services", icon: Database },
       { href: "/vms", labelKey: "machines", icon: Server },
       { href: "/operational-issues", labelKey: "operational_issues", icon: AlertTriangle },

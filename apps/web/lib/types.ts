@@ -1504,6 +1504,37 @@ export interface GlobalSearchResultDto {
   metadata?: Record<string, string | null>;
 }
 
+export interface CertificateDto {
+  id: string;
+  hostname: string;
+  status: CertStatus;
+  issuedAt: string | null;
+  notBefore: string | null;
+  notAfter: string | null;
+  renewAfter: string | null;
+  lastError: string | null;
+}
+
+export interface OperationalPoliciesDto {
+  publicAccess: EnvironmentPolicyDto[];
+  machineReadiness: OperationalThresholdDto[];
+  release: OperationalThresholdDto[];
+}
+
+export interface EnvironmentPolicyDto {
+  environment: string;
+  reconciliationPolicy: string;
+  edgeTlsPolicy: string;
+  monitorRequired: boolean;
+  description: string;
+}
+
+export interface OperationalThresholdDto {
+  key: string;
+  value: string;
+  description: string;
+}
+
 export interface DataServiceBindingOverviewDto {
   id: string;
   appEnvironmentId: string;

@@ -771,6 +771,7 @@ Estado de avance:
 - `PublicAccessState` ya expone `reconciliationPolicy` y `edgeTlsPolicy` por ambiente (`production` estricto, otros standard/flexible), y App Environment muestra esa politica junto al estado deseado.
 - Public Access ya conecta esas politicas con el modelo de certificados de Proxy: cada ruta muestra `certStatus`, expiracion, e issues operacionales `cert.failed`, `cert.expired` y `cert.expiring`; esos issues cambian la siguiente accion a `renew_certificate`.
 - Proxy ya expone `/api/proxy/certificates` para listar certificados, solicitar emision por hostname y renovar manualmente certificados existentes. Public Access resuelve certificados por `certificate_id` o por hostname cuando la ruta no tiene el id directo.
+- `/certificates` ya ofrece UI operacional para listar, emitir y renovar certificados TLS. `/policies` ya muestra el catalogo efectivo de politicas sin obligar al operador a leer configuracion interna.
 
 Contrato actual:
 
@@ -830,16 +831,16 @@ Estado de avance:
 - Saved views locales ya existen para las listas operacionales de alto volumen: App Environments, Releases, Public Access, Machines, Data Services y Operational Issues.
 - Preview actions en Command Palette quedan ligadas a exponer `previewId`/lifecycle actions en Search; no deben inferirse desde texto.
 
-## Backlog residual
+## Extensiones futuras
 
 La plataforma ya queda organizada alrededor de `App Environment` como unidad mental operativa: desde ahi se entiende que se puede desplegar, reconciliar acceso publico, revisar config efectiva, ver historial de deployments, decidir rollback/restart/redeploy y entender readiness de la maquina destino. `Project` deja de ser la unidad de operacion diaria y queda como agrupador administrativo/comercial para portafolio, clientes, permisos y contexto de negocio.
 
-El backlog residual no bloquea el flujo principal de subir cambios a Git y desplegarlos en maquinas. Son extensiones para cuando existan contratos mas especificos:
+El flujo principal de subir cambios a Git, construir localmente cuando convenga y desplegar en maquinas ya tiene superficie operacional. Lo siguiente no bloquea ese flujo; son extensiones para escenarios mas especializados:
 
-- Certificados UI: agregar pagina dedicada si se requiere operacion frecuente; el contrato REST de listar/emitir/renovar y el estado en Public Access ya existen.
+- Certificados avanzados: agregar rotacion/importacion de certificados externos si se requiere operar una CA distinta a ACME/Let's Encrypt.
 - Preview lifecycle avanzado: agregar expiracion/extend desde Command Palette cuando existan contratos UI para esas mutaciones; delete preview ya esta cubierto.
 - MCP Public Access: exponer `aethra_reconcile_public_access` como wrapper directo del reconciler cuando esa logica salga del endpoint host a un servicio reutilizable.
-- Policies UI: agregar editor formal cuando estas reglas dejen de ser catalogo efectivo y pasen a ser configurables por tenant/equipo.
+- Policies editables: agregar editor formal cuando estas reglas dejen de ser catalogo efectivo y pasen a ser configurables por tenant/equipo.
 - Saved views persistentes para listas grandes.
 
 ### P3
