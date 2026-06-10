@@ -1456,6 +1456,16 @@ export interface MachineOverviewDto {
   workloads: MachineWorkloadDto[];
 }
 
+export interface GlobalSearchResultDto {
+  type: string;
+  title: string;
+  subtitle: string;
+  href: string;
+  status: string | null;
+  badge: string | null;
+  score: number;
+}
+
 export interface DataServiceBindingOverviewDto {
   id: string;
   appEnvironmentId: string;

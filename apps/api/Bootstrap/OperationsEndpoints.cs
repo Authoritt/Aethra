@@ -88,6 +88,10 @@ public static class OperationsEndpoints
             .RequireAuthorization("scope:projects:read")
             .WithName("ListOperationalIssues");
 
+        group.MapGet("/search", GlobalSearch)
+            .RequireAuthorization("scope:projects:read")
+            .WithName("GlobalOperationalSearch");
+
         return app;
     }
 
@@ -1116,6 +1120,133 @@ public static class OperationsEndpoints
         .ToList();
 
         return Results.Ok(rows);
+    }
+
+    private static async Task<IResult> GlobalSearch(
+        [FromQuery] string? q,
+        [FromQuery] int? limit,
+        ProjectsDbContext projectsDb,
+        DeploymentsDbContext deploymentsDb,
+        ProxyDbContext proxyDb,
+        MonitoringDbContext monitoringDb,
+        VmsDbContext vmsDb,
+        ServicesDbContext servicesDb,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(q))
+        {
+            return Results.Ok(Array.Empty<GlobalSearchResultDto>());
+        }
+
+        var query = q.Trim();
+        var max = Math.Clamp(limit ?? 30, 1, 100);
+        var snapshot = await LoadSnapshot(projectsDb, deploymentsDb, monitoringDb, ct);
+        var vms = await LoadVms(vmsDb, ct);
+        var results = new List<GlobalSearchResultDto>();
+
+        foreach (var app in snapshot.Templates.Values)
+        {
+            var project = snapshot.Projects.GetValueOrDefault(app.projectId);
+            if (MatchesSearch(query, app.name, app.slug, app.gitRepoUrl, project?.name))
+            {
+                AddSearchResult(results, query, "App", app.name, project?.name ?? app.defaultBranch, $"/apps/{app.id}", null, app.slug);
+            }
+        }
+
+        foreach (var instance in snapshot.Instances)
+        {
+            var env = ToAppEnvironment(instance, snapshot, vms);
+            if (MatchesSearch(query, env.AppName, env.TenantName, env.Environment, env.Slug, env.PublicUrl, env.MachineName))
+            {
+                AddSearchResult(
+                    results,
+                    query,
+                    "App Environment",
+                    $"{env.AppName} / {env.TenantName} / {env.Environment}",
+                    env.PublicUrl ?? env.MachineName,
+                    $"/instances/{env.Id}",
+                    env.HealthStatus,
+                    env.Slug);
+            }
+        }
+
+        var releases = await LoadReleases(projectsDb, deploymentsDb, releaseId: null, take: 40, ct);
+        foreach (var release in releases)
+        {
+            if (MatchesSearch(query, release.AppName, release.GitSha, release.ShortSha, release.GitRef, release.Status, release.BuildId))
+            {
+                AddSearchResult(
+                    results,
+                    query,
+                    "Release",
+                    $"{release.AppName} {release.ShortSha}",
+                    $"{release.GitRef} / {release.TargetCount} target(s)",
+                    $"/releases/{release.Id}",
+                    release.Status,
+                    release.Trigger);
+            }
+        }
+
+        var routesByHost = await LoadRoutesByHost(proxyDb, ct);
+        foreach (var (hostname, routes) in routesByHost)
+        {
+            var owner = ResolveEndpointOwner(hostname, routes, snapshot);
+            if (MatchesSearch(query, hostname, owner?.appName, owner?.tenantName, owner?.environment)
+                || routes.Any(route => MatchesSearch(query, route.pathPrefix, route.backendUrl)))
+            {
+                AddSearchResult(
+                    results,
+                    query,
+                    "Public Endpoint",
+                    hostname,
+                    owner is null ? $"{routes.Count} route(s)" : $"{owner.appName} / {owner.tenantName} / {owner.environment}",
+                    owner is null ? $"/public-access?q={Uri.EscapeDataString(hostname)}" : $"/instances/{owner.instanceId}",
+                    owner is null ? "unowned" : "owned",
+                    routes.Count == 1 ? routes[0].pathPrefix : $"{routes.Count} routes");
+            }
+        }
+
+        foreach (var vm in vms.Values)
+        {
+            var workloads = snapshot.Instances.Where(i => string.Equals(i.targetVmId, vm.id, StringComparison.Ordinal)).ToList();
+            var workloadDtos = workloads.Select(i => ToAppEnvironment(i, snapshot, vms)).ToList();
+            var readiness = ResolveMachineReadiness(
+                vm.status,
+                workloadDtos.Count(w => w.HealthStatus is "failed" or "degraded"),
+                workloadDtos.Count(w => w.HealthStatus == "deploying"),
+                workloads.Count);
+            if (MatchesSearch(query, vm.name, vm.slug, vm.status, readiness.Status, readiness.Reason))
+            {
+                AddSearchResult(results, query, "Machine", vm.name, readiness.Reason, $"/vms/{vm.id}", readiness.Status, vm.slug);
+            }
+        }
+
+        var services = await servicesDb.ManagedServices.AsNoTracking()
+            .Select(s => new
+            {
+                id = s.Id.ToString(),
+                s.Name,
+                s.Slug,
+                type = s.Type.ToString(),
+                status = s.Status.ToString(),
+                s.TargetVmId
+            })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        foreach (var service in services)
+        {
+            if (MatchesSearch(query, service.Name, service.Slug, service.type, service.status, service.TargetVmId))
+            {
+                AddSearchResult(results, query, "Data Service", service.Name, $"{service.type} / {service.TargetVmId}", $"/services/{service.id}", service.status, service.Slug);
+            }
+        }
+
+        return Results.Ok(results
+            .OrderByDescending(r => r.Score)
+            .ThenBy(r => r.Type)
+            .ThenBy(r => r.Title)
+            .Take(max)
+            .ToList());
     }
 
     private static async Task<IResult> ListOperationalIssues(
@@ -2266,6 +2397,49 @@ public static class OperationsEndpoints
     private static bool Contains(string? value, string query)
         => value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
 
+    private static bool MatchesSearch(string query, params string?[] values)
+        => values.Any(value => Contains(value, query));
+
+    private static void AddSearchResult(
+        List<GlobalSearchResultDto> results,
+        string query,
+        string type,
+        string title,
+        string subtitle,
+        string href,
+        string? status,
+        string? badge)
+        => results.Add(new GlobalSearchResultDto(
+            type,
+            title,
+            subtitle,
+            href,
+            status,
+            badge,
+            SearchScore(query, title, subtitle, status, badge)));
+
+    private static int SearchScore(string query, params string?[] values)
+    {
+        var score = 0;
+        foreach (var value in values.Where(v => !string.IsNullOrWhiteSpace(v)))
+        {
+            if (string.Equals(value, query, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 100;
+            }
+            else if (value!.StartsWith(query, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 50;
+            }
+            else if (value.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 10;
+            }
+        }
+
+        return score;
+    }
+
     private static int SeverityRank(string severity)
         => severity switch
         {
@@ -2604,6 +2778,15 @@ public static class OperationsEndpoints
         string? PublicUrl,
         int IssueCount,
         bool IsEphemeral);
+
+    public sealed record GlobalSearchResultDto(
+        string Type,
+        string Title,
+        string Subtitle,
+        string Href,
+        string? Status,
+        string? Badge,
+        int Score);
 
     public sealed record DataServiceOverviewDto(
         string Id,

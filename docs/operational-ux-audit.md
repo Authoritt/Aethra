@@ -660,6 +660,7 @@ Estado actual de implementacion:
 - `/instances/{id}` ya muestra los Data Services consumidos por ese App Environment.
 - `/data-services` ya existe como vista operacional filtrable por busqueda, status y tipo, y `/services` queda como vista tecnica.
 - `/dashboard` ya funciona como Command Center con issues, releases, public access y machines.
+- `GET /api/ops/search` y `/search` ya permiten busqueda global de Apps, App Environments, Releases, Public Endpoints, Machines y Data Services.
 - `/projects`, `/templates`, `/clients` y `/routes` quedan como compatibilidad/configuracion tecnica, no como camino principal.
 
 ### Fase 1: Reencuadre sin romper modelo
@@ -789,6 +790,12 @@ Resultado:
 - MCP de alto nivel.
 - Policies simples.
 - Quick filters/Saved views para listas operacionales.
+
+Estado de avance:
+
+- Search global ya existe como endpoint operacional y pagina `/search`.
+- El topbar ya tiene acceso directo a Search.
+- Pendiente: command palette modal con atajos y acciones, reutilizando `/api/ops/search`.
 
 ## Backlog priorizado
 

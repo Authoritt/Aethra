@@ -11,6 +11,7 @@ import {
   Monitor,
   Moon,
   Palette,
+  Search,
   Sun,
   User,
 } from "lucide-react";
@@ -107,6 +108,11 @@ export function AppTopbar({ onOpenSidebar }: AppTopbarProps) {
       </div>
 
       <div className="flex items-center gap-1">
+        <Button asChild variant="ghost" size="icon" aria-label="Search">
+          <Link href="/search">
+            <Search className="size-4" />
+          </Link>
+        </Button>
         <LanguageToggle />
         <ThemeToggle />
         <UserMenu
@@ -127,7 +133,10 @@ function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   // next-themes recomienda gate-ar el render hasta mounted para evitar mismatch.
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setMounted(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const current = mounted ? (theme ?? "system") : "system";
   const effective = mounted ? (resolvedTheme ?? "light") : "light";
