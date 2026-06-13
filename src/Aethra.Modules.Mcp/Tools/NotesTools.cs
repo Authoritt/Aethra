@@ -69,4 +69,45 @@ public sealed class NotesTools(IMediator mediator, IMcpCallerContext caller)
             pinned_facts = facts,
         });
     }
+
+    [McpServerTool(Name = "aethra_update_note", Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Actualiza (patch) el título y/o el cuerpo markdown de una nota. Sólo cambia los campos provistos; "
+        + "los omitidos quedan igual. Devuelve el detalle de la nota. No toca los pinned facts del scope.")]
+    public async Task<object> UpdateNoteAsync(
+        [Description("ID de la nota (lo devuelve aethra_add_note).")] string noteId,
+        [Description("Nuevo título. Omitir/null = no cambiar.")] string? title,
+        [Description("Nuevo cuerpo markdown. Omitir/null = no cambiar.")] string? markdown,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.NotesWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.NotesWrite);
+        }
+        var result = await mediator.Send(new UpdateNoteCommand(noteId, title, markdown), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_delete_note", Destructive = true, Idempotent = true, OpenWorld = false)]
+    [Description("Elimina una nota. NO afecta los pinned facts del scope (esos se gestionan aparte). "
+        + "Usá dry_run=true primero para confirmar.")]
+    public async Task<object> DeleteNoteAsync(
+        [Description("ID de la nota (lo devuelve aethra_add_note).")] string noteId,
+        [Description("Si true, NO borra — devuelve el plan.")] bool dryRun,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.NotesWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.NotesWrite);
+        }
+        if (dryRun)
+        {
+            return McpResponses.DryRun(
+                wouldCall: $"delete note {noteId}",
+                plan: new { noteId, action = "delete note (pinned facts untouched)" });
+        }
+        var result = await mediator.Send(new DeleteNoteCommand(noteId), ct).ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new { note_id = noteId, deleted = true })
+            : McpResponses.FromError(result.Error);
+    }
 }
