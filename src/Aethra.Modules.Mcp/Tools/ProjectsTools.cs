@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using Aethra.Modules.Mcp.Security;
+using Aethra.Modules.Projects.UseCases.Projects.Queries;
+using MediatR;
 using ModelContextProtocol.Server;
 
 namespace Aethra.Modules.Mcp.Tools;
@@ -10,30 +12,33 @@ namespace Aethra.Modules.Mcp.Tools;
 /// <c>not_implemented_post_refactor</c> hasta que F9.5 las reescriba.
 /// </summary>
 [McpServerToolType]
-public sealed class ProjectsTools(IMcpCallerContext caller)
+public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
 {
     [McpServerTool(Name = "aethra_list_projects", ReadOnly = true, OpenWorld = false)]
-    [Description("(F9 stub) Listará todos los proyectos con su jerarquía (templates, clients, instances) en F9.5.")]
-    public object List()
+    [Description("Lista todos los proyectos con sus contadores de templates y clients. Read-only.")]
+    public async Task<object> ListAsync(CancellationToken ct)
     {
         if (!caller.HasScope(McpScopes.ProjectsRead))
         {
             return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
         }
-        return McpResponses.NotImplemented("aethra_list_projects", "F9.5");
+        var result = await mediator.Send(new ListProjectsQuery(), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
     [McpServerTool(Name = "aethra_get_project", ReadOnly = true, OpenWorld = false)]
-    [Description("(F9 stub) Detalle completo de un proyecto en F9.5.")]
-    public object Get(
-        [Description("ID del proyecto (formato 'prj_...').")] string projectId)
+    [Description("Detalle de un proyecto: slug, nombre, descripción, color, icon, contadores de templates/clients "
+        + "y timestamps. Read-only.")]
+    public async Task<object> GetAsync(
+        [Description("ID del proyecto (formato 'prj_...').")] string projectId,
+        CancellationToken ct)
     {
-        _ = projectId;
         if (!caller.HasScope(McpScopes.ProjectsRead))
         {
             return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
         }
-        return McpResponses.NotImplemented("aethra_get_project", "F9.5");
+        var result = await mediator.Send(new GetProjectByIdQuery(projectId), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
     [McpServerTool(Name = "aethra_discover_repo", ReadOnly = true, OpenWorld = true)]
