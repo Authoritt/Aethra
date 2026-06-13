@@ -53,8 +53,19 @@ public static class WatchPathMatcher
             {
                 if (i + 1 < p.Length && p[i + 1] == '*')
                 {
-                    sb.Append(".*");
-                    i++;
+                    // "**/" matchea CERO o más segmentos (semántica gitignore): la barra es
+                    // opcional para que "**/x" también matchee "x" en la raíz. Un "**" suelto
+                    // (p.ej. al final de "backend/**") matchea cualquier cosa, incluido "/".
+                    if (i + 2 < p.Length && p[i + 2] == '/')
+                    {
+                        sb.Append("(?:.*/)?");
+                        i += 2;
+                    }
+                    else
+                    {
+                        sb.Append(".*");
+                        i++;
+                    }
                 }
                 else
                 {
