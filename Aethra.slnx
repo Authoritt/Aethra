@@ -26,6 +26,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Aethra.ArchitectureTests/Aethra.ArchitectureTests.csproj" />
+    <Project Path="tests/Aethra.Modules.Projects.Tests/Aethra.Modules.Projects.Tests.csproj" />
     <Project Path="tests/Aethra.Modules.Services.Tests/Aethra.Modules.Services.Tests.csproj" />
   </Folder>
 </Solution>
