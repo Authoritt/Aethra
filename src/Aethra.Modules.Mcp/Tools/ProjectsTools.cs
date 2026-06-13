@@ -3,6 +3,7 @@ using Aethra.Modules.Mcp.Security;
 using Aethra.Modules.Projects.UseCases.Clients.Commands;
 using Aethra.Modules.Projects.UseCases.Instances.Commands;
 using Aethra.Modules.Projects.UseCases.Projects.Commands;
+using Aethra.Modules.Projects.UseCases.Templates.Commands;
 using Aethra.Modules.Projects.UseCases.Projects.Queries;
 using MediatR;
 using ModelContextProtocol.Server;
@@ -150,6 +151,62 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
             TrackedRef: trackedRef);
         var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_create_template", Destructive = false, Idempotent = false, OpenWorld = false)]
+    [Description("Crea un Template (definición de app desde un repo Git) dentro de un proyecto. El webhook secret se "
+        + "genera en el server y por seguridad NO se devuelve por MCP — obtenelo en la UI o rotalo con "
+        + "aethra_rotate_webhook_secret. BuildArgs y credencial de token se configuran vía UI/REST si se necesitan.")]
+    public async Task<object> CreateTemplateAsync(
+        [Description("ID del proyecto contenedor (formato 'prj_...').")] string projectId,
+        [Description("Slug único dentro del proyecto (lowercase, a-z 0-9 -).")] string slug,
+        [Description("Nombre display.")] string name,
+        [Description("URL del repo Git (https).")] string gitRepoUrl,
+        [Description("Branch por defecto (ej. 'main').")] string branch,
+        [Description("Estrategia de build: 'Dockerfile', 'Compose' o 'Nixpacks'.")] string buildType,
+        [Description("Descripción opcional.")] string? description,
+        [Description("Subdirectorio base del repo (monorepo). Opcional.")] string? baseDirectory,
+        [Description("Path al Dockerfile relativo al repo (para buildType=Dockerfile).")] string? dockerfilePath,
+        [Description("Path al compose file (para buildType=Compose).")] string? composeFilePath,
+        [Description("Nombre de la credencial (GitHubPat) para clonar repos privados. Opcional.")] string? accessTokenCredentialName,
+        [Description("Globs que disparan rebuild al cambiar (ej. ['src/**']). Opcional.")] string[]? watchPaths,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
+        }
+        var cmd = new CreateTemplateCommand(
+            ProjectId: projectId,
+            Slug: slug,
+            Name: name,
+            Description: description,
+            GitRepoUrl: gitRepoUrl,
+            Branch: branch,
+            BaseDirectory: baseDirectory,
+            WatchPaths: watchPaths,
+            AccessTokenCredentialName: accessTokenCredentialName,
+            BuildType: buildType,
+            DockerfilePath: dockerfilePath,
+            ComposeFilePath: composeFilePath,
+            BuildArgs: null,
+            WebhookSecret: null);
+        var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            return McpResponses.FromError(result.Error);
+        }
+        var t = result.Value;
+        return McpResponses.Ok(new
+        {
+            id = t.id,
+            project_id = t.projectId,
+            slug = t.slug,
+            name = t.name,
+            created_at = t.createdAt,
+            webhook_secret_set = !string.IsNullOrEmpty(t.webhookSecret),
+            note = "El webhook secret no se devuelve por MCP. Obtenelo en la UI o rotalo con aethra_rotate_webhook_secret.",
+        });
     }
 
     [McpServerTool(Name = "aethra_discover_repo", ReadOnly = true, OpenWorld = true)]
