@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Aethra.Modules.Mcp.Security;
 using Aethra.Modules.Projects.UseCases.Clients.Commands;
+using Aethra.Modules.Projects.UseCases.Instances.Commands;
 using Aethra.Modules.Projects.UseCases.Projects.Commands;
 using Aethra.Modules.Projects.UseCases.Projects.Queries;
 using MediatR;
@@ -115,6 +116,39 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
         var result = await mediator
             .Send(new CreateClientCommand(projectId, slug, displayName, description, contactEmail, billingTag), ct)
             .ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_create_instance", Destructive = false, Idempotent = false, OpenWorld = false)]
+    [Description("Crea una Instance = Template × Client × Environment en una VM target. Usa los puertos/volúmenes/"
+        + "healthcheck por defecto del template (ajustables luego vía reconfigure/REST). Devuelve el detalle. "
+        + "OJO: crear la instance NO la despliega — usá aethra_deploy_instance_native o aethra_deploy_app_environment después.")]
+    public async Task<object> CreateInstanceAsync(
+        [Description("ID del template (formato 'tpl_...').")] string templateId,
+        [Description("ID del client/tenant (formato 'cli_...').")] string clientId,
+        [Description("Environment configurado en Settings (ej. 'production', 'test').")] string environment,
+        [Description("ID de la VM target donde correrá (formato 'vm_...').")] string targetVmId,
+        [Description("Slug override opcional; null = se deriva de template+client.")] string? slugOverride,
+        [Description("Si true, redeploya automáticamente al llegar un build nuevo de la rama trackeada.")] bool autoDeployOnNewBuild,
+        [Description("Ref git a trackear (ej. 'refs/heads/main'). Null = cascada template/environment.")] string? trackedRef,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
+        }
+        var cmd = new CreateInstanceCommand(
+            TemplateId: templateId,
+            ClientId: clientId,
+            Environment: environment,
+            TargetVmId: targetVmId,
+            SlugOverride: slugOverride,
+            Ports: null,
+            Volumes: null,
+            Healthcheck: null,
+            AutoDeployOnNewBuild: autoDeployOnNewBuild,
+            TrackedRef: trackedRef);
+        var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
