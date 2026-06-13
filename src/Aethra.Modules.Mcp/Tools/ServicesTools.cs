@@ -23,6 +23,22 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_get_service", ReadOnly = true, OpenWorld = false)]
+    [Description("Devuelve el detalle de un Managed Service: imagen, puerto interno, red, estado, si está expuesto, "
+        + "timestamps, conteo de bindings y, si falló el aprovisionamiento, error_code/error_message. "
+        + "Read-only; NO devuelve credenciales ni connection strings.")]
+    public async Task<object> GetServiceAsync(
+        [Description("ID del Managed Service (formato 'svc_...').")] string serviceId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ServicesRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ServicesRead);
+        }
+        var result = await mediator.Send(new GetServiceByIdQuery(serviceId), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
     [McpServerTool(Name = "aethra_list_service_templates", ReadOnly = true, OpenWorld = false)]
     [Description("Lista las plantillas disponibles (postgres, redis, etc.) que pueden usarse en aethra_create_service.")]
     public async Task<object> ListTemplatesAsync(CancellationToken ct)
@@ -126,6 +142,41 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
             MigrationsHook: null);
         var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_list_bindings", ReadOnly = true, OpenWorld = false)]
+    [Description("Lista los bindings (Instance ↔ ManagedService) de un servicio: resource_name, permisos, "
+        + "env_var_prefix y timestamps (creado/aprovisionado/revocado/última rotación). Por defecto sólo activos; "
+        + "include_revoked=true incluye los ya revocados. Read-only; NO devuelve credenciales.")]
+    public async Task<object> ListBindingsAsync(
+        [Description("ID del Managed Service (formato 'svc_...').")] string serviceId,
+        [Description("Si true, incluye bindings ya revocados. Default false (sólo activos).")] bool includeRevoked,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ServicesRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ServicesRead);
+        }
+        var result = await mediator.Send(new ListBindingsQuery(serviceId, includeRevoked), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_unbind_service", Destructive = true, Idempotent = false, OpenWorld = false)]
+    [Description("Revoca un binding (Instance ↔ ManagedService): lo marca como revocado y des-aprovisiona las "
+        + "credenciales inyectadas. La app afectada PERDERÁ acceso al servicio (requiere redeploy/restart). "
+        + "Usá aethra_list_bindings para obtener el binding_id.")]
+    public async Task<object> UnbindServiceAsync(
+        [Description("ID del ServiceBinding a revocar (formato 'bnd_...').")] string bindingId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ServicesWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ServicesWrite);
+        }
+        var result = await mediator.Send(new RevokeBindingCommand(bindingId), ct).ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new { binding_id = bindingId, revoked = true })
+            : McpResponses.FromError(result.Error);
     }
 
     [McpServerTool(Name = "aethra_rotate_credentials", Destructive = true, Idempotent = false, OpenWorld = false)]
