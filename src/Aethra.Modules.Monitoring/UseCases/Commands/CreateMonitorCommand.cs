@@ -35,6 +35,16 @@ public sealed class CreateMonitorValidator : AbstractValidator<CreateMonitorComm
         // Códigos fuera de 100–599 hoy se descartan en silencio (Monitor.NormalizeExpected); rechazarlos
         // explícitamente evita que un typo (ej. 2000) cambie el comportamiento del monitor sin aviso.
         RuleForEach(c => c.ExpectedStatusCodes).InclusiveBetween(100, 599);
+        // IntervalSec/TimeoutMs fuera de rango hoy se CLAMPEAN en silencio (Monitor.ClampInterval/ClampTimeout);
+        // validar acá hace que un valor inválido falle claro en vez de cambiar lo pedido por el usuario.
+        RuleFor(c => c.IntervalSec)
+            .Must(v => v >= Monitor.MinIntervalSec && v <= Monitor.MaxIntervalSec)
+            .When(c => c.IntervalSec.HasValue)
+            .WithMessage($"IntervalSec debe estar entre {Monitor.MinIntervalSec} y {Monitor.MaxIntervalSec} segundos.");
+        RuleFor(c => c.TimeoutMs)
+            .Must(v => v >= Monitor.MinTimeoutMs && v <= Monitor.MaxTimeoutMs)
+            .When(c => c.TimeoutMs.HasValue)
+            .WithMessage($"TimeoutMs debe estar entre {Monitor.MinTimeoutMs} y {Monitor.MaxTimeoutMs} ms.");
     }
 }
 

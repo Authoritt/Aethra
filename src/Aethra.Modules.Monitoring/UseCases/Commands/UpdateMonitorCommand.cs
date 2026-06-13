@@ -52,6 +52,15 @@ public sealed class UpdateMonitorValidator : AbstractValidator<UpdateMonitorComm
         // Mismo criterio que CreateMonitor: rechazar códigos fuera de 100–599 (si se proveen) en vez
         // de dejar que Monitor.NormalizeExpected los descarte en silencio.
         RuleForEach(c => c.ExpectedStatusCodes).InclusiveBetween(100, 599);
+        // IntervalSec/TimeoutMs: rechazar fuera de rango (si se proveen) en vez del clamp silencioso del dominio.
+        RuleFor(c => c.IntervalSec)
+            .Must(v => v >= Monitor.MinIntervalSec && v <= Monitor.MaxIntervalSec)
+            .When(c => c.IntervalSec.HasValue)
+            .WithMessage($"IntervalSec debe estar entre {Monitor.MinIntervalSec} y {Monitor.MaxIntervalSec} segundos.");
+        RuleFor(c => c.TimeoutMs)
+            .Must(v => v >= Monitor.MinTimeoutMs && v <= Monitor.MaxTimeoutMs)
+            .When(c => c.TimeoutMs.HasValue)
+            .WithMessage($"TimeoutMs debe estar entre {Monitor.MinTimeoutMs} y {Monitor.MaxTimeoutMs} ms.");
     }
 }
 
