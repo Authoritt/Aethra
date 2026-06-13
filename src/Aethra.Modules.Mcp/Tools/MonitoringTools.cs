@@ -70,6 +70,22 @@ public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller
         return result.IsSuccess ? OkMonitorState(result.Value) : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_trigger_monitor_check", Destructive = false, Idempotent = false, OpenWorld = true)]
+    [Description("Fuerza un chequeo on-demand de un monitor HTTP AHORA (sin esperar al intervalo): hace la request al "
+        + "endpoint, registra el resultado y puede actualizar el status del monitor. Devuelve el check: status, "
+        + "http_status_code, latency_ms, error y un snippet de la respuesta. Útil para revalidar tras un fix.")]
+    public async Task<object> TriggerCheckAsync(
+        [Description("ID del monitor a chequear (formato 'mon_...').")] string monitorId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.MonitoringWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.MonitoringWrite);
+        }
+        var result = await mediator.Send(new TriggerMonitorCheckCommand(monitorId), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
     // Proyección segura del detalle: confirma el toggle sin filtrar Headers/BodyTemplate (pueden traer tokens de auth).
     private static object OkMonitorState(Aethra.Modules.Monitoring.UseCases.Dtos.MonitorDetailDto m)
         => McpResponses.Ok(new
