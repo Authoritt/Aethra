@@ -37,6 +37,29 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_delete_dns_record", Destructive = true, Idempotent = true, OpenWorld = true)]
+    [Description("Borra un DNS record de Cloudflare (y la copia local en Aethra). Usá dry_run=true primero para confirmar.")]
+    public async Task<object> DeleteDnsRecordAsync(
+        [Description("ID del DNS record en Aethra (el que devuelve aethra_create_dns_record).")] string recordId,
+        [Description("Si true, NO borra — devuelve el plan.")] bool dryRun,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.CloudflareWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.CloudflareWrite);
+        }
+        if (dryRun)
+        {
+            return McpResponses.DryRun(
+                wouldCall: $"delete dns record {recordId}",
+                plan: new { recordId, action = "delete DNS record on Cloudflare + local copy" });
+        }
+        var result = await mediator.Send(new DeleteDnsRecordCommand(recordId), ct).ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new { record_id = recordId, deleted = true })
+            : McpResponses.FromError(result.Error);
+    }
+
     [McpServerTool(Name = "aethra_attach_domain", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Adjunta un hostname a una Instance: crea DNS record en Cloudflare (CNAME proxied), crea Route YARP y opcionalmente un Monitor HTTP. Cada paso devuelve su propio status.")]
     public async Task<object> AttachDomainAsync(
