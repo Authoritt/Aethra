@@ -134,6 +134,31 @@ public sealed class NotificationsTools(IMediator mediator, IMcpCallerContext cal
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_delete_notification_channel", Destructive = true, Idempotent = false, OpenWorld = false)]
+    [Description("Elimina un canal de notificación: detiene los envíos futuros por ese canal. El historial de "
+        + "deliveries ya registrado NO se borra (consultable con aethra_list_notification_deliveries). "
+        + "Usá dry_run=true primero para confirmar.")]
+    public async Task<object> DeleteChannelAsync(
+        [Description("ID del canal (formato 'nch_...'; lo lista aethra_list_notification_channels).")] string channelId,
+        [Description("Si true, NO borra — devuelve el plan.")] bool dryRun,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.NotificationsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.NotificationsWrite);
+        }
+        if (dryRun)
+        {
+            return McpResponses.DryRun(
+                wouldCall: $"DELETE /api/notifications/channels/{channelId}",
+                plan: new { channelId, action = "delete notification channel (stops future sends; keeps delivery history)" });
+        }
+        var result = await mediator.Send(new DeleteChannelCommand(channelId), ct).ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new { channel_id = channelId, deleted = true })
+            : McpResponses.FromError(result.Error);
+    }
+
     private static List<string> ListConfigKeys(JsonElement config)
     {
         var keys = new List<string>();
