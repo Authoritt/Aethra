@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Aethra.Modules.Mcp.Security;
 using Aethra.Modules.Projects.UseCases.EnvVars.Queries;
+using Aethra.Modules.Projects.UseCases.Secrets.Queries;
 using Aethra.Shared.Contracts.Projects;
 using MediatR;
 using ModelContextProtocol.Server;
@@ -72,6 +73,23 @@ public sealed class EnvVarsTools(IEnvVarWriter envVarWriter, IMediator mediator,
             return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
         }
         var result = await mediator.Send(new ListEnvVarsQuery(scopeType, scopeId), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_list_secrets", ReadOnly = true, OpenWorld = false)]
+    [Description("Lista los SECRETOS de un scope (project|template|client|instance) SIN sus valores: sólo key, "
+        + "has_value (indica que existe un cipher persistido), source y timestamps. El valor cifrado NUNCA se expone "
+        + "por diseño. Útil para inventariar qué secretos están configurados sin filtrarlos.")]
+    public async Task<object> ListSecretsAsync(
+        [Description("Tipo de scope: 'project', 'template', 'client' o 'instance'.")] string scopeType,
+        [Description("ID del scope (prj_*, tpl_*, cli_*, ins_*).")] string scopeId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
+        }
+        var result = await mediator.Send(new ListSecretsQuery(scopeType, scopeId), ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 }
