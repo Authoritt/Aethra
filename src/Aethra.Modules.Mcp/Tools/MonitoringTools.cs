@@ -40,6 +40,48 @@ public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_get_monitor", ReadOnly = true, OpenWorld = false)]
+    [Description("Detalle de un monitor HTTP: url, método, status codes esperados, intervalo, timeout, estado, "
+        + "habilitado, fallos consecutivos, último chequeo y timestamps. Read-only. Por seguridad NO devuelve los "
+        + "headers ni el body template del request (pueden traer tokens) — sólo indica si existen vía "
+        + "has_custom_headers / has_body_template.")]
+    public async Task<object> GetAsync(
+        [Description("ID del monitor (formato 'mon_...').")] string monitorId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.MonitoringRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.MonitoringRead);
+        }
+        var result = await mediator.Send(new GetMonitorByIdQuery(monitorId), ct).ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            return McpResponses.FromError(result.Error);
+        }
+        var m = result.Value;
+        return McpResponses.Ok(new
+        {
+            id = m.Id,
+            slug = m.Slug,
+            name = m.Name,
+            url = m.Url,
+            http_method = m.HttpMethod,
+            expected_status_codes = m.ExpectedStatusCodes,
+            interval_sec = m.IntervalSec,
+            timeout_ms = m.TimeoutMs,
+            instance_id = m.InstanceId,
+            project_id = m.ProjectId,
+            is_enabled = m.IsEnabled,
+            status = m.Status,
+            last_checked_at = m.LastCheckedAt,
+            consecutive_failures = m.ConsecutiveFailures,
+            created_at = m.CreatedAt,
+            updated_at = m.UpdatedAt,
+            has_custom_headers = m.Headers is { Count: > 0 },
+            has_body_template = !string.IsNullOrEmpty(m.BodyTemplate),
+        });
+    }
+
     [McpServerTool(Name = "aethra_enable_monitor", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Activa un monitor HTTP: vuelve a programarse y a chequear el endpoint en su intervalo. "
         + "Idempotente (activar uno ya activo es no-op). Confirma el estado; NO devuelve headers ni body del check.")]
