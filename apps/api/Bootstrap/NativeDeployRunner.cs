@@ -178,10 +178,11 @@ public sealed class NativeDeployRunner(
         }
 
         var routes = new List<string>();
-        if (!string.IsNullOrWhiteSpace(hostname))
+        var anyServiceHost = services.Any(s => !string.IsNullOrWhiteSpace(s.Hostname));
+        if (!string.IsNullOrWhiteSpace(hostname) || anyServiceHost)
         {
             routes = await ReconcileRoutingAsync(
-                instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname!, ct).ConfigureAwait(false);
+                instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, ct).ConfigureAwait(false);
         }
         else
         {
@@ -242,13 +243,14 @@ public sealed class NativeDeployRunner(
             return; // solo aplica a instancias nativas multi-servicio
         }
         var hostname = instance.CustomDomain ?? instance.AutoHostname;
-        if (string.IsNullOrWhiteSpace(hostname))
+        var anyServiceHost = services.Any(s => !string.IsNullOrWhiteSpace(s.Hostname));
+        if (string.IsNullOrWhiteSpace(hostname) && !anyServiceHost)
         {
             return;
         }
         await ReconcileRoutingAsync(instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, ct)
             .ConfigureAwait(false);
-        log.LogInformation("reconcile-routing {Inst}: rutas/CNAME/monitor sincronizados a {Host}", instance.Slug, hostname);
+        log.LogInformation("reconcile-routing {Inst}: rutas/CNAME/monitor sincronizados (multi-host)", instance.Slug);
     }
 
     /// <summary>
@@ -259,31 +261,53 @@ public sealed class NativeDeployRunner(
     /// </summary>
     private async Task<List<string>> ReconcileRoutingAsync(
         string slug, string instanceId, string projectId,
-        IReadOnlyList<TemplateServiceView> services, string hostname, CancellationToken ct)
+        IReadOnlyList<TemplateServiceView> services, string? instanceHostname, CancellationToken ct)
     {
-        // 1) CNAME del host deseado (best-effort).
-        await EnsureDnsRecordAsync(hostname, ct).ConfigureAwait(false);
-
-        // 2) Asegurar rutas del host deseado (idempotente).
         var routes = new List<string>();
+        // Set deseado de (host, pathPrefix) para limpiar SOLO rutas mías realmente obsoletas.
+        var desired = new HashSet<(string Host, string Prefix)>();
+        var hostsTouched = new List<string>();
+
+        // 1) Asegurar rutas: cada servicio bajo su Hostname propio (multi-host) o el de la Instance.
+        // Un servicio con Hostname propio pero sin PathPrefixes asume "/" (quiere ruta). Sin host
+        // ni prefix → servicio interno, sin ruta pública.
         foreach (var svc in services)
         {
-            foreach (var prefix in svc.PathPrefixes)
+            var host = !string.IsNullOrWhiteSpace(svc.Hostname) ? svc.Hostname! : instanceHostname;
+            if (string.IsNullOrWhiteSpace(host))
+            {
+                continue;
+            }
+            IReadOnlyList<string> prefixes = svc.PathPrefixes.Count > 0
+                ? svc.PathPrefixes
+                : (!string.IsNullOrWhiteSpace(svc.Hostname) ? new[] { "/" } : svc.PathPrefixes);
+            if (prefixes.Count == 0)
+            {
+                continue;
+            }
+            if (!hostsTouched.Contains(host, StringComparer.OrdinalIgnoreCase))
+            {
+                hostsTouched.Add(host);
+            }
+            foreach (var prefix in prefixes)
             {
                 var backend = $"http://{slug}-{svc.Name}:{svc.Port}";
                 var r = await mediator.Send(new CreateRouteCommand(
-                    hostname,
-                    backend,
-                    false,
-                    prefix,
-                    "app_environment",
-                    instanceId,
-                    "native_deploy"), ct).ConfigureAwait(false);
-                routes.Add(r.IsSuccess ? $"{prefix} → {backend}" : $"{prefix} (ya existía)");
+                    host, backend, false, prefix,
+                    "app_environment", instanceId, "native_deploy"), ct).ConfigureAwait(false);
+                routes.Add(r.IsSuccess ? $"{host}{prefix} → {backend}" : $"{host}{prefix} (ya existía)");
+                desired.Add((host.ToLowerInvariant(), prefix));
             }
         }
 
-        // 3) Limpiar rutas viejas: las que apuntan a ESTA Instance ({slug}-{svc}:) pero bajo otro host.
+        // 2) CNAME + tunnel ingress por cada host tocado (best-effort, idempotente).
+        foreach (var host in hostsTouched)
+        {
+            await EnsureDnsRecordAsync(host, ct).ConfigureAwait(false);
+        }
+
+        // 3) Limpiar SOLO rutas mías ({slug}-{svc}:) que NO estén en el set deseado (host+prefix).
+        // Borra hosts viejos de ESTA Instance sin tocar las rutas multi-host vigentes.
         var myBackends = services.Select(s => $"http://{slug}-{s.Name}:").ToList();
         var all = await mediator.Send(new ListRoutesQuery(), ct).ConfigureAwait(false);
         if (all.IsSuccess)
@@ -291,21 +315,25 @@ public sealed class NativeDeployRunner(
             foreach (var rt in all.Value)
             {
                 var isMine = myBackends.Any(b => rt.BackendUrl.StartsWith(b, StringComparison.Ordinal));
-                if (isMine && !string.Equals(rt.Hostname, hostname, StringComparison.OrdinalIgnoreCase))
+                if (isMine && !desired.Contains((rt.Hostname.ToLowerInvariant(), rt.PathPrefix)))
                 {
                     await mediator.Send(new DeleteRouteCommand(rt.Id), ct).ConfigureAwait(false);
-                    routes.Add($"− {rt.Hostname}{rt.PathPrefix} (URL anterior, borrada)");
-                    log.LogInformation("reconcile-routing {Slug}: ruta vieja borrada {Host}{Path}", slug, rt.Hostname, rt.PathPrefix);
+                    routes.Add($"− {rt.Hostname}{rt.PathPrefix} (obsoleta, borrada)");
+                    log.LogInformation("reconcile-routing {Slug}: ruta obsoleta borrada {Host}{Path}", slug, rt.Hostname, rt.PathPrefix);
                 }
             }
         }
 
-        // 4) Monitor del host deseado.
-        await mediator.Send(new CreateMonitorCommand(
-            Slug: slug, Name: slug, Url: $"https://{hostname}/",
-            HttpMethod: "GET", ExpectedStatusCodes: [200, 301, 302, 307, 308],
-            IntervalSec: 120, TimeoutMs: 15000, Headers: null, BodyTemplate: null,
-            InstanceId: instanceId, ProjectId: projectId), ct).ConfigureAwait(false);
+        // 4) Monitor por cada host tocado (slug propio cuando hay varios hosts).
+        foreach (var host in hostsTouched)
+        {
+            var monSlug = hostsTouched.Count > 1 ? host.Split('.')[0] : slug;
+            await mediator.Send(new CreateMonitorCommand(
+                Slug: monSlug, Name: host, Url: $"https://{host}/",
+                HttpMethod: "GET", ExpectedStatusCodes: [200, 301, 302, 307, 308],
+                IntervalSec: 120, TimeoutMs: 15000, Headers: null, BodyTemplate: null,
+                InstanceId: instanceId, ProjectId: projectId), ct).ConfigureAwait(false);
+        }
 
         return routes;
     }

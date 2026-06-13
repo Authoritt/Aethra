@@ -819,6 +819,8 @@ export interface TemplateServiceDef {
   /** "registry" (imagen prebuilt) o "git" (Aethra clona y construye). */
   buildMode: string;
   dockerfilePath: string | null;
+  /** Hostname público propio del servicio (apps multi-host). null = host de la instancia. */
+  hostname: string | null;
   /** F13.3 — volúmenes persistentes del servicio (ej. DataProtection keys). */
   volumes: TemplateServiceVolumeDef[];
 }

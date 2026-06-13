@@ -30,7 +30,9 @@ public sealed class NativeDeployTools(IMediator mediator, IMcpCallerContext call
         [property: Description("Solo modo 'git': ruta al Dockerfile del servicio dentro del repo. Default 'Dockerfile'.")]
         string? DockerfilePath,
         [property: Description("Volúmenes persistentes del servicio (ej. DataProtection keys). El token {instance} en el nombre se interpola al slug.")]
-        IReadOnlyList<McpServiceVolume>? Volumes);
+        IReadOnlyList<McpServiceVolume>? Volumes,
+        [property: Description("Hostname público propio del servicio (apps multi-host: api/admin/tenant en dominios distintos). null = usa el hostname de la Instance.")]
+        string? Hostname);
 
     public sealed record McpServiceVolume(
         [property: Description("Nombre del named volume. Admite {instance} → slug (ej. '{instance}-dpkeys').")]
@@ -54,7 +56,8 @@ public sealed class NativeDeployTools(IMediator mediator, IMcpCallerContext call
         var mapped = (services ?? [])
             .Select(s => new TemplateServiceInput(
                 s.Name, s.Image, s.Port, s.PathPrefixes, s.Env, s.BuildMode, s.DockerfilePath,
-                s.Volumes?.Select(v => new TemplateVolumeInput(v.Name, v.ContainerPath, v.ReadOnly)).ToList()))
+                s.Volumes?.Select(v => new TemplateVolumeInput(v.Name, v.ContainerPath, v.ReadOnly)).ToList(),
+                s.Hostname))
             .ToList();
         var result = await mediator.Send(new SetTemplateServicesCommand(templateId, mapped), ct).ConfigureAwait(false);
         return result.IsSuccess

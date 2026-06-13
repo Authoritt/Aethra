@@ -23,7 +23,11 @@ public sealed record TemplateService(
     string? DockerfilePath = null,
     // F13.3 — volúmenes persistentes del servicio (ej. DataProtection keys). Null = sin volúmenes
     // (jsonb sin el campo deserializa a este valor). Se montan al desplegar cada Instance.
-    IReadOnlyList<ServiceVolume>? Volumes = null);
+    IReadOnlyList<ServiceVolume>? Volumes = null,
+    // Hostname público propio del servicio para apps multi-host (ej. una app con api/admin/tenant
+    // cada uno en su dominio). null = usa el hostname de la Instance (customDomain/autoHostname).
+    // Las rutas de este servicio (por PathPrefix) se publican bajo este host. jsonb sin campo = null.
+    string? Hostname = null);
 
 /// <summary>
 /// F13.3 — un volumen persistente montado en un servicio del deploy nativo. El token

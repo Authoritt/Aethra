@@ -52,7 +52,8 @@ public sealed record TemplateServiceDto(
     IReadOnlyList<TemplateBuildArgDto> env,
     string buildMode,
     string? dockerfilePath,
-    IReadOnlyList<TemplateServiceVolumeDto> volumes);
+    IReadOnlyList<TemplateServiceVolumeDto> volumes,
+    string? hostname);
 
 /// <summary>F13.3 — volumen persistente de un servicio para la vista detalle.</summary>
 public sealed record TemplateServiceVolumeDto(

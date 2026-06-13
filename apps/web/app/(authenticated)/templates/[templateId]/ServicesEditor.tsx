@@ -18,6 +18,7 @@ interface Row {
   dockerfilePath: string;
   port: string;
   pathPrefixes: string;
+  hostname: string;
   envText: string;
   volumesText: string;
 }
@@ -30,6 +31,7 @@ function toRow(s: TemplateServiceDef): Row {
     dockerfilePath: s.dockerfilePath ?? "",
     port: String(s.port ?? ""),
     pathPrefixes: (s.pathPrefixes ?? []).join(", "),
+    hostname: s.hostname ?? "",
     envText: (s.env ?? []).map((e) => `${e.key}=${e.value}`).join("\n"),
     volumesText: (s.volumes ?? [])
       .map((v) => `${v.name}:${v.containerPath}${v.readOnly ? ":ro" : ""}`)
@@ -38,7 +40,7 @@ function toRow(s: TemplateServiceDef): Row {
 }
 
 function emptyRow(): Row {
-  return { name: "", buildMode: "registry", image: "", dockerfilePath: "", port: "", pathPrefixes: "", envText: "", volumesText: "" };
+  return { name: "", buildMode: "registry", image: "", dockerfilePath: "", port: "", pathPrefixes: "", hostname: "", envText: "", volumesText: "" };
 }
 
 /** Parsea "nombre:/ruta[:ro]" por línea → {name, containerPath, readOnly}. */
@@ -99,6 +101,7 @@ export function ServicesEditor({
           ),
           buildMode: r.buildMode,
           dockerfilePath: r.buildMode === "git" ? r.dockerfilePath.trim() || "Dockerfile" : null,
+          hostname: r.hostname.trim() || null,
           volumes: parseVolumes(r.volumesText),
         }));
       await api(`/api/templates/${encodeURIComponent(templateId)}/services`, {
@@ -158,6 +161,9 @@ export function ServicesEditor({
             </Field>
             <Field label="Rutas (pathPrefix, CSV)">
               <Input value={r.pathPrefixes} onChange={(e) => update(i, { pathPrefixes: e.target.value })} placeholder="/api, /hubs   ·   vacío = interno" className="font-mono text-xs" />
+            </Field>
+            <Field label="Hostname propio (multi-host, opcional)">
+              <Input value={r.hostname} onChange={(e) => update(i, { hostname: e.target.value })} placeholder="api.miapp.com   ·   vacío = host de la instancia" className="font-mono text-xs" />
             </Field>
             <Field label="Env (KEY=valor por línea)">
               <textarea
