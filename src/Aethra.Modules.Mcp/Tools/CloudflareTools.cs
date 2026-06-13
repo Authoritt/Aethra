@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
 using Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands;
 using Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries;
 using Aethra.Modules.Mcp.Security;
@@ -12,6 +13,30 @@ namespace Aethra.Modules.Mcp.Tools;
 [McpServerToolType]
 public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller)
 {
+    [McpServerTool(Name = "aethra_create_dns_record", Destructive = false, Idempotent = false, OpenWorld = true)]
+    [Description("Crea un DNS record en Cloudflare (y persiste la copia local con su id externo). Tipos: A, AAAA, "
+        + "CNAME, TXT, MX. Para apuntar un hostname a una Instance preferí aethra_attach_domain (hace DNS+ruta+monitor); "
+        + "usá esta tool para records sueltos. Devuelve el record creado.")]
+    public async Task<object> CreateDnsRecordAsync(
+        [Description("ID de la zona Cloudflare gestionada en Aethra.")] string zoneId,
+        [Description("Tipo: A | AAAA | CNAME | TXT | MX.")] string type,
+        [Description("Nombre del record (FQDN, ej. 'api.midominio.com').")] string name,
+        [Description("Contenido: IP (A/AAAA), target (CNAME), valor (TXT), host (MX).")] string content,
+        [Description("TTL en segundos (1 = automático).")] int ttl,
+        [Description("Si true, proxea por Cloudflare (sólo válido para A/AAAA/CNAME).")] bool proxied,
+        [Description("Comentario opcional.")] string? comment,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.CloudflareWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.CloudflareWrite);
+        }
+        var result = await mediator
+            .Send(new CreateDnsRecordCommand(zoneId, type, name, content, ttl, proxied, comment), ct)
+            .ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
     [McpServerTool(Name = "aethra_attach_domain", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Adjunta un hostname a una Instance: crea DNS record en Cloudflare (CNAME proxied), crea Route YARP y opcionalmente un Monitor HTTP. Cada paso devuelve su propio status.")]
     public async Task<object> AttachDomainAsync(
