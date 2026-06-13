@@ -128,6 +128,24 @@ public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_delete_monitor", Destructive = true, Idempotent = false, OpenWorld = false)]
+    [Description("Elimina permanentemente un monitor HTTP y su historial de checks. Útil para quitar monitores "
+        + "obsoletos o falsos-positivos (ej. hostnames que ya no existen). Para silenciar temporalmente sin perder "
+        + "el histórico, preferí aethra_disable_monitor.")]
+    public async Task<object> DeleteAsync(
+        [Description("ID del monitor a eliminar (formato 'mon_...').")] string monitorId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.MonitoringWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.MonitoringWrite);
+        }
+        var result = await mediator.Send(new DeleteMonitorCommand(monitorId), ct).ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new { monitor_id = monitorId, deleted = true })
+            : McpResponses.FromError(result.Error);
+    }
+
     // Proyección segura del detalle: confirma el toggle sin filtrar Headers/BodyTemplate (pueden traer tokens de auth).
     private static object OkMonitorState(Aethra.Modules.Monitoring.UseCases.Dtos.MonitorDetailDto m)
         => McpResponses.Ok(new
