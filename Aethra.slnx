@@ -28,6 +28,7 @@
     <Project Path="tests/Aethra.ArchitectureTests/Aethra.ArchitectureTests.csproj" />
     <Project Path="tests/Aethra.Modules.Identity.Tests/Aethra.Modules.Identity.Tests.csproj" />
     <Project Path="tests/Aethra.Modules.Monitoring.Tests/Aethra.Modules.Monitoring.Tests.csproj" />
+    <Project Path="tests/Aethra.Modules.Notes.Tests/Aethra.Modules.Notes.Tests.csproj" />
     <Project Path="tests/Aethra.Modules.Notifications.Tests/Aethra.Modules.Notifications.Tests.csproj" />
     <Project Path="tests/Aethra.Modules.Projects.Tests/Aethra.Modules.Projects.Tests.csproj" />
     <Project Path="tests/Aethra.Modules.Proxy.Tests/Aethra.Modules.Proxy.Tests.csproj" />
