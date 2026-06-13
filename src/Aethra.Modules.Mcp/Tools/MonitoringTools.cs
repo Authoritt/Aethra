@@ -58,28 +58,44 @@ public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller
         {
             return McpResponses.FromError(result.Error);
         }
-        var m = result.Value;
-        return McpResponses.Ok(new
+        return McpResponses.Ok(RedactedMonitor(result.Value));
+    }
+
+    [McpServerTool(Name = "aethra_create_monitor", Destructive = false, Idempotent = false, OpenWorld = false)]
+    [Description("Crea un monitor HTTP que chequea periódicamente un endpoint y marca Up/Down/Degraded. "
+        + "Devuelve el detalle (redactado). Para headers de autenticación personalizados, configurá el monitor "
+        + "luego vía la UI/REST (esta tool no los recibe).")]
+    public async Task<object> CreateAsync(
+        [Description("Slug único (lowercase, a-z 0-9 -).")] string slug,
+        [Description("Nombre display human-readable.")] string name,
+        [Description("URL a chequear (ej. 'https://app.example.com/health').")] string url,
+        [Description("Método HTTP: GET | HEAD | POST. Vacío/null = GET.")] string? httpMethod,
+        [Description("Códigos HTTP que cuentan como 'up' (ej. [200, 204]). Null = [200].")] int[]? expectedStatusCodes,
+        [Description("Intervalo entre chequeos en segundos. Null = default del sistema.")] int? intervalSec,
+        [Description("Timeout por request en milisegundos. Null = default del sistema.")] int? timeoutMs,
+        [Description("Body a enviar (sólo para POST). Opcional.")] string? bodyTemplate,
+        [Description("Instance asociada (opcional, 'ins_...').")] string? instanceId,
+        [Description("Project asociado (opcional, 'prj_...').")] string? projectId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.MonitoringWrite))
         {
-            id = m.Id,
-            slug = m.Slug,
-            name = m.Name,
-            url = m.Url,
-            http_method = m.HttpMethod,
-            expected_status_codes = m.ExpectedStatusCodes,
-            interval_sec = m.IntervalSec,
-            timeout_ms = m.TimeoutMs,
-            instance_id = m.InstanceId,
-            project_id = m.ProjectId,
-            is_enabled = m.IsEnabled,
-            status = m.Status,
-            last_checked_at = m.LastCheckedAt,
-            consecutive_failures = m.ConsecutiveFailures,
-            created_at = m.CreatedAt,
-            updated_at = m.UpdatedAt,
-            has_custom_headers = m.Headers is { Count: > 0 },
-            has_body_template = !string.IsNullOrEmpty(m.BodyTemplate),
-        });
+            return McpResponses.InsufficientScope(McpScopes.MonitoringWrite);
+        }
+        var cmd = new CreateMonitorCommand(
+            Slug: slug,
+            Name: name,
+            Url: url,
+            HttpMethod: string.IsNullOrWhiteSpace(httpMethod) ? "GET" : httpMethod,
+            ExpectedStatusCodes: expectedStatusCodes,
+            IntervalSec: intervalSec,
+            TimeoutMs: timeoutMs,
+            Headers: null,
+            BodyTemplate: bodyTemplate,
+            InstanceId: instanceId,
+            ProjectId: projectId);
+        var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(RedactedMonitor(result.Value)) : McpResponses.FromError(result.Error);
     }
 
     [McpServerTool(Name = "aethra_enable_monitor", Destructive = false, Idempotent = true, OpenWorld = false)]
@@ -156,4 +172,29 @@ public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller
             is_enabled = m.IsEnabled,
             status = m.Status,
         });
+
+    // Detalle del monitor SIN los campos sensibles del request (Headers/BodyTemplate pueden traer tokens):
+    // sólo se exponen flags has_custom_headers / has_body_template.
+    private static object RedactedMonitor(Aethra.Modules.Monitoring.UseCases.Dtos.MonitorDetailDto m)
+        => new
+        {
+            id = m.Id,
+            slug = m.Slug,
+            name = m.Name,
+            url = m.Url,
+            http_method = m.HttpMethod,
+            expected_status_codes = m.ExpectedStatusCodes,
+            interval_sec = m.IntervalSec,
+            timeout_ms = m.TimeoutMs,
+            instance_id = m.InstanceId,
+            project_id = m.ProjectId,
+            is_enabled = m.IsEnabled,
+            status = m.Status,
+            last_checked_at = m.LastCheckedAt,
+            consecutive_failures = m.ConsecutiveFailures,
+            created_at = m.CreatedAt,
+            updated_at = m.UpdatedAt,
+            has_custom_headers = m.Headers is { Count: > 0 },
+            has_body_template = !string.IsNullOrEmpty(m.BodyTemplate),
+        };
 }
