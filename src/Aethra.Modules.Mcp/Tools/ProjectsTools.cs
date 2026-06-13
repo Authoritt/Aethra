@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Aethra.Modules.Mcp.Security;
+using Aethra.Modules.Projects.UseCases.Projects.Commands;
 using Aethra.Modules.Projects.UseCases.Projects.Queries;
 using MediatR;
 using ModelContextProtocol.Server;
@@ -38,6 +39,27 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
             return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
         }
         var result = await mediator.Send(new GetProjectByIdQuery(projectId), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_create_project", Destructive = false, Idempotent = false, OpenWorld = false)]
+    [Description("Crea un proyecto: el contenedor de nivel superior que agrupa templates, clients e instances. "
+        + "Devuelve el detalle del proyecto creado.")]
+    public async Task<object> CreateAsync(
+        [Description("Slug único (lowercase, a-z 0-9 -).")] string slug,
+        [Description("Nombre display human-readable.")] string name,
+        [Description("Descripción opcional.")] string? description,
+        [Description("Color hex opcional para la UI (ej. '#22c55e').")] string? color,
+        [Description("Icon opcional (nombre/emoji para la UI).")] string? icon,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
+        }
+        var result = await mediator
+            .Send(new CreateProjectCommand(slug, name, description, color, icon), ct)
+            .ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
