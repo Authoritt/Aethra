@@ -63,6 +63,38 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_delete_project", Destructive = true, Idempotent = false, OpenWorld = false)]
+    [Description("CRITICAL: borra un proyecto y TODO su árbol en CASCADA (instancias desplegadas, templates, clients "
+        + "y sus env vars/secrets) — hard delete, no recuperable. Si el proyecto tiene instancias desplegadas, FALLA "
+        + "salvo que pases force=true para confirmar la cascada. Usá dry_run=true primero para ver el plan.")]
+    public async Task<object> DeleteAsync(
+        [Description("ID del proyecto (formato 'prj_...').")] string projectId,
+        [Description("Si true, confirma el borrado en CASCADA aunque haya instancias desplegadas.")] bool force,
+        [Description("Si true, NO borra — devuelve el plan.")] bool dryRun,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
+        }
+        if (dryRun)
+        {
+            return McpResponses.DryRun(
+                wouldCall: $"DELETE /api/projects/{projectId}{(force ? "?force=true" : string.Empty)}",
+                plan: new
+                {
+                    projectId,
+                    force,
+                    action = "CASCADE hard-delete: project + templates + clients + instances + their env vars/secrets",
+                    note = "Sin force=true, falla si el proyecto tiene instancias desplegadas.",
+                });
+        }
+        var result = await mediator.Send(new DeleteProjectCommand(projectId, force), ct).ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new { project_id = projectId, deleted = true, cascade = force })
+            : McpResponses.FromError(result.Error);
+    }
+
     [McpServerTool(Name = "aethra_discover_repo", ReadOnly = true, OpenWorld = true)]
     [Description("(F9 stub) Analiza un repo Git para proponer Templates en F9.5.")]
     public object DiscoverRepo(
