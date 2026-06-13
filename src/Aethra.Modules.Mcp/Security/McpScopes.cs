@@ -26,6 +26,7 @@ internal static class McpScopes
 
     public const string MetricsRead = "metrics:read";
 
+    public const string CloudflareRead = "cloudflare:read";
     public const string CloudflareWrite = "cloudflare:write";
 
     public const string VmsRead = "vms:read";

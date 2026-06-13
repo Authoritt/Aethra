@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
+using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Queries;
 using Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands;
 using Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries;
 using Aethra.Modules.Mcp.Security;
@@ -78,6 +79,22 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
         var result = await mediator
             .Send(new UpdateDnsRecordCommand(recordId, content, ttl, proxied, comment), ct)
             .ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_list_dns_records", ReadOnly = true, OpenWorld = false)]
+    [Description("Lista los DNS records que Aethra gestiona en una zona Cloudflare: id, tipo, nombre, contenido, "
+        + "ttl, proxied, comentario y estado de sync. Read-only. Útil para descubrir el id antes de "
+        + "aethra_update_dns_record / aethra_delete_dns_record.")]
+    public async Task<object> ListDnsRecordsAsync(
+        [Description("ID de la zona Cloudflare gestionada en Aethra.")] string zoneId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.CloudflareRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.CloudflareRead);
+        }
+        var result = await mediator.Send(new ListDnsRecordsQuery(zoneId), ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
