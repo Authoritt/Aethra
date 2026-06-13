@@ -113,4 +113,28 @@ public sealed class ScheduledJobsTools(IMediator mediator, IMcpCallerContext cal
         var result = await mediator.Send(new ListScheduledJobRunsQuery(jobId, effective), ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
+
+    [McpServerTool(Name = "aethra_delete_scheduled_job", Destructive = true, Idempotent = true, OpenWorld = false)]
+    [Description("Elimina un scheduled job: deja de ejecutarse en su cron. El historial de runs ya registrado "
+        + "(consultable con aethra_list_scheduled_job_runs) no se altera. Usá dry_run=true primero para confirmar.")]
+    public async Task<object> DeleteJobAsync(
+        [Description("ID del scheduled job (formato 'sch_...').")] string jobId,
+        [Description("Si true, NO borra — devuelve el plan.")] bool dryRun,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ServicesWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ServicesWrite);
+        }
+        if (dryRun)
+        {
+            return McpResponses.DryRun(
+                wouldCall: $"delete scheduled job {jobId}",
+                plan: new { jobId, action = "delete scheduled job (stops future cron runs; keeps run history)" });
+        }
+        var result = await mediator.Send(new DeleteScheduledJobCommand(jobId), ct).ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new { job_id = jobId, deleted = true })
+            : McpResponses.FromError(result.Error);
+    }
 }
