@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <Description>Unit tests del dominio del módulo Monitoring (Monitor + MonitorCheck):
+clamping de intervalo/timeout, normalización de status codes, transiciones de estado /
+ConsecutiveFailures, IsDueAt y la validación/truncado de MonitorCheck.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Aethra.Modules.Monitoring\Aethra.Modules.Monitoring.csproj" />
+  </ItemGroup>
+
+</Project>
