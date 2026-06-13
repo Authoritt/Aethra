@@ -194,4 +194,35 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
             ? McpResponses.Ok(new { binding_id = bindingId, rotated = true })
             : McpResponses.FromError(result.Error);
     }
+
+    [McpServerTool(Name = "aethra_delete_service", Destructive = true, Idempotent = true, OpenWorld = false)]
+    [Description("Da de baja un Managed Service: lo marca como Stopped y lo deregistra de Aethra. "
+        + "IMPORTANTE: NO toca el contenedor ni los datos reales (no borra el container, volumen ni la BD) y NO hace "
+        + "hard-delete del registro — sólo lo saca de la gestión activa. Bloquea si el servicio tiene bindings "
+        + "activos (revocalos antes con aethra_unbind_service). Usá dry_run=true primero para confirmar.")]
+    public async Task<object> DeleteServiceAsync(
+        [Description("ID del Managed Service (formato 'svc_...').")] string serviceId,
+        [Description("Si true, NO ejecuta — devuelve el plan.")] bool dryRun,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ServicesWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ServicesWrite);
+        }
+        if (dryRun)
+        {
+            return McpResponses.DryRun(
+                wouldCall: $"DELETE /api/services/{serviceId}",
+                plan: new
+                {
+                    serviceId,
+                    action = "mark service Stopped + deregister (does NOT touch container/volume/DB)",
+                    note = "Fails if there are active bindings; revoke them first.",
+                });
+        }
+        var result = await mediator.Send(new DeleteServiceCommand(serviceId), ct).ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new { service_id = serviceId, status = "Stopped", deregistered = true })
+            : McpResponses.FromError(result.Error);
+    }
 }
