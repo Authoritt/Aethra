@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Aethra.Modules.Mcp.Security;
+using Aethra.Modules.Projects.UseCases.Clients.Commands;
 using Aethra.Modules.Projects.UseCases.Projects.Commands;
 using Aethra.Modules.Projects.UseCases.Projects.Queries;
 using MediatR;
@@ -93,6 +94,28 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
         return result.IsSuccess
             ? McpResponses.Ok(new { project_id = projectId, deleted = true, cascade = force })
             : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_create_client", Destructive = false, Idempotent = false, OpenWorld = false)]
+    [Description("Crea un client (tenant) dentro de un proyecto. El slug es único por proyecto. "
+        + "Devuelve el detalle del client.")]
+    public async Task<object> CreateClientAsync(
+        [Description("ID del proyecto contenedor (formato 'prj_...').")] string projectId,
+        [Description("Slug único dentro del proyecto (lowercase, a-z 0-9 -).")] string slug,
+        [Description("Nombre display del client/tenant.")] string displayName,
+        [Description("Descripción opcional.")] string? description,
+        [Description("Email de contacto opcional.")] string? contactEmail,
+        [Description("Tag de facturación opcional.")] string? billingTag,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
+        }
+        var result = await mediator
+            .Send(new CreateClientCommand(projectId, slug, displayName, description, contactEmail, billingTag), ct)
+            .ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
     [McpServerTool(Name = "aethra_discover_repo", ReadOnly = true, OpenWorld = true)]
