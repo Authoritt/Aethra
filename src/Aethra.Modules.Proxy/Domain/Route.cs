@@ -79,7 +79,10 @@ public sealed class Route : AggregateRoot<RouteId>
         {
             p = "/" + p;
         }
-        return p.Length > 1 ? p.TrimEnd('/') : p;
+        // Quita la barra final, pero un prefijo de puras barras ("//", "///") colapsa a "/"
+        // (catch-all), nunca a cadena vacía — que rompería el match de path en YARP.
+        var trimmed = p.TrimEnd('/');
+        return trimmed.Length == 0 ? "/" : trimmed;
     }
 
     public void UpdateBackend(string backendUrl, DateTimeOffset now)
