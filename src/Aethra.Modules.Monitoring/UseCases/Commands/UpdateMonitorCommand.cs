@@ -2,6 +2,7 @@ using Aethra.Modules.Monitoring.Domain;
 using Aethra.Modules.Monitoring.Infrastructure;
 using Aethra.Modules.Monitoring.UseCases.Dtos;
 using Aethra.Shared.Infrastructure.Cqrs;
+using FluentValidation;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Ids;
 using Aethra.Shared.Kernel.Results;
@@ -31,6 +32,25 @@ public sealed record UpdateMonitorCommand(
     bool ClearInstanceId,
     string? ProjectId,
     bool ClearProjectId) : ICommand<MonitorDetailDto>;
+
+/// <summary>
+/// Validación de patch: corre en el ValidationBehavior antes del handler. Semántica PATCH — sólo
+/// valida los campos PROVISTOS (no-null), espejando las reglas de <c>CreateMonitorValidator</c>
+/// (Name/Url/HttpMethod) para que un update no pueda dejar un monitor en un estado que create rechazaría.
+/// </summary>
+public sealed class UpdateMonitorValidator : AbstractValidator<UpdateMonitorCommand>
+{
+    public UpdateMonitorValidator()
+    {
+        RuleFor(c => c.MonitorId).NotEmpty();
+        When(c => c.Name is not null, () =>
+            RuleFor(c => c.Name).NotEmpty().MaximumLength(255));
+        When(c => c.Url is not null, () =>
+            RuleFor(c => c.Url).NotEmpty().MaximumLength(2048));
+        When(c => c.HttpMethod is not null, () =>
+            RuleFor(c => c.HttpMethod).NotEmpty());
+    }
+}
 
 internal sealed class UpdateMonitorHandler(MonitoringDbContext db, IClock clock)
     : ICommandHandler<UpdateMonitorCommand, MonitorDetailDto>
