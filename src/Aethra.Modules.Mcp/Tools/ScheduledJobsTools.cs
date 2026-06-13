@@ -114,6 +114,32 @@ public sealed class ScheduledJobsTools(IMediator mediator, IMcpCallerContext cal
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_update_scheduled_job", Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Actualiza (patch) un scheduled job: sólo cambia los campos provistos; los omitidos quedan igual. "
+        + "Permite pausar/reanudar (enabled), cambiar el cron, el comando, timezone, concurrencia y timeout. "
+        + "Devuelve el job actualizado.")]
+    public async Task<object> UpdateJobAsync(
+        [Description("ID del scheduled job (formato 'sch_...').")] string jobId,
+        [Description("Nuevo nombre display. Omitir/null = no cambiar.")] string? name,
+        [Description("Nueva descripción. Omitir/null = no cambiar.")] string? description,
+        [Description("Nuevo comando shell a ejecutar dentro del contenedor. Omitir/null = no cambiar.")] string? command,
+        [Description("Nuevo cron (ej. '0 2 * * *'). Omitir/null = no cambiar.")] string? cronExpression,
+        [Description("Nueva timezone IANA (ej. 'America/Bogota'). Omitir/null = no cambiar.")] string? timeZone,
+        [Description("Máx. ejecuciones concurrentes. Omitir/null = no cambiar.")] int? maxConcurrent,
+        [Description("Timeout por ejecución en segundos. Omitir/null = no cambiar.")] int? timeoutSeconds,
+        [Description("true = habilita el job, false = lo pausa. Omitir/null = no cambiar.")] bool? enabled,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ServicesWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ServicesWrite);
+        }
+        var cmd = new UpdateScheduledJobCommand(
+            jobId, name, description, command, cronExpression, timeZone, maxConcurrent, timeoutSeconds, enabled);
+        var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
     [McpServerTool(Name = "aethra_delete_scheduled_job", Destructive = true, Idempotent = true, OpenWorld = false)]
     [Description("Elimina un scheduled job: deja de ejecutarse en su cron. El historial de runs ya registrado "
         + "(consultable con aethra_list_scheduled_job_runs) no se altera. Usá dry_run=true primero para confirmar.")]
