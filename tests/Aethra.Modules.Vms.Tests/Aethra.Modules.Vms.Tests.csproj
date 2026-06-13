@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <Description>Unit tests del dominio del módulo Vms (agregado Vm):
+ciclo de vida (Register/Connected/Disconnected), promoción de InstallStatus, el rolling buffer
+de InstallLog y la idempotencia de SetAcceptsPreviews.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Aethra.Modules.Vms\Aethra.Modules.Vms.csproj" />
+  </ItemGroup>
+
+</Project>
