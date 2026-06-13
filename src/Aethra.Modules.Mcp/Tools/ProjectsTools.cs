@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Aethra.Modules.Mcp.Security;
 using Aethra.Modules.Projects.UseCases.Clients.Commands;
 using Aethra.Modules.Projects.UseCases.Instances.Commands;
+using Aethra.Modules.Projects.UseCases.Instances.Queries;
 using Aethra.Modules.Projects.UseCases.Projects.Commands;
 using Aethra.Modules.Projects.UseCases.Templates.Commands;
 using Aethra.Modules.Projects.UseCases.Projects.Queries;
@@ -207,6 +208,46 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
             webhook_secret_set = !string.IsNullOrEmpty(t.webhookSecret),
             note = "El webhook secret no se devuelve por MCP. Obtenelo en la UI o rotalo con aethra_rotate_webhook_secret.",
         });
+    }
+
+    [McpServerTool(Name = "aethra_list_instances", ReadOnly = true, OpenWorld = false)]
+    [Description("Lista instances (Template × Client × Environment) con filtros opcionales. Read-only; "
+        + "devuelve resúmenes sin env vars/secretos.")]
+    public async Task<object> ListInstancesAsync(
+        [Description("Filtrar por project_id (formato 'prj_...'). Omitir = todos.")] string? projectId,
+        [Description("Filtrar por template_id (formato 'tpl_...'). Omitir = todos.")] string? templateId,
+        [Description("Filtrar por client_id (formato 'cli_...'). Omitir = todos.")] string? clientId,
+        [Description("Filtrar por efímeras/preview (true) o permanentes (false). Omitir = todas.")] bool? isEphemeral,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
+        }
+        var query = new ListInstancesQuery(
+            TemplateId: templateId,
+            ProjectId: projectId,
+            OwnerUserId: null,
+            IsEphemeral: isEphemeral,
+            ClientId: clientId);
+        var result = await mediator.Send(query, ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_get_instance", ReadOnly = true, OpenWorld = false)]
+    [Description("Detalle de una instance: template/client/environment, slug, target VM, container, ports, volumes, "
+        + "healthcheck, autodeploy y timestamps. Read-only; NO incluye env vars ni secretos (esos van por "
+        + "aethra_list_env_vars / aethra_list_secrets).")]
+    public async Task<object> GetInstanceAsync(
+        [Description("ID de la instance (formato 'ins_...').")] string instanceId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
+        }
+        var result = await mediator.Send(new GetInstanceByIdQuery(instanceId), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
     [McpServerTool(Name = "aethra_discover_repo", ReadOnly = true, OpenWorld = true)]
