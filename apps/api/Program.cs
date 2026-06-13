@@ -199,6 +199,11 @@ builder.Services.AddAuthorization(opts =>
 builder.Services.AddSignalR(o =>
 {
     o.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    // El satélite responde BuildImage con BuildResult.LogLines = el log de build COMPLETO. Para
+    // builds reales (imágenes .NET/Next) eso supera de lejos el default de 32KB; SignalR descartaba
+    // el mensaje en el central → el ack del build nunca llegaba y deploy-native moría por timeout
+    // (900s). Subimos el límite de recepción para que las respuestas de build grandes lleguen.
+    o.MaximumReceiveMessageSize = 64 * 1024 * 1024; // 64 MiB
 });
 
 // DashboardForwarder vive en apps/api (no en un módulo). Lo registramos escaneando
