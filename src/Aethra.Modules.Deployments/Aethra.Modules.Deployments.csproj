@@ -25,4 +25,10 @@ NO referencia otros Modules.* — cross-module via Shared.Contracts (eventos + r
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <!-- Expone helpers internos (p.ej. BuildContextBuilder.ApplyAccessToken/Redact, seguridad
+       de tokens) al proyecto de tests sin hacerlos parte de la API pública del módulo. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Aethra.Modules.Deployments.Tests" />
+  </ItemGroup>
+
 </Project>

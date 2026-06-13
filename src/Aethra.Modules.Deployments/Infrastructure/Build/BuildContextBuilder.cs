@@ -223,7 +223,7 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
     /// No toca URLs SSH ni URLs que ya traen credenciales (<c>user@host</c>). El token NUNCA se
     /// loguea: solo viaja en los args de <c>git</c> y en <c>.git/config</c> del workDir temporal.
     /// </summary>
-    private static string ApplyAccessToken(string repoUrl, string? accessToken)
+    internal static string ApplyAccessToken(string repoUrl, string? accessToken)
     {
         if (string.IsNullOrWhiteSpace(accessToken)
             || !repoUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
@@ -244,7 +244,7 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
     /// Defensa en profundidad: elimina el token (crudo y url-encoded) de un texto antes de
     /// loguearlo o propagarlo en una excepción, por si <c>git</c> lo eco en stderr.
     /// </summary>
-    private static string Redact(string text, string? accessToken)
+    internal static string Redact(string text, string? accessToken)
     {
         if (string.IsNullOrEmpty(accessToken))
         {
