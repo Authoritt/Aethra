@@ -110,25 +110,6 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
-    [McpServerTool(Name = "aethra_update_service", Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Actualiza los metadatos editables de un Managed Service: nombre display y si está expuesto "
-        + "externamente. Devuelve el detalle actualizado. No recrea ni reinicia el contenedor; NO toca credenciales.")]
-    public async Task<object> UpdateServiceAsync(
-        [Description("ID del Managed Service (formato 'svc_...').")] string serviceId,
-        [Description("Nuevo nombre display human-readable.")] string name,
-        [Description("Si true, marca el servicio como expuesto externamente; false lo marca como interno.")] bool exposedExternally,
-        CancellationToken ct)
-    {
-        if (!caller.HasScope(McpScopes.ServicesWrite))
-        {
-            return McpResponses.InsufficientScope(McpScopes.ServicesWrite);
-        }
-        var result = await mediator
-            .Send(new UpdateServiceCommand(serviceId, name, exposedExternally), ct)
-            .ConfigureAwait(false);
-        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
-    }
-
     [McpServerTool(Name = "aethra_bind_service", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Crea un binding (Instance ↔ ManagedService): provisiona credenciales y las inyecta como env vars (DATABASE_URL, etc).")]
     public async Task<object> BindServiceAsync(
