@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <Description>Unit tests del dominio del módulo Proxy (agregado Certificate):
+ciclo de vida ACME (Request/Issued/Renewing/Failed), cálculo de RenewAfter y el branching
+del evento emitido (issued vs renewed).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Aethra.Modules.Proxy\Aethra.Modules.Proxy.csproj" />
+  </ItemGroup>
+
+</Project>
