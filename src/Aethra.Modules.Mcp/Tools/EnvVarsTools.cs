@@ -1,12 +1,14 @@
 using System.ComponentModel;
 using Aethra.Modules.Mcp.Security;
+using Aethra.Modules.Projects.UseCases.EnvVars.Queries;
 using Aethra.Shared.Contracts.Projects;
+using MediatR;
 using ModelContextProtocol.Server;
 
 namespace Aethra.Modules.Mcp.Tools;
 
 [McpServerToolType]
-public sealed class EnvVarsTools(IEnvVarWriter envVarWriter, IMcpCallerContext caller)
+public sealed class EnvVarsTools(IEnvVarWriter envVarWriter, IMediator mediator, IMcpCallerContext caller)
 {
     public sealed record EnvVarInput(
         string Key,
@@ -54,5 +56,22 @@ public sealed class EnvVarsTools(IEnvVarWriter envVarWriter, IMcpCallerContext c
             count = upserts.Count,
             source = caller.AuditSource,
         });
+    }
+
+    [McpServerTool(Name = "aethra_list_env_vars", ReadOnly = true, OpenWorld = false)]
+    [Description("Lista las env vars NO secretas de un scope (project|template|client|instance) con sus valores en "
+        + "claro — las env vars planas no son secretas por diseño; los secretos viven aparte y NO se exponen por MCP. "
+        + "Devuelve key, value, flags build_time/runtime/literal/multiline, source y timestamps.")]
+    public async Task<object> ListEnvVarsAsync(
+        [Description("Tipo de scope: 'project', 'template', 'client' o 'instance'.")] string scopeType,
+        [Description("ID del scope (prj_*, tpl_*, cli_*, ins_*).")] string scopeId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
+        }
+        var result = await mediator.Send(new ListEnvVarsQuery(scopeType, scopeId), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 }
