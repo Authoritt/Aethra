@@ -49,6 +49,9 @@ public sealed class UpdateMonitorValidator : AbstractValidator<UpdateMonitorComm
             RuleFor(c => c.Url).NotEmpty().MaximumLength(2048));
         When(c => c.HttpMethod is not null, () =>
             RuleFor(c => c.HttpMethod).NotEmpty());
+        // Mismo criterio que CreateMonitor: rechazar códigos fuera de 100–599 (si se proveen) en vez
+        // de dejar que Monitor.NormalizeExpected los descarte en silencio.
+        RuleForEach(c => c.ExpectedStatusCodes).InclusiveBetween(100, 599);
     }
 }
 

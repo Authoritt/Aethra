@@ -32,6 +32,9 @@ public sealed class CreateMonitorValidator : AbstractValidator<CreateMonitorComm
         RuleFor(c => c.Name).NotEmpty().MaximumLength(255);
         RuleFor(c => c.Url).NotEmpty().MaximumLength(2048);
         RuleFor(c => c.HttpMethod).NotEmpty();
+        // Códigos fuera de 100–599 hoy se descartan en silencio (Monitor.NormalizeExpected); rechazarlos
+        // explícitamente evita que un typo (ej. 2000) cambie el comportamiento del monitor sin aviso.
+        RuleForEach(c => c.ExpectedStatusCodes).InclusiveBetween(100, 599);
     }
 }
 
