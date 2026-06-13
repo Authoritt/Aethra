@@ -55,6 +55,31 @@ public static class ServicesEndpoints
         .RequireAuthorization(ScopeWrite)
         .WithName("CreateServiceFromTemplate");
 
+        // Adopta un servicio que YA existe como contenedor (creado fuera de Aethra) para darle
+        // visibilidad en /services + /data-services SIN provisionarlo ni recrearlo.
+        services.MapPost("/adopt", async ([FromBody] AdoptServiceRequest body, IMediator m, CancellationToken ct) =>
+        {
+            var cmd = new AdoptServiceCommand(
+                Slug: body.Slug,
+                Name: body.Name,
+                Type: body.Type,
+                Version: body.Version ?? string.Empty,
+                TargetVmId: body.TargetVmId,
+                ContainerName: body.ContainerName,
+                Image: body.Image ?? string.Empty,
+                InternalPort: body.InternalPort ?? 0,
+                NetworkName: body.NetworkName ?? "aethra-net",
+                AdminUser: body.AdminUser ?? string.Empty,
+                AdminPassword: body.AdminPassword ?? string.Empty,
+                ExposedExternally: body.ExposedExternally ?? false);
+            var r = await m.Send(cmd, ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/services/{r.Value.Id}", r.Value)
+                : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("AdoptService");
+
         services.MapPatch("/{serviceId}", async (string serviceId, [FromBody] UpdateServiceRequest body,
             IMediator m, CancellationToken ct) =>
         {
@@ -256,6 +281,19 @@ public static class ServicesEndpoints
     public sealed record SetBackupPolicyRequest(string? CronExpression, int? RetentionCount, string? Destination);
 
     public sealed record CreateServiceRequest(string TemplateId, string Slug, string Name, string TargetVmId, bool? ExposedExternally);
+    public sealed record AdoptServiceRequest(
+        string Slug,
+        string Name,
+        string Type,
+        string? Version,
+        string TargetVmId,
+        string ContainerName,
+        string? Image,
+        int? InternalPort,
+        string? NetworkName,
+        string? AdminUser,
+        string? AdminPassword,
+        bool? ExposedExternally);
     public sealed record UpdateServiceRequest(string Name, bool ExposedExternally);
     public sealed record CreateBindingRequest(
         string InstanceId,

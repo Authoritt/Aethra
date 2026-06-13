@@ -81,6 +81,44 @@ public sealed class ManagedService : AggregateRoot<ManagedServiceId>
         return svc;
     }
 
+    /// <summary>
+    /// Registra ("adopta") un servicio que YA existe como contenedor (creado fuera de Aethra) sin
+    /// provisionarlo: arranca en <see cref="ManagedServiceStatus.Ready"/> con el ContainerName real
+    /// y NO emite <c>ManagedServiceCreatedEvent</c> (no dispara al provisioner ni recrea nada).
+    /// Da visibilidad en /services + /data-services a Postgres/Redis existentes sin tocar sus datos.
+    /// </summary>
+    public static ManagedService Adopt(string slug, string name, ServiceType type, string version,
+        string targetVmId, string containerName, string image, int internalPort, string networkName,
+        byte[] adminCredentialsCipher, DateTimeOffset now, bool exposedExternally = false)
+    {
+        if (string.IsNullOrWhiteSpace(slug))
+        {
+            throw new ArgumentException("Slug requerido.", nameof(slug));
+        }
+        if (string.IsNullOrWhiteSpace(targetVmId))
+        {
+            throw new ArgumentException("TargetVmId requerido.", nameof(targetVmId));
+        }
+        if (string.IsNullOrWhiteSpace(containerName))
+        {
+            throw new ArgumentException("ContainerName requerido.", nameof(containerName));
+        }
+        if (adminCredentialsCipher is null || adminCredentialsCipher.Length == 0)
+        {
+            throw new ArgumentException("AdminCredentials cifradas requeridas.", nameof(adminCredentialsCipher));
+        }
+
+        var svc = new ManagedService(ManagedServiceId.New(), slug.Trim().ToLowerInvariant(), name.Trim(),
+            type, version.Trim(), targetVmId, containerName.Trim().ToLowerInvariant(),
+            string.IsNullOrWhiteSpace(image) ? "(external)" : image.Trim(),
+            internalPort, string.IsNullOrWhiteSpace(networkName) ? "aethra-net" : networkName.Trim(),
+            adminCredentialsCipher, exposedExternally, now);
+        // El contenedor ya existe y corre: queda Ready, sin evento de provisioning.
+        svc.Status = ManagedServiceStatus.Ready;
+        svc.ProvisionedAt = now;
+        return svc;
+    }
+
     public void MarkProvisioned(DateTimeOffset now)
     {
         if (Status is ManagedServiceStatus.Ready) { return; }
