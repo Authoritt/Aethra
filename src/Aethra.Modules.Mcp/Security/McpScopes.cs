@@ -22,6 +22,7 @@ internal static class McpScopes
     public const string ServicesWrite = "services:write";
 
     public const string MonitoringRead = "monitoring:read";
+    public const string MonitoringWrite = "monitoring:write";
 
     public const string MetricsRead = "metrics:read";
 
