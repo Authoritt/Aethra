@@ -54,6 +54,46 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_adopt_service", Destructive = false, Idempotent = false, OpenWorld = false)]
+    [Description("Registra ('adopta') un contenedor que YA existe (creado fuera de Aethra) como ManagedService, "
+        + "para que aparezca en /services y /data-services SIN provisionarlo ni recrearlo. Ideal para Postgres/"
+        + "Redis levantados a mano. No toca el contenedor: solo guarda metadata + credenciales admin cifradas.")]
+    public async Task<object> AdoptServiceAsync(
+        [Description("Slug único del servicio (ej. 'aethra-postgres', 'relaycore-redis').")] string slug,
+        [Description("Nombre display human-readable.")] string name,
+        [Description("Tipo: Postgres | Redis | RabbitMQ | MySQL | MongoDB | MariaDB | ClickHouse.")] string type,
+        [Description("ID de la VM donde corre el contenedor existente.")] string targetVmId,
+        [Description("Nombre real del contenedor Docker ya existente (ej. 'aethra-postgres').")] string containerName,
+        [Description("Versión (ej. '16', '7'). Vacío = 'external'.")] string? version,
+        [Description("Imagen del contenedor (ej. 'postgres:16-alpine'). Vacío = '(external)'.")] string? image,
+        [Description("Puerto interno (Postgres 5432, Redis 6379...). 0 = default del tipo.")] int internalPort,
+        [Description("Red Docker. Vacío = 'aethra-net'.")] string? networkName,
+        [Description("Usuario admin del servicio existente. Vacío = 'admin'.")] string? adminUser,
+        [Description("Password admin (para Redis sin auth, dejar vacío).")] string? adminPassword,
+        [Description("Si true, marca el servicio como expuesto externamente.")] bool exposedExternally,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ServicesWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ServicesWrite);
+        }
+        var cmd = new AdoptServiceCommand(
+            Slug: slug,
+            Name: name,
+            Type: type,
+            Version: version ?? string.Empty,
+            TargetVmId: targetVmId,
+            ContainerName: containerName,
+            Image: image ?? string.Empty,
+            InternalPort: internalPort,
+            NetworkName: networkName ?? "aethra-net",
+            AdminUser: adminUser ?? string.Empty,
+            AdminPassword: adminPassword ?? string.Empty,
+            ExposedExternally: exposedExternally);
+        var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
     [McpServerTool(Name = "aethra_bind_service", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Crea un binding (Instance ↔ ManagedService): provisiona credenciales y las inyecta como env vars (DATABASE_URL, etc).")]
     public async Task<object> BindServiceAsync(
