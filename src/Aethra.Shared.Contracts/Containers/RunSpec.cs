@@ -27,7 +27,13 @@ public sealed record RunSpec(
 /// <param name="ContainerPort">Puerto interno expuesto por el contenedor.</param>
 /// <param name="HostPort">Puerto del host. Si es null, el runtime asigna uno ephemeral.</param>
 /// <param name="Protocol">Protocolo: <c>tcp</c> o <c>udp</c> (minúsculas).</param>
-public sealed record PortBinding(int ContainerPort, int? HostPort, string Protocol);
+/// <param name="HostIp">
+/// Interfaz del host a la que se ata el puerto. Si es null, el runtime usa <c>127.0.0.1</c>
+/// (loopback) — los contenedores nativos se alcanzan por DNS de Docker dentro de la red del
+/// proxy, así que el puerto en el host es solo para health-check/diagnóstico y NO debe quedar
+/// público. Para exponer públicamente (p. ej. un ingress SMTP) pasar <c>"0.0.0.0"</c> explícito.
+/// </param>
+public sealed record PortBinding(int ContainerPort, int? HostPort, string Protocol, string? HostIp = null);
 
 /// <summary>Mapeo de un volumen o path del host hacia el contenedor.</summary>
 /// <param name="NameOrHostPath">Nombre del named volume o ruta absoluta del host (bind mount).</param>

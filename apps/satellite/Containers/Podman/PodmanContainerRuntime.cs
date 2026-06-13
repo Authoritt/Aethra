@@ -295,9 +295,15 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
             foreach (var p in spec.Ports)
             {
                 args.Add("-p");
+                // HostIp por defecto = 127.0.0.1 (loopback): los contenedores nativos se alcanzan por
+                // DNS interno vía el proxy; el puerto en el host es solo health-check/diagnóstico y no
+                // debe quedar público. Para exponer público pasar HostIp="0.0.0.0". El doble ":" deja
+                // que el runtime asigne un puerto ephemeral en esa interfaz.
+                var ip = string.IsNullOrWhiteSpace(p.HostIp) ? "127.0.0.1" : p.HostIp;
+                var proto = p.Protocol.ToLowerInvariant();
                 args.Add(p.HostPort is int hp
-                    ? string.Create(CultureInfo.InvariantCulture, $"{hp}:{p.ContainerPort}/{p.Protocol.ToLowerInvariant()}")
-                    : string.Create(CultureInfo.InvariantCulture, $"{p.ContainerPort}/{p.Protocol.ToLowerInvariant()}"));
+                    ? string.Create(CultureInfo.InvariantCulture, $"{ip}:{hp}:{p.ContainerPort}/{proto}")
+                    : string.Create(CultureInfo.InvariantCulture, $"{ip}::{p.ContainerPort}/{proto}"));
             }
 
             foreach (var v in spec.Volumes)

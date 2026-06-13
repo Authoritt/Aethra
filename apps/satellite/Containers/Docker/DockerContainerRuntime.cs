@@ -330,6 +330,9 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
 
             // Mapeo de puertos: ExposedPorts declara el puerto del contenedor; HostConfig.PortBindings
             // ata cada uno al host. Si HostPort es null, lo dejamos vacío y Docker asigna ephemeral.
+            // HostIP por defecto = 127.0.0.1 (loopback): el proxy alcanza los contenedores por DNS de
+            // Docker en la red interna, así que el puerto en el host es solo para health-check/diagnóstico
+            // y NO debe quedar público (0.0.0.0). Para exponer público pasar HostIp="0.0.0.0" explícito.
             var exposedPorts = new Dictionary<string, EmptyStruct>(StringComparer.Ordinal);
             var portBindings = new Dictionary<string, IList<global::Docker.DotNet.Models.PortBinding>>(StringComparer.Ordinal);
             foreach (var p in spec.Ports)
@@ -338,7 +341,11 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
                 exposedPorts[key] = default;
                 portBindings[key] = new List<global::Docker.DotNet.Models.PortBinding>
                 {
-                    new() { HostPort = p.HostPort?.ToString(CultureInfo.InvariantCulture) ?? string.Empty },
+                    new()
+                    {
+                        HostIP = string.IsNullOrWhiteSpace(p.HostIp) ? "127.0.0.1" : p.HostIp,
+                        HostPort = p.HostPort?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+                    },
                 };
             }
 
