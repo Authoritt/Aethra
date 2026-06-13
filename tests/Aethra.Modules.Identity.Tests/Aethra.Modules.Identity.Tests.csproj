@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <Description>Unit tests del dominio del módulo Identity. RecoveryCodes: generación, formato,
+serialización y — crítico para seguridad — el bitmask de uso one-shot de los códigos de recuperación 2FA.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Aethra.Modules.Identity\Aethra.Modules.Identity.csproj" />
+  </ItemGroup>
+
+</Project>
