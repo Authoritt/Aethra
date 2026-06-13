@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Aethra.Modules.Mcp.Security;
 using Aethra.Modules.Projects.UseCases.Clients.Commands;
+using Aethra.Modules.Projects.UseCases.Clients.Queries;
 using Aethra.Modules.Projects.UseCases.Instances.Commands;
 using Aethra.Modules.Projects.UseCases.Instances.Queries;
 using Aethra.Modules.Projects.UseCases.Projects.Commands;
@@ -118,6 +119,36 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
         var result = await mediator
             .Send(new CreateClientCommand(projectId, slug, displayName, description, contactEmail, billingTag), ct)
             .ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_list_clients", ReadOnly = true, OpenWorld = false)]
+    [Description("Lista los clients (tenants) de un proyecto: slug, nombre, email de contacto, billing tag, "
+        + "conteos y timestamps. Read-only.")]
+    public async Task<object> ListClientsAsync(
+        [Description("ID del proyecto (formato 'prj_...').")] string projectId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
+        }
+        var result = await mediator.Send(new ListClientsQuery(projectId), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_get_client", ReadOnly = true, OpenWorld = false)]
+    [Description("Detalle de un client (tenant): slug, nombre, descripción, email de contacto, billing tag y "
+        + "timestamps. Read-only.")]
+    public async Task<object> GetClientAsync(
+        [Description("ID del client (formato 'cli_...').")] string clientId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
+        }
+        var result = await mediator.Send(new GetClientByIdQuery(clientId), ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
