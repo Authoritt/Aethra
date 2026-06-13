@@ -1,5 +1,6 @@
 using Aethra.Modules.Services.Domain;
 using Aethra.Modules.Services.Infrastructure;
+using Aethra.Modules.Services.Infrastructure.Scheduling;
 using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Ids;
@@ -39,9 +40,18 @@ internal sealed class SetBackupPolicyHandler(ServicesDbContext db, IClock clock)
             || request.Destination is not null)
         {
             policy = new BackupPolicy(
-                CronExpression: request.CronExpression ?? "*/60",
+                CronExpression: request.CronExpression ?? "0 2 * * *",
                 RetentionCount: request.RetentionCount ?? 7,
                 Destination: request.Destination ?? "volume://default");
+
+            // BackupPolicy.IsValid() sólo exige cron NO vacío; pero un cron malformado se persistiría
+            // y el BackupWorker nunca dispararía la policy (backups rotos en silencio). Validamos el
+            // FORMATO acá con el mismo parser de 5 campos que usa CreateScheduledJobCommand.
+            if (!CronExpression.TryParse(policy.CronExpression, out _))
+            {
+                return Error.Validation("backup.invalid_cron",
+                    $"CronExpression invalida: '{policy.CronExpression}'. Formato: 'minute hour day month dow' (ej. '0 2 * * *').");
+            }
         }
 
         try
