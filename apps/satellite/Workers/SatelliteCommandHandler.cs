@@ -2,6 +2,7 @@ using Aethra.Satellite.Containers;
 using Aethra.Shared.Contracts.Containers;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Aethra.Satellite.Workers;
 
@@ -19,8 +20,20 @@ namespace Aethra.Satellite.Workers;
 /// </summary>
 public sealed class SatelliteCommandHandler(
     IContainerRuntime runtime,
-    ILogger<SatelliteCommandHandler> logger)
+    ILogger<SatelliteCommandHandler> logger,
+    IOptions<SatelliteOptions> options)
 {
+    private readonly int _imageRetentionKeep = options.Value.ImageRetentionKeep;
+
+    /// <summary>Deriva el repositorio (sin el <c>:tag</c>) de un image ref, respetando un puerto
+    /// de registry (<c>host:5000/repo:tag</c>): el separador es el último ':' después del último '/'.</summary>
+    private static string ImageRepoOf(string imageRef)
+    {
+        var lastSlash = imageRef.LastIndexOf('/');
+        var lastColon = imageRef.LastIndexOf(':');
+        return lastColon > lastSlash ? imageRef[..lastColon] : imageRef;
+    }
+
     /// <summary>
     /// Engancha al <paramref name="connection"/> los handlers de comandos. Debe llamarse
     /// una sola vez tras la primera conexión; los registros persisten a través de reconnects
@@ -54,6 +67,28 @@ public sealed class SatelliteCommandHandler(
                     "BuildImageResponse",
                     new BuildImageResponse(req.CorrelationId, build),
                     CancellationToken.None);
+
+                // Retención: tras un build exitoso, purgar tags viejos del mismo repo para que los
+                // flujos git-mode (un tag por commit) no saturen el disco. Best-effort: corre después
+                // de responder y nunca falla el build ni borra imágenes en uso.
+                if (build.Success && _imageRetentionKeep > 0)
+                {
+                    var repo = ImageRepoOf(req.Spec.ImageRef);
+                    try
+                    {
+                        var removed = await runtime.PruneImageRepoAsync(repo, _imageRetentionKeep, CancellationToken.None);
+                        if (removed.Count > 0)
+                        {
+                            logger.LogInformation(
+                                "Retención de imágenes: borrados {Count} tags viejos de {Repo} (keep={Keep}).",
+                                removed.Count, repo, _imageRetentionKeep);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Retención de imágenes falló para {Repo} (no bloquea el build).", repo);
+                    }
+                }
             });
         });
 

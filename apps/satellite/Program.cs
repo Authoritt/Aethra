@@ -45,6 +45,19 @@ builder.Services.Configure<SatelliteOptions>(opts =>
         ?? "docker").ToLowerInvariant();
     opts.DataVolumePath = Environment.GetEnvironmentVariable("AETHRA_DATA_VOLUME_PATH")
         ?? section["DataVolumePath"];
+    if (int.TryParse(
+            Environment.GetEnvironmentVariable("AETHRA_IMAGE_RETENTION_KEEP"),
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var retention))
+    {
+        opts.ImageRetentionKeep = retention;
+    }
+    else if (int.TryParse(section["ImageRetentionKeep"], NumberStyles.Integer,
+        CultureInfo.InvariantCulture, out var cfgRetention))
+    {
+        opts.ImageRetentionKeep = cfgRetention;
+    }
 });
 
 // Elegimos probe según OS. Linux → /proc real; otros → BCL cross-platform (Windows dev).

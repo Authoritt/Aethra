@@ -45,4 +45,13 @@ public interface IContainerRuntime
     /// <paramref name="timeoutSeconds"/>, mata el proceso y marca <c>TimedOut=true</c>.</summary>
     Task<ExecResult> ExecInContainerAsync(
         string containerNameOrId, string command, int timeoutSeconds, CancellationToken ct);
+
+    /// <summary>
+    /// Retención de imágenes: borra los tags más antiguos de <paramref name="repository"/>
+    /// (ej. <c>aethra/myapp-api</c>) dejando los <paramref name="keepLast"/> más recientes
+    /// por fecha de creación. NO fuerza el borrado, por lo que nunca elimina una imagen en uso por
+    /// un contenedor. Best-effort e idempotente: con <paramref name="keepLast"/> &lt;= 0 no hace
+    /// nada. Devuelve los refs efectivamente borrados.
+    /// </summary>
+    Task<IReadOnlyList<string>> PruneImageRepoAsync(string repository, int keepLast, CancellationToken ct);
 }

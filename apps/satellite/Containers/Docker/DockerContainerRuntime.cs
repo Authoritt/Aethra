@@ -432,6 +432,48 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
             ct);
     }
 
+    public async Task<IReadOnlyList<string>> PruneImageRepoAsync(string repository, int keepLast, CancellationToken ct)
+    {
+        if (keepLast <= 0 || string.IsNullOrWhiteSpace(repository))
+        {
+            return [];
+        }
+
+        var prefix = repository + ":";
+        var all = await _client.Images
+            .ListImagesAsync(new ImagesListParameters { All = false }, ct)
+            .ConfigureAwait(false);
+
+        // Imágenes con al menos un tag de este repositorio, más recientes primero.
+        var ofRepo = all
+            .Where(i => i.RepoTags is not null
+                && i.RepoTags.Any(t => t.StartsWith(prefix, StringComparison.Ordinal)))
+            .OrderByDescending(i => i.Created)
+            .ToList();
+
+        var removed = new List<string>();
+        foreach (var image in ofRepo.Skip(keepLast))
+        {
+            foreach (var tag in image.RepoTags.Where(t => t.StartsWith(prefix, StringComparison.Ordinal)))
+            {
+                try
+                {
+                    // Force=false: si la imagen está en uso por un contenedor, Docker la rechaza
+                    // y la dejamos intacta (red de seguridad — nunca rompemos algo corriendo).
+                    await _client.Images
+                        .DeleteImageAsync(tag, new ImageDeleteParameters { Force = false }, ct)
+                        .ConfigureAwait(false);
+                    removed.Add(tag);
+                }
+                catch (DockerApiException ex)
+                {
+                    _logger.LogDebug(ex, "Retención: no se pudo borrar {Tag} (probablemente en uso); se omite.", tag);
+                }
+            }
+        }
+        return removed;
+    }
+
     /// <summary>
     /// Streamea logs en formato multiplexado. Docker antepone un header de 8 bytes por frame:
     /// <c>[StreamType, 0,0,0, BigEndianSizeUInt32]</c>. Docker.DotNet expone

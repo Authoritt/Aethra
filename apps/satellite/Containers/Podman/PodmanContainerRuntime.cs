@@ -410,6 +410,49 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
         }
     }
 
+    public async Task<IReadOnlyList<string>> PruneImageRepoAsync(string repository, int keepLast, CancellationToken ct)
+    {
+        if (keepLast <= 0 || string.IsNullOrWhiteSpace(repository))
+        {
+            return [];
+        }
+
+        var (code, stdout, _) = await RunPodmanAsync(
+            ["images", repository, "--format", "{{.CreatedAt}}|{{.Repository}}:{{.Tag}}"], ct).ConfigureAwait(false);
+        if (code != 0)
+        {
+            return [];
+        }
+
+        var prefix = repository + ":";
+        // CreatedAt viene como "2026-06-13 14:00:22 ..." (año primero) ⇒ orden lexicográfico = cronológico.
+        var refs = stdout
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.Split('|', 2))
+            .Where(p => p.Length == 2
+                && p[1].StartsWith(prefix, StringComparison.Ordinal)
+                && !p[1].EndsWith(":<none>", StringComparison.Ordinal))
+            .OrderByDescending(p => p[0], StringComparer.Ordinal)
+            .Select(p => p[1])
+            .ToList();
+
+        var removed = new List<string>();
+        foreach (var imageRef in refs.Skip(keepLast))
+        {
+            // rmi sin -f: si la imagen está en uso, podman la rechaza y la dejamos intacta.
+            var (rc, _, stderr) = await RunPodmanAsync(["rmi", imageRef], ct).ConfigureAwait(false);
+            if (rc == 0)
+            {
+                removed.Add(imageRef);
+            }
+            else
+            {
+                _logger.LogDebug("Retención podman: no se pudo borrar {Ref} (en uso?): {Err}", imageRef, stderr);
+            }
+        }
+        return removed;
+    }
+
     public async IAsyncEnumerable<string> StreamLogsAsync(
         string nameOrId, int tailLines, [EnumeratorCancellation] CancellationToken ct)
     {
