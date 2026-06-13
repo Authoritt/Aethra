@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using Aethra.Modules.Mcp.Security;
+using Aethra.Modules.Projects.UseCases.EnvVars.Commands;
 using Aethra.Modules.Projects.UseCases.EnvVars.Queries;
+using Aethra.Modules.Projects.UseCases.Secrets.Commands;
 using Aethra.Modules.Projects.UseCases.Secrets.Queries;
 using Aethra.Shared.Contracts.Projects;
 using MediatR;
@@ -91,5 +93,57 @@ public sealed class EnvVarsTools(IEnvVarWriter envVarWriter, IMediator mediator,
         }
         var result = await mediator.Send(new ListSecretsQuery(scopeType, scopeId), ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_delete_env_var", Destructive = true, Idempotent = true, OpenWorld = false)]
+    [Description("Elimina una env var (no secreta) por key de un scope (project|template|client|instance). "
+        + "Usá dry_run=true primero para confirmar.")]
+    public async Task<object> DeleteEnvVarAsync(
+        [Description("Tipo de scope: 'project', 'template', 'client' o 'instance'.")] string scopeType,
+        [Description("ID del scope (prj_*, tpl_*, cli_*, ins_*).")] string scopeId,
+        [Description("Key de la env var a borrar.")] string key,
+        [Description("Si true, NO borra — devuelve el plan.")] bool dryRun,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
+        }
+        if (dryRun)
+        {
+            return McpResponses.DryRun(
+                wouldCall: $"delete env var '{key}' from {scopeType}:{scopeId}",
+                plan: new { scopeType, scopeId, key, action = "delete non-secret env var" });
+        }
+        var result = await mediator.Send(new DeleteEnvVarCommand(scopeType, scopeId, key), ct).ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new { scope_type = scopeType, scope_id = scopeId, key, deleted = true })
+            : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_delete_secret", Destructive = true, Idempotent = true, OpenWorld = false)]
+    [Description("Elimina un secreto por key de un scope (borra el cipher persistido). El valor nunca se expuso. "
+        + "Usá dry_run=true primero para confirmar.")]
+    public async Task<object> DeleteSecretAsync(
+        [Description("Tipo de scope: 'project', 'template', 'client' o 'instance'.")] string scopeType,
+        [Description("ID del scope (prj_*, tpl_*, cli_*, ins_*).")] string scopeId,
+        [Description("Key del secreto a borrar.")] string key,
+        [Description("Si true, NO borra — devuelve el plan.")] bool dryRun,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
+        }
+        if (dryRun)
+        {
+            return McpResponses.DryRun(
+                wouldCall: $"delete secret '{key}' from {scopeType}:{scopeId}",
+                plan: new { scopeType, scopeId, key, action = "delete secret (removes persisted cipher)" });
+        }
+        var result = await mediator.Send(new DeleteSecretCommand(scopeType, scopeId, key), ct).ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new { scope_type = scopeType, scope_id = scopeId, key, deleted = true })
+            : McpResponses.FromError(result.Error);
     }
 }
