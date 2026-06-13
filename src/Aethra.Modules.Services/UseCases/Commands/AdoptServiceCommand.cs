@@ -7,6 +7,7 @@ using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Results;
 using Aethra.Shared.Kernel.Time;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aethra.Modules.Services.UseCases.Commands;
@@ -29,6 +30,27 @@ public sealed record AdoptServiceCommand(
     string AdminUser,
     string AdminPassword,
     bool ExposedExternally) : ICommand<ManagedServiceDetailDto>;
+
+/// <summary>
+/// Validación temprana de <see cref="AdoptServiceCommand"/>: corre en el ValidationBehavior antes del
+/// handler para devolver errores claros (slug/nombre/tipo/VM/contenedor requeridos, puerto en rango)
+/// en vez de fallar adentro al parsear el enum o al persistir.
+/// </summary>
+public sealed class AdoptServiceValidator : AbstractValidator<AdoptServiceCommand>
+{
+    public AdoptServiceValidator()
+    {
+        RuleFor(c => c.Slug).NotEmpty().MaximumLength(64)
+            .Matches("^[a-z][a-z0-9-]{0,30}$")
+            .WithMessage("Slug debe ser lowercase y contener solo a-z 0-9 y guiones.");
+        RuleFor(c => c.Name).NotEmpty().MaximumLength(255);
+        RuleFor(c => c.Type).NotEmpty();
+        RuleFor(c => c.TargetVmId).NotEmpty().MaximumLength(64);
+        RuleFor(c => c.ContainerName).NotEmpty().MaximumLength(255)
+            .WithMessage("ContainerName es obligatorio: adopt apunta a un contenedor que YA existe.");
+        RuleFor(c => c.InternalPort).InclusiveBetween(0, 65535);
+    }
+}
 
 internal sealed class AdoptServiceHandler(
     ServicesDbContext db,
