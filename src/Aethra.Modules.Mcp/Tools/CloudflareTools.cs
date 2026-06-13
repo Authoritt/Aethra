@@ -60,6 +60,27 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
             : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_update_dns_record", Destructive = false, Idempotent = true, OpenWorld = true)]
+    [Description("Actualiza (patch) un DNS record en Cloudflare: content, ttl, proxied y/o comment. El tipo y el "
+        + "nombre NO se cambian (borrá y recreá para eso). Sólo aplica los campos provistos. Devuelve el record actualizado.")]
+    public async Task<object> UpdateDnsRecordAsync(
+        [Description("ID del DNS record en Aethra.")] string recordId,
+        [Description("Nuevo contenido (IP/target/valor). Omitir/null = no cambiar.")] string? content,
+        [Description("Nuevo TTL en segundos (1 = automático). Omitir/null = no cambiar.")] int? ttl,
+        [Description("Proxy Cloudflare on/off (sólo A/AAAA/CNAME). Omitir/null = no cambiar.")] bool? proxied,
+        [Description("Nuevo comentario. Omitir/null = no cambiar.")] string? comment,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.CloudflareWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.CloudflareWrite);
+        }
+        var result = await mediator
+            .Send(new UpdateDnsRecordCommand(recordId, content, ttl, proxied, comment), ct)
+            .ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
     [McpServerTool(Name = "aethra_attach_domain", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Adjunta un hostname a una Instance: crea DNS record en Cloudflare (CNAME proxied), crea Route YARP y opcionalmente un Monitor HTTP. Cada paso devuelve su propio status.")]
     public async Task<object> AttachDomainAsync(
