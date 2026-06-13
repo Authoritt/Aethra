@@ -88,8 +88,17 @@ public readonly record struct AethraId
         var bitBuffer = 0;
         var bitCount = 0;
         var byteIndex = 0;
-        foreach (var c in encoded.ToUpperInvariant())
+        foreach (var raw in encoded.ToUpperInvariant())
         {
+            // Crockford tolera símbolos confundibles al DECODIFICAR: O→0, I/L→1. Encode nunca
+            // los emite (no están en el alfabeto), así que el round-trip máquina no cambia; esto
+            // solo evita que un ID transcrito a mano se rompa por confundir O/0 o I/1.
+            var c = raw switch
+            {
+                'O' => '0',
+                'I' or 'L' => '1',
+                _ => raw,
+            };
             var i = CrockfordAlphabet.IndexOf(c);
             if (i < 0)
             {
