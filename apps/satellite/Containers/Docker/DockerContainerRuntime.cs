@@ -49,60 +49,49 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
             return await BuildImageNixpacksAsync(spec, ct).ConfigureAwait(false);
         }
 
+        // Dockerfile mode: construimos con el CLI `docker build` (no Docker.DotNet). El builder
+        // legacy de Docker.DotNet NO soporta BuildKit, y los Dockerfiles modernos (p.ej. Next.js)
+        // usan `RUN --mount=type=cache`, que requiere BuildKit. El CLI sí lo usa (forzamos
+        // DOCKER_BUILDKIT=1). Extraemos el contexto tar.gz a un tempdir y delegamos al CLI.
         var logs = new List<string>();
+        var tempDir = Path.Combine(Path.GetTempPath(), "aethra-docker-build-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
         try
         {
-            await using var tarball = new MemoryStream(spec.BuildContextTarGz, writable: false);
+            logs.Add($"Extrayendo contexto de build a {tempDir}...");
+            await ExtractTarGzAsync(spec.BuildContextTarGz, tempDir, ct).ConfigureAwait(false);
 
-            var parameters = new ImageBuildParameters
+            var dockerfile = string.IsNullOrWhiteSpace(spec.DockerfilePath) ? "Dockerfile" : spec.DockerfilePath!;
+            var args = new List<string> { "build", "-t", spec.ImageRef, "-f", Path.Combine(tempDir, dockerfile) };
+            foreach (var (k, v) in spec.BuildArgs)
             {
-                Dockerfile = spec.DockerfilePath,
-                Tags = [spec.ImageRef],
-                BuildArgs = spec.BuildArgs.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal),
-            };
+                args.Add("--build-arg");
+                args.Add(string.Create(CultureInfo.InvariantCulture, $"{k}={v}"));
+            }
+            args.Add(tempDir); // build context = directorio extraído
 
-            // Docker.DotNet emite mensajes JSON tipo {stream, errorDetail, aux:{ID}}.
-            // ID en aux suele venir al final con el sha256 de la imagen construida.
+            logs.Add($"Ejecutando: docker {string.Join(' ', args)} (BuildKit)");
+            var env = new Dictionary<string, string>(StringComparer.Ordinal) { ["DOCKER_BUILDKIT"] = "1" };
+            var (exitCode, stdout, stderr) = await RunProcessAsync("docker", args, ct, env).ConfigureAwait(false);
+            logs.AddRange(SplitLines(stdout));
+            logs.AddRange(SplitLines(stderr));
+
+            if (exitCode != 0)
+            {
+                return new BuildResult(Success: false, ImageId: null,
+                    ErrorMessage: $"docker build salió con código {exitCode.ToString(CultureInfo.InvariantCulture)}", logs);
+            }
+
             string? imageId = null;
-            string? errorDetail = null;
-            var progress = new Progress<JSONMessage>(msg =>
+            try
             {
-                if (!string.IsNullOrWhiteSpace(msg.Stream))
-                {
-                    logs.Add(msg.Stream.TrimEnd('\n', '\r'));
-                }
-                if (msg.ErrorMessage is { Length: > 0 } err)
-                {
-                    errorDetail = err;
-                    logs.Add(string.Create(CultureInfo.InvariantCulture, $"ERROR: {err}"));
-                }
-                if (msg.Aux is not null)
-                {
-                    // Aux viene como dynamic JToken; el payload típico es {"ID":"sha256:..."}.
-                    var auxText = msg.Aux.ToString();
-                    if (auxText is not null)
-                    {
-                        const string idKey = "\"ID\":\"";
-                        var idx = auxText.IndexOf(idKey, StringComparison.Ordinal);
-                        if (idx >= 0)
-                        {
-                            var start = idx + idKey.Length;
-                            var end = auxText.IndexOf('"', start);
-                            if (end > start)
-                            {
-                                imageId = auxText[start..end];
-                            }
-                        }
-                    }
-                }
-            });
-
-            await _client.Images.BuildImageFromDockerfileAsync(
-                parameters, tarball, authConfigs: null, headers: null, progress, ct);
-
-            if (errorDetail is not null)
+                var inspect = await _client.Images.InspectImageAsync(spec.ImageRef, ct).ConfigureAwait(false);
+                imageId = inspect.ID;
+            }
+            catch (DockerImageNotFoundException)
             {
-                return new BuildResult(Success: false, ImageId: null, errorDetail, logs);
+                return new BuildResult(Success: false, ImageId: null,
+                    ErrorMessage: $"docker build terminó OK pero la imagen {spec.ImageRef} no aparece en el daemon.", logs);
             }
 
             return new BuildResult(Success: true, imageId, ErrorMessage: null, logs);
@@ -113,8 +102,12 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Build de imagen {ImageRef} falló", spec.ImageRef);
+            _logger.LogError(ex, "Build (docker CLI) de imagen {ImageRef} falló", spec.ImageRef);
             return new BuildResult(Success: false, ImageId: null, ErrorMessage: ex.Message, logs);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
         }
     }
 
@@ -656,7 +649,8 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
     }
 
     private static async Task<(int ExitCode, string Stdout, string Stderr)> RunProcessAsync(
-        string fileName, IReadOnlyList<string> args, CancellationToken ct)
+        string fileName, IReadOnlyList<string> args, CancellationToken ct,
+        IReadOnlyDictionary<string, string>? env = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -666,6 +660,13 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
             RedirectStandardError = true,
             CreateNoWindow = true,
         };
+        if (env is not null)
+        {
+            foreach (var (k, v) in env)
+            {
+                psi.Environment[k] = v;
+            }
+        }
         foreach (var a in args)
         {
             psi.ArgumentList.Add(a);
