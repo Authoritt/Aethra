@@ -26,6 +26,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Aethra.ArchitectureTests/Aethra.ArchitectureTests.csproj" />
+    <Project Path="tests/Aethra.Modules.Cloudflare.Tests/Aethra.Modules.Cloudflare.Tests.csproj" />
     <Project Path="tests/Aethra.Modules.Deployments.Tests/Aethra.Modules.Deployments.Tests.csproj" />
     <Project Path="tests/Aethra.Modules.Identity.Tests/Aethra.Modules.Identity.Tests.csproj" />
     <Project Path="tests/Aethra.Modules.Monitoring.Tests/Aethra.Modules.Monitoring.Tests.csproj" />

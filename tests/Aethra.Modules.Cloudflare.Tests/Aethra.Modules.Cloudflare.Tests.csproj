@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <Description>Unit tests del dominio del módulo Cloudflare (DnsRecord + CloudflareTunnel):
+validación de TTL/nombre/content, normalización, eventos de sync y defaults/asimetría de servicios del túnel.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Aethra.Modules.Cloudflare\Aethra.Modules.Cloudflare.csproj" />
+  </ItemGroup>
+
+</Project>
