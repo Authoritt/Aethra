@@ -49,7 +49,11 @@ public sealed record TemplateForBuildView(
     string DockerfilePath,
     string? ComposeFilePath = null,
     bool AutoPreviewPullRequests = false,
-    IReadOnlyList<TemplateServiceView>? Services = null);
+    IReadOnlyList<TemplateServiceView>? Services = null,
+    // Nombre lógico de la credencial (PAT/deploy key) en Settings para clonar el repo si es
+    // privado. null = repo público. El secreto se resuelve vía IIntegrationCredentialResolver
+    // en el momento del build; nunca viaja en este read-model.
+    string? AccessTokenCredentialName = null);
 
 /// <summary>
 /// F13 — proyección de un servicio multi-contenedor del Template (deploy nativo).

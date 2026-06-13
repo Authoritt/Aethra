@@ -30,6 +30,7 @@ Fallan en CI si un modulo referencia internals de otro o si Domain referencia EF
     <ProjectReference Include="..\..\src\Aethra.Modules.Cloudflare\Aethra.Modules.Cloudflare.csproj" />
     <ProjectReference Include="..\..\src\Aethra.Modules.Notes\Aethra.Modules.Notes.csproj" />
     <ProjectReference Include="..\..\src\Aethra.Modules.Identity\Aethra.Modules.Identity.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Notifications\Aethra.Modules.Notifications.csproj" />
   </ItemGroup>
 
 </Project>

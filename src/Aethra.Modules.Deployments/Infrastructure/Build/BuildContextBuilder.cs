@@ -25,6 +25,7 @@ public interface IBuildContextBuilder
         string branch,
         string? gitSha,
         string baseDirectory,
+        string? accessToken,
         CancellationToken ct);
 }
 
@@ -47,6 +48,7 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
         string branch,
         string? gitSha,
         string baseDirectory,
+        string? accessToken,
         CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gitRepoUrl);
@@ -57,11 +59,15 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
         try
         {
             // === Clone shallow del branch ===
+            // El log usa la URL LIMPIA; la URL con token (si el repo es privado) solo viaja en los
+            // args de git. El token queda en .git/config del workDir temporal, que se excluye del
+            // tar (PackContext) y se borra al final.
             log.Add($"Clonando {gitRepoUrl} (branch={branch})...");
+            var cloneUrl = ApplyAccessToken(gitRepoUrl, accessToken);
             var hasBranch = !string.IsNullOrWhiteSpace(branch);
             string[] cloneArgs = hasBranch
-                ? ["clone", "--depth", "1", "--branch", branch, "--single-branch", gitRepoUrl, workDir]
-                : ["clone", "--depth", "1", gitRepoUrl, workDir];
+                ? ["clone", "--depth", "1", "--branch", branch, "--single-branch", cloneUrl, workDir]
+                : ["clone", "--depth", "1", cloneUrl, workDir];
 
             var clone = await RunGitAsync(cloneArgs, workingDir: null, ct).ConfigureAwait(false);
             if (clone.ExitCode != 0)
@@ -70,12 +76,12 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
                 // difiere del pedido. Clonamos el default y luego intentamos el checkout.
                 Directory.Delete(workDir, recursive: true);
                 Directory.CreateDirectory(workDir);
-                var retry = await RunGitAsync(["clone", "--depth", "1", gitRepoUrl, workDir], null, ct)
+                var retry = await RunGitAsync(["clone", "--depth", "1", cloneUrl, workDir], null, ct)
                     .ConfigureAwait(false);
                 if (retry.ExitCode != 0)
                 {
                     throw new InvalidOperationException(
-                        $"git clone falló: {Trim(retry.StdErr.Length > 0 ? retry.StdErr : clone.StdErr)}");
+                        $"git clone falló: {Redact(Trim(retry.StdErr.Length > 0 ? retry.StdErr : clone.StdErr), accessToken)}");
                 }
             }
 
@@ -209,6 +215,44 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
     private static void TryKill(Process proc)
     {
         try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+    }
+
+    /// <summary>
+    /// Inyecta un token de acceso en una URL HTTPS para clonar repos privados:
+    /// <c>https://host/owner/repo</c> → <c>https://x-access-token:&lt;token&gt;@host/owner/repo</c>.
+    /// No toca URLs SSH ni URLs que ya traen credenciales (<c>user@host</c>). El token NUNCA se
+    /// loguea: solo viaja en los args de <c>git</c> y en <c>.git/config</c> del workDir temporal.
+    /// </summary>
+    private static string ApplyAccessToken(string repoUrl, string? accessToken)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken)
+            || !repoUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return repoUrl;
+        }
+        var rest = repoUrl["https://".Length..];
+        var slash = rest.IndexOf('/', StringComparison.Ordinal);
+        var authority = slash >= 0 ? rest[..slash] : rest;
+        if (authority.Contains('@', StringComparison.Ordinal))
+        {
+            return repoUrl; // ya trae credenciales — no duplicar
+        }
+        return $"https://x-access-token:{Uri.EscapeDataString(accessToken)}@{rest}";
+    }
+
+    /// <summary>
+    /// Defensa en profundidad: elimina el token (crudo y url-encoded) de un texto antes de
+    /// loguearlo o propagarlo en una excepción, por si <c>git</c> lo eco en stderr.
+    /// </summary>
+    private static string Redact(string text, string? accessToken)
+    {
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            return text;
+        }
+        return text
+            .Replace(accessToken, "***", StringComparison.Ordinal)
+            .Replace(Uri.EscapeDataString(accessToken), "***", StringComparison.Ordinal);
     }
 
     private static string Short(string sha) => sha.Length >= 7 ? sha[..7] : sha;

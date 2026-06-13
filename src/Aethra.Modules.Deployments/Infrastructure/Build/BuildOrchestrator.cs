@@ -89,8 +89,12 @@ public sealed class BuildOrchestrator(
                 var cloneBranch = string.IsNullOrWhiteSpace(build.GitRef)
                     ? template.Branch
                     : NormalizeRef(build.GitRef);
+                // Repo privado: token de clone resuelto desde la credencial del template (si la hay).
+                var cloneToken = string.IsNullOrWhiteSpace(template.AccessTokenCredentialName)
+                    ? null
+                    : await credentialResolver.GetSecretAsync(template.AccessTokenCredentialName!, ct).ConfigureAwait(false);
                 context = await buildContextBuilder
-                    .BuildAsync(template.GitRepoUrl, cloneBranch, build.GitSha, template.BaseDirectory, ct)
+                    .BuildAsync(template.GitRepoUrl, cloneBranch, build.GitSha, template.BaseDirectory, cloneToken, ct)
                     .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
