@@ -68,7 +68,12 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
                 args.Add("--build-arg");
                 args.Add(string.Create(CultureInfo.InvariantCulture, $"{k}={v}"));
             }
-            args.Add(tempDir); // build context = directorio extraído
+            // Contexto de build: subdir del servicio si lo especifica (Dockerfiles que asumen
+            // context=su subcarpeta, p.ej. un frontend), si no la raíz del tarball extraído.
+            var contextDir = string.IsNullOrWhiteSpace(spec.BuildContextDir)
+                ? tempDir
+                : Path.Combine(tempDir, spec.BuildContextDir!);
+            args.Add(contextDir); // build context
 
             logs.Add($"Ejecutando: docker {string.Join(' ', args)} (BuildKit)");
             var env = new Dictionary<string, string>(StringComparer.Ordinal) { ["DOCKER_BUILDKIT"] = "1" };

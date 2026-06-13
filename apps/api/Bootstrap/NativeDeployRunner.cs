@@ -116,7 +116,8 @@ public sealed class NativeDeployRunner(
                     DockerfilePath: string.IsNullOrWhiteSpace(svc.DockerfilePath) ? "Dockerfile" : svc.DockerfilePath!,
                     BuildArgs: new Dictionary<string, string>(),
                     BuildSecrets: null,
-                    Mode: BuildMode.Dockerfile);
+                    Mode: BuildMode.Dockerfile,
+                    BuildContextDir: svc.BuildContext);
                 var br = await satellite.SendBuildAsync(instance.TargetVmId, buildSpec, pushTo: null, ct).ConfigureAwait(false);
                 if (!br.Success)
                 {

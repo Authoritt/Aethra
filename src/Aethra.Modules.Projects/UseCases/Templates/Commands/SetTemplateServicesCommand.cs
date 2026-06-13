@@ -25,7 +25,8 @@ public sealed record TemplateServiceInput(
     string? BuildMode = null,
     string? DockerfilePath = null,
     IReadOnlyList<TemplateVolumeInput>? Volumes = null,
-    string? Hostname = null);
+    string? Hostname = null,
+    string? BuildContext = null);
 
 public sealed record TemplateVolumeInput(
     string Name,
@@ -64,7 +65,8 @@ internal sealed class SetTemplateServicesHandler(ProjectsDbContext db, IClock cl
                     .Where(v => !string.IsNullOrWhiteSpace(v.Name) && !string.IsNullOrWhiteSpace(v.ContainerPath))
                     .Select(v => new ServiceVolume(v.Name.Trim(), v.ContainerPath.Trim(), v.ReadOnly))
                     .ToList(),
-                Hostname: string.IsNullOrWhiteSpace(s.Hostname) ? null : s.Hostname.Trim().ToLowerInvariant()))
+                Hostname: string.IsNullOrWhiteSpace(s.Hostname) ? null : s.Hostname.Trim().ToLowerInvariant(),
+                BuildContext: string.IsNullOrWhiteSpace(s.BuildContext) ? null : s.BuildContext.Trim()))
             .ToList();
 
         template.ReplaceServices(services, clock.UtcNow);

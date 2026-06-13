@@ -27,7 +27,10 @@ public sealed record TemplateService(
     // Hostname público propio del servicio para apps multi-host (ej. una app con api/admin/tenant
     // cada uno en su dominio). null = usa el hostname de la Instance (customDomain/autoHostname).
     // Las rutas de este servicio (por PathPrefix) se publican bajo este host. jsonb sin campo = null.
-    string? Hostname = null);
+    string? Hostname = null,
+    // Subdirectorio (relativo a la raíz del repo) usado como contexto de `docker build` de este
+    // servicio. null = raíz. Para Dockerfiles que asumen context=su subcarpeta. jsonb sin campo = null.
+    string? BuildContext = null);
 
 /// <summary>
 /// F13.3 — un volumen persistente montado en un servicio del deploy nativo. El token

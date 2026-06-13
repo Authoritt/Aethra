@@ -42,4 +42,9 @@ public sealed record BuildSpec(
     IReadOnlyDictionary<string, byte[]>? BuildSecrets,
     BuildMode Mode = BuildMode.Dockerfile,
     string? ComposeFilePath = null,
-    string? NixpacksConfig = null);
+    string? NixpacksConfig = null,
+    // Subdirectorio (relativo a la raíz del tarball) que se usa como CONTEXTO de `docker build`.
+    // null/empty = la raíz. Permite apps cuyo Dockerfile asume context=su subcarpeta (p.ej. un
+    // frontend en Frontends/web con COPY relativos a esa carpeta). El DockerfilePath sigue siendo
+    // relativo a la raíz del tarball.
+    string? BuildContextDir = null);

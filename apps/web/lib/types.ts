@@ -821,6 +821,8 @@ export interface TemplateServiceDef {
   dockerfilePath: string | null;
   /** Hostname público propio del servicio (apps multi-host). null = host de la instancia. */
   hostname: string | null;
+  /** Subdir usado como contexto de docker build de este servicio. null = raíz del repo. */
+  buildContext: string | null;
   /** F13.3 — volúmenes persistentes del servicio (ej. DataProtection keys). */
   volumes: TemplateServiceVolumeDef[];
 }

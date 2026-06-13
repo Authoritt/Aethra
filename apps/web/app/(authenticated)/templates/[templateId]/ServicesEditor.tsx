@@ -19,6 +19,7 @@ interface Row {
   port: string;
   pathPrefixes: string;
   hostname: string;
+  buildContext: string;
   envText: string;
   volumesText: string;
 }
@@ -32,6 +33,7 @@ function toRow(s: TemplateServiceDef): Row {
     port: String(s.port ?? ""),
     pathPrefixes: (s.pathPrefixes ?? []).join(", "),
     hostname: s.hostname ?? "",
+    buildContext: s.buildContext ?? "",
     envText: (s.env ?? []).map((e) => `${e.key}=${e.value}`).join("\n"),
     volumesText: (s.volumes ?? [])
       .map((v) => `${v.name}:${v.containerPath}${v.readOnly ? ":ro" : ""}`)
@@ -40,7 +42,7 @@ function toRow(s: TemplateServiceDef): Row {
 }
 
 function emptyRow(): Row {
-  return { name: "", buildMode: "registry", image: "", dockerfilePath: "", port: "", pathPrefixes: "", hostname: "", envText: "", volumesText: "" };
+  return { name: "", buildMode: "registry", image: "", dockerfilePath: "", port: "", pathPrefixes: "", hostname: "", buildContext: "", envText: "", volumesText: "" };
 }
 
 /** Parsea "nombre:/ruta[:ro]" por línea → {name, containerPath, readOnly}. */
@@ -102,6 +104,7 @@ export function ServicesEditor({
           buildMode: r.buildMode,
           dockerfilePath: r.buildMode === "git" ? r.dockerfilePath.trim() || "Dockerfile" : null,
           hostname: r.hostname.trim() || null,
+          buildContext: r.buildContext.trim() || null,
           volumes: parseVolumes(r.volumesText),
         }));
       await api(`/api/templates/${encodeURIComponent(templateId)}/services`, {
@@ -164,6 +167,9 @@ export function ServicesEditor({
             </Field>
             <Field label="Hostname propio (multi-host, opcional)">
               <Input value={r.hostname} onChange={(e) => update(i, { hostname: e.target.value })} placeholder="api.miapp.com   ·   vacío = host de la instancia" className="font-mono text-xs" />
+            </Field>
+            <Field label="Build context (subdir, opcional)">
+              <Input value={r.buildContext} onChange={(e) => update(i, { buildContext: e.target.value })} placeholder="Frontends/web   ·   vacío = raíz del repo" className="font-mono text-xs" />
             </Field>
             <Field label="Env (KEY=valor por línea)">
               <textarea
