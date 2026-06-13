@@ -36,20 +36,15 @@ public static class ApiKeyGenerator
     /// </summary>
     public static string Generate()
     {
-        // 20 bytes random = 160 bits. Base32 con alfabeto de 30 chars usa log2(30)≈4.91 bits/char,
-        // por eso 32 chars = ~157 bits efectivos. Sobra para protección contra colisiones y brute force.
+        // 20 bytes random = 160 bits. Base32 con alfabeto de 31 chars usa log2(31)≈4.95 bits/char,
+        // por eso 32 chars = ~158 bits efectivos. Sobra para protección contra colisiones y brute force.
         Span<byte> bytes = stackalloc byte[20];
         RandomNumberGenerator.Fill(bytes);
 
+        // Cada slot combina dos bytes del buffer (b1 ^ (b2<<1)) antes del módulo, para no mapear
+        // 1:1 byte→char y atenuar el sesgo del módulo sobre un alfabeto que no es potencia de 2
+        // (31 chars; ver RFC 4648 §6).
         Span<char> result = stackalloc char[Base32Length];
-        for (var i = 0; i < Base32Length; i++)
-        {
-            result[i] = Alphabet[bytes[i % bytes.Length] % Alphabet.Length];
-        }
-
-        // Mejoramos la calidad combinando dos bytes por slot para evitar correlación al
-        // hacer modulo (cuando alphabet.length no es potencia de 2 hay un sesgo
-        // mínimo; ver RFC 4648 §6).
         for (var i = 0; i < Base32Length; i++)
         {
             var b1 = bytes[i % bytes.Length];
