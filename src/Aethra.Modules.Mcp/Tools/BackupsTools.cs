@@ -52,6 +52,36 @@ public sealed class BackupsTools(IMediator mediator, IMcpCallerContext caller)
             ]);
     }
 
+    [McpServerTool(Name = "aethra_set_backup_policy", Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Configura (o limpia) la política de backups AUTOMÁTICOS de un Managed Service: cron + retención + "
+        + "destino. Destino: 'volume://ruta' (disco local) o 's3://bucket/prefix'. Pasar cron vacío/null limpia la "
+        + "política (desactiva los backups programados; los on-demand vía aethra_backup_service siguen disponibles).")]
+    public async Task<object> SetBackupPolicyAsync(
+        [Description("ID del Managed Service (formato 'svc_...').")] string serviceId,
+        [Description("Cron (ej. '0 2 * * *' = 02:00 diario). Vacío/null = desactivar backups automáticos.")] string? cronExpression,
+        [Description("Cuántos backups retener (>0). Requerido cuando se setea cron.")] int? retentionCount,
+        [Description("Destino: 'volume://path' o 's3://bucket/prefix'. Requerido cuando se setea cron.")] string? destination,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ServicesWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ServicesWrite);
+        }
+        var result = await mediator
+            .Send(new SetBackupPolicyCommand(serviceId, cronExpression, retentionCount, destination), ct)
+            .ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new
+            {
+                service_id = serviceId,
+                policy_active = !string.IsNullOrWhiteSpace(cronExpression),
+                cron = cronExpression,
+                retention = retentionCount,
+                destination,
+            })
+            : McpResponses.FromError(result.Error);
+    }
+
     [McpServerTool(Name = "aethra_list_service_backups", ReadOnly = true, OpenWorld = false)]
     [Description("Lista los backups del servicio (más recientes primero). Read-only.")]
     public async Task<object> ListBackupsAsync(
