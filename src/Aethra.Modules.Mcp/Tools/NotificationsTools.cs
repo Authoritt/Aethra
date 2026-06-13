@@ -159,6 +159,36 @@ public sealed class NotificationsTools(IMediator mediator, IMcpCallerContext cal
             : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_update_notification_channel", Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Actualiza (patch) un canal de notificación: activar/pausar (is_active), reemplazar el config "
+        + "(mismo shape que en create según el type) y/o los event_filters. Sólo cambia los campos provistos; los "
+        + "omitidos quedan igual. Por seguridad el config NO se devuelve (se cifra) — sólo se confirma qué cambió.")]
+    public async Task<object> UpdateChannelAsync(
+        [Description("ID del canal (formato 'nch_...').")] string channelId,
+        [Description("true = activa el canal, false = lo pausa. Omitir/null = no cambiar.")] bool? isActive,
+        [Description("Nuevo config (dict JSON; shape según el type). Omitir = no cambiar. NO se devuelve en la respuesta.")] JsonElement? config,
+        [Description("Reemplaza la lista de event types filtrados (ej. ['deploy.failed']). Omitir = no cambiar.")] IReadOnlyList<string>? eventFilters,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.NotificationsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.NotificationsWrite);
+        }
+        var result = await mediator
+            .Send(new PatchChannelCommand(channelId, isActive, config, eventFilters), ct)
+            .ConfigureAwait(false);
+        return result.IsSuccess
+            ? McpResponses.Ok(new
+            {
+                channel_id = channelId,
+                updated = true,
+                is_active = isActive,
+                event_filters = eventFilters,
+                config_updated = config.HasValue,
+            })
+            : McpResponses.FromError(result.Error);
+    }
+
     private static List<string> ListConfigKeys(JsonElement config)
     {
         var keys = new List<string>();
