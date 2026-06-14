@@ -86,6 +86,16 @@ public static class MetricsDiskAggregator
         }
     }
 
+    // Filesystems virtuales/RAM que NO son disco real: el satélite antes incluía tmpfs (DriveType.Ram),
+    // así que el total de "Disco" sumaba ~RAM (p.ej. principal mostraba 125 GB en vez de ~97 GB). Los
+    // excluimos al agregar para que el número refleje almacenamiento de bloque real.
+    private static readonly HashSet<string> VirtualFilesystems = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "tmpfs", "ramfs", "devtmpfs", "overlay", "overlayfs", "squashfs", "efivarfs",
+        "proc", "sysfs", "cgroup", "cgroup2", "devpts", "mqueue", "debugfs", "tracefs",
+        "fusectl", "configfs", "binfmt_misc", "autofs", "nsfs", "pstore", "bpf", "hugetlbfs", "securityfs",
+    };
+
     public static (long Used, long Total) Aggregate(IReadOnlyList<DiskUsage>? disks)
     {
         if (disks is null || disks.Count == 0)
@@ -95,6 +105,10 @@ public static class MetricsDiskAggregator
         long used = 0, total = 0;
         foreach (var d in disks)
         {
+            if (d.Filesystem is not null && VirtualFilesystems.Contains(d.Filesystem))
+            {
+                continue; // tmpfs/overlay/etc. no son disco real.
+            }
             used += d.UsedBytes;
             total += d.TotalBytes;
         }

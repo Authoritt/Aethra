@@ -59,7 +59,9 @@ public sealed class LinuxMetricsProbe : IMetricsProbe
         {
             try
             {
-                if (!d.IsReady || d.DriveType is not (DriveType.Fixed or DriveType.Ram))
+                // Sólo disco real (bloque). DriveType.Ram = tmpfs/ramfs (respaldado por RAM) → inflaba
+                // el total de "Disco" sumando ~RAM; se excluye. El central además filtra por filesystem.
+                if (!d.IsReady || d.DriveType is not DriveType.Fixed)
                 {
                     continue;
                 }
