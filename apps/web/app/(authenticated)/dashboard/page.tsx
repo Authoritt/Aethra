@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { KpiCard } from "@/components/aethra/kpi-card";
 import { DiskUsageCard } from "@/components/aethra/disk-usage-card";
+import { NodeDiskCard } from "@/components/aethra/node-disk-card";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   AppEnvironmentOverviewDto,
@@ -313,9 +314,19 @@ export default async function Dashboard() {
         </Card>
       </section>
 
-      {disk ? (
-        <section className="grid grid-cols-1 gap-4">
-          <DiskUsageCard data={disk} />
+      {machines.length > 0 || disk ? (
+        <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {machines.length > 0 ? (
+            <NodeDiskCard
+              nodes={machines.map((m) => ({
+                name: m.name,
+                slug: m.slug,
+                totalBytes: m.rootDiskTotalBytes,
+                availableBytes: m.rootDiskAvailableBytes,
+              }))}
+            />
+          ) : null}
+          {disk ? <DiskUsageCard data={disk} /> : null}
         </section>
       ) : null}
     </div>
