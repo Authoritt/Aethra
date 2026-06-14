@@ -228,6 +228,35 @@ export default function VmLiveDashboard({
     [displayPoints],
   );
 
+  // Exporta las muestras visibles (vivo o histórico) a CSV, 100% en el cliente (sin libs).
+  const downloadCsv = () => {
+    if (displayPoints.length === 0) return;
+    const header =
+      "timestamp,cpuPercent,memoryUsedBytes,memoryTotalBytes,diskUsedBytes,diskTotalBytes,netBytesReceived,netBytesSent";
+    const rows = displayPoints.map((p) =>
+      [
+        p.timestamp,
+        p.cpuPercent,
+        p.memoryUsedBytes,
+        p.memoryTotalBytes,
+        p.diskUsedBytes,
+        p.diskTotalBytes,
+        p.netBytesReceived,
+        p.netBytesSent,
+      ].join(","),
+    );
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vms-${vmId}-${range}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <section className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
@@ -288,8 +317,18 @@ export default function VmLiveDashboard({
                 : ` · ${displayPoints.length} muestras`}
             </span>
           </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={downloadCsv}
+              disabled={displayPoints.length === 0}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+              title="Descargar las muestras visibles como CSV"
+            >
+              CSV ↓
+            </button>
           <div
-            className="inline-flex items-center gap-0.5 self-start rounded-md border border-border bg-muted/40 p-0.5 sm:self-auto"
+            className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/40 p-0.5"
             role="group"
             aria-label="Rango del gráfico"
           >
@@ -309,6 +348,7 @@ export default function VmLiveDashboard({
                 {r.label}
               </button>
             ))}
+          </div>
           </div>
         </CardHeader>
         <CardContent>
