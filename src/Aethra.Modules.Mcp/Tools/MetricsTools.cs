@@ -34,4 +34,19 @@ public sealed class MetricsTools(IMediator mediator, IMcpCallerContext caller)
         var result = await mediator.Send(new GetLatestMetricsQuery(vmId, effective), ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
+
+    [McpServerTool(Name = "aethra_database_disk_usage", ReadOnly = true, OpenWorld = false)]
+    [Description("Uso de disco de la base de datos central: tamaño total de la DB, suma de tablas y las top-N tablas por bytes (heap+índices+TOAST) con filas estimadas. Sirve para ubicar fugas de disco y verificar que la retención mantiene acotadas las tablas de alto volumen (vm_metrics, monitor_checks, etc.). Sólo lee el catálogo de Postgres — no expone datos de negocio.")]
+    public async Task<object> DatabaseDiskUsageAsync(
+        [Description("Cantidad de tablas más grandes a devolver (1-200, default 30).")] int topN,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.MetricsRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.MetricsRead);
+        }
+        var effective = topN <= 0 ? 30 : topN;
+        var result = await mediator.Send(new GetDatabaseDiskUsageQuery(effective), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
 }
