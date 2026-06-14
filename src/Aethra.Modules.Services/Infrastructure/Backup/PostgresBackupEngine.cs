@@ -37,17 +37,20 @@ public sealed class PostgresBackupEngine(
         await using var conn = new NpgsqlConnection(connString);
         await conn.OpenAsync(ct).ConfigureAwait(false);
 
-        // Listar tablas user-land del schema public.
-        var tables = new List<string>();
+        // Listar tablas de TODOS los schemas user-land (no sólo 'public'): la DB del control-plane y de
+        // los módulos es multi-schema (projects, vms, metrics, monitoring, ...). Antes sólo se respaldaba
+        // 'public' → dumps casi vacíos para DBs multi-schema. Excluimos los catálogos del sistema.
+        var tables = new List<(string Schema, string Table)>();
         await using (var cmd = new NpgsqlCommand(
-            "SELECT table_name FROM information_schema.tables "
-            + "WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name",
+            "SELECT table_schema, table_name FROM information_schema.tables "
+            + "WHERE table_schema NOT IN ('pg_catalog', 'information_schema') "
+            + "AND table_type = 'BASE TABLE' ORDER BY table_schema, table_name",
             conn))
         await using (var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
         {
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
             {
-                tables.Add(reader.GetString(0));
+                tables.Add((reader.GetString(0), reader.GetString(1)));
             }
         }
 
@@ -60,14 +63,14 @@ public sealed class PostgresBackupEngine(
             await writer.WriteLineAsync($"-- timestamp: {DateTimeOffset.UtcNow:O}").ConfigureAwait(false);
             await writer.WriteLineAsync($"-- tables: {tables.Count}").ConfigureAwait(false);
 
-            foreach (var table in tables)
+            foreach (var (schema, table) in tables)
             {
-                var quoted = PostgresIdentifier.Quote(table);
-                await writer.WriteLineAsync($"COPY public.{quoted} FROM STDIN;").ConfigureAwait(false);
+                var qualified = $"{PostgresIdentifier.Quote(schema)}.{PostgresIdentifier.Quote(table)}";
+                await writer.WriteLineAsync($"COPY {qualified} FROM STDIN;").ConfigureAwait(false);
                 await writer.FlushAsync(ct).ConfigureAwait(false);
 
                 await using var copy = await conn.BeginTextExportAsync(
-                    $"COPY public.{quoted} TO STDOUT", ct).ConfigureAwait(false);
+                    $"COPY {qualified} TO STDOUT", ct).ConfigureAwait(false);
                 var buffer = new char[8192];
                 int read;
                 while ((read = await copy.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
