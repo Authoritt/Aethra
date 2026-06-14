@@ -77,7 +77,7 @@ public sealed class SatelliteBackupStorage(
         return best.VmId;
     }
 
-    private static (string Target, string Sub) ParseDestination(string destinationBase)
+    internal static (string Target, string Sub) ParseDestination(string destinationBase)
     {
         var s = StripScheme(destinationBase).Trim('/');
         var slash = s.IndexOf('/');
@@ -90,7 +90,7 @@ public sealed class SatelliteBackupStorage(
         return (target.Length == 0 ? "auto" : target, sub.Length == 0 ? "backups" : sub);
     }
 
-    private static (string VmId, string RelativePath) ParseFull(string fullPath)
+    internal static (string VmId, string RelativePath) ParseFull(string fullPath)
     {
         var s = StripScheme(fullPath).Trim('/');
         var slash = s.IndexOf('/');
@@ -106,6 +106,6 @@ public sealed class SatelliteBackupStorage(
             ? uri["satellite://".Length..]
             : uri;
 
-    private static string CombineRelative(string sub, string fileName)
+    internal static string CombineRelative(string sub, string fileName)
         => string.IsNullOrEmpty(sub) ? fileName : $"{sub.Trim('/')}/{fileName}";
 }

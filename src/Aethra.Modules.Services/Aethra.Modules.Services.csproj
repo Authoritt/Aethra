@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Aethra.Modules.Services.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Aethra.Shared.Kernel\Aethra.Shared.Kernel.csproj" />
     <ProjectReference Include="..\Aethra.Shared.Contracts\Aethra.Shared.Contracts.csproj" />
     <ProjectReference Include="..\Aethra.Shared.Infrastructure\Aethra.Shared.Infrastructure.csproj" />
