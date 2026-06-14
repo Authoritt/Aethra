@@ -99,7 +99,11 @@ public sealed class BackupsTools(IMediator mediator, IMcpCallerContext caller)
             return McpResponses.InsufficientScope(McpScopes.ServicesRead);
         }
         var result = await mediator.Send(new GetBackupPolicyQuery(serviceId), ct).ConfigureAwait(false);
-        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+        // policy = null cuando no hay política configurada (sólo backups on-demand). Envolvemos en un
+        // objeto no-nulo para distinguir claramente ese caso y satisfacer McpResponses.Ok(object).
+        return result.IsSuccess
+            ? McpResponses.Ok(new { service_id = serviceId, policy = result.Value })
+            : McpResponses.FromError(result.Error);
     }
 
     [McpServerTool(Name = "aethra_list_service_backups", ReadOnly = true, OpenWorld = false)]
