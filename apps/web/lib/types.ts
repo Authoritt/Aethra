@@ -161,6 +161,22 @@ export interface VmMetricPoint {
   netBytesSent: number;
 }
 
+/** Uso de disco de una tabla: bytes totales (heap+índices+TOAST) y filas estimadas. */
+export interface TableDiskUsageDto {
+  schema: string;
+  table: string;
+  totalBytes: number;
+  estimatedRows: number;
+}
+
+/** Resumen de uso de disco de la base de datos central (GET /api/metrics/database). */
+export interface DatabaseDiskUsageDto {
+  databaseSizeBytes: number;
+  tablesTotalBytes: number;
+  tableCount: number;
+  tables: TableDiskUsageDto[];
+}
+
 /* -------------------------------------------------------------------------- */
 /* Reverse proxy routes (F3)                                                  */
 /* -------------------------------------------------------------------------- */

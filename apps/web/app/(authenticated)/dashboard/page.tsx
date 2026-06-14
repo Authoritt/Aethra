@@ -15,10 +15,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { KpiCard } from "@/components/aethra/kpi-card";
+import { DiskUsageCard } from "@/components/aethra/disk-usage-card";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   AppEnvironmentOverviewDto,
   AppOverviewDto,
+  DatabaseDiskUsageDto,
   MachineOverviewDto,
   OperationalIssueDto,
   PublicEndpointOverviewDto,
@@ -28,7 +30,7 @@ import type {
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
-  const [appsData, envsData, releasesData, endpointsData, issuesData, machinesData] =
+  const [appsData, envsData, releasesData, endpointsData, issuesData, machinesData, diskData] =
     await Promise.all([
       serverFetch<AppOverviewDto[]>("/api/ops/apps"),
       serverFetch<AppEnvironmentOverviewDto[]>("/api/ops/app-environments"),
@@ -36,6 +38,7 @@ export default async function Dashboard() {
       serverFetch<PublicEndpointOverviewDto[]>("/api/ops/public-endpoints"),
       serverFetch<OperationalIssueDto[]>("/api/ops/operational-issues"),
       serverFetch<MachineOverviewDto[]>("/api/ops/machines"),
+      serverFetch<DatabaseDiskUsageDto>("/api/metrics/database?top=12"),
     ]);
 
   if (
@@ -68,6 +71,13 @@ export default async function Dashboard() {
   const recentReleases = releases.slice(0, 5);
   const brokenEndpointRows = endpoints.filter((e) => e.healthStatus !== "healthy").slice(0, 5);
   const machineRows = machines.slice(0, 6);
+  const disk =
+    diskData &&
+    diskData !== "unauthorized" &&
+    diskData !== "notfound" &&
+    diskData !== "error"
+      ? diskData
+      : null;
 
   return (
     <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
@@ -302,6 +312,12 @@ export default async function Dashboard() {
           </CardContent>
         </Card>
       </section>
+
+      {disk ? (
+        <section className="grid grid-cols-1 gap-4">
+          <DiskUsageCard data={disk} />
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -35,6 +35,16 @@ public static class MetricsEndpoints
         .WithDescription("Historial de métricas de una VM en una ventana (hours, default 24, máx 168) "
             + "downsampled a 'points' puntos (default 240). Para rangos largos sin miles de muestras.");
 
+        group.MapGet("/database", async (int? top, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetDatabaseDiskUsageQuery(top ?? 30), ct);
+            return ToResult(result);
+        })
+        .RequireAuthorization(ScopeRead)
+        .WithName("GetDatabaseDiskUsage")
+        .WithDescription("Uso de disco de la base de datos central: tamaño total, suma de tablas y top-N tablas "
+            + "por bytes (heap+índices+TOAST) con filas estimadas. Para ubicar fugas de disco. Sólo catálogo PG.");
+
         return app;
     }
 
