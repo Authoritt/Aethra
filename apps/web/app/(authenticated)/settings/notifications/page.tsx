@@ -21,6 +21,7 @@ import type { NotificationChannelDto } from "@/lib/types";
 import { TestChannelButton } from "./TestChannelButton";
 import { DeleteChannelButton } from "./DeleteChannelButton";
 import { ToggleActiveSwitch } from "./ToggleActiveSwitch";
+import { EditEventsButton } from "./EditEventsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -155,6 +156,11 @@ export default async function NotificationsPage() {
                   </TableCell>
                   <TableCell className="align-top text-right">
                     <div className="inline-flex items-center gap-2">
+                      <EditEventsButton
+                        id={c.id}
+                        name={c.name}
+                        eventFilters={c.eventFilters}
+                      />
                       <TestChannelButton id={c.id} name={c.name} />
                       <DeleteChannelButton id={c.id} name={c.name} />
                     </div>
