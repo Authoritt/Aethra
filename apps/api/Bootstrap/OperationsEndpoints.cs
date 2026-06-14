@@ -2729,7 +2729,13 @@ public static class OperationsEndpoints
         {
             if (string.IsNullOrWhiteSpace(vm.containerRuntime))
             {
-                return new MachineReadiness("degraded", "Satellite connected but container runtime is unknown.");
+                // Un nodo conectado sin runtime de contenedores sólo es un problema si tiene (o debería
+                // tener) workloads. Marcar "degraded" un nodo ocioso sin runtime (p.ej. de observabilidad)
+                // es ruido; con cero workloads asignados es "ready" con una razón aclaratoria. Si hay
+                // workloads asignados, sí es degraded (no se pueden operar sin runtime).
+                return workloadCount == 0
+                    ? new MachineReadiness("ready", "Connected; no container runtime (idle, no workloads assigned).")
+                    : new MachineReadiness("degraded", "Satellite connected but container runtime is unknown.");
             }
             if (vm.runtimeSocketAccessible == false)
             {
