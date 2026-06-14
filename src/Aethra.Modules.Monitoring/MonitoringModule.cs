@@ -53,6 +53,10 @@ public static class MonitoringModule
         services.AddScoped<IMonitorProbe, HttpMonitorProbe>();
         services.AddHostedService<MonitorWorker>();
 
+        // Retención de checks crudos (evita el crecimiento ilimitado del disco) — sección "Monitoring".
+        services.Configure<MonitoringRetentionOptions>(configuration.GetSection("Monitoring"));
+        services.AddHostedService<MonitorCheckRetentionWorker>();
+
         return services;
     }
 
