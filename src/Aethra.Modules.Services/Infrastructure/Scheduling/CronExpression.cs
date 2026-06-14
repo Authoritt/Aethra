@@ -98,8 +98,13 @@ public sealed class CronExpression
             }
             if (!_daysOfMonth.Contains(local.Day) || !_daysOfWeek.Contains((int)local.DayOfWeek))
             {
-                local = local.Date.AddDays(1);
-                local = new DateTimeOffset(local.Year, local.Month, local.Day, 0, 0, 0, local.Offset);
+                // Avanzar al inicio del día siguiente PRESERVANDO el offset de la zona objetivo.
+                // OJO: no reasignar `local` desde `local.Date.AddDays(1)` (un DateTime Unspecified),
+                // porque la conversión implícita a DateTimeOffset usa la zona LOCAL de la máquina y
+                // corrompía el offset → jobs/backups con TimeZone != UTC se programaban con horas
+                // desfasadas en cada cambio de día.
+                var nextDay = local.Date.AddDays(1);
+                local = new DateTimeOffset(nextDay.Year, nextDay.Month, nextDay.Day, 0, 0, 0, local.Offset);
                 continue;
             }
             if (!_hours.Contains(local.Hour))
