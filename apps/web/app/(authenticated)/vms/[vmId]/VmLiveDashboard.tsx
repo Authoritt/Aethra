@@ -77,6 +77,15 @@ export default function VmLiveDashboard({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
+  // Reloj de cliente (1s) para el badge de frescura. Se inicia en useEffect → sin mismatch de hydration.
+  const [nowMs, setNowMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const connection = new HubConnectionBuilder()
@@ -180,6 +189,11 @@ export default function VmLiveDashboard({
   }, [range, vmId]);
 
   const latest = points.length > 0 ? points[points.length - 1] : null;
+  // Antigüedad de la última muestra recibida (sólo relevante en "vivo").
+  const lastSampleAgeSec =
+    nowMs !== null && latest
+      ? Math.max(0, Math.round((nowMs - Date.parse(latest.timestamp)) / 1000))
+      : null;
   const memoryTotal = latest?.memoryTotalBytes ?? totalMemoryBytes ?? 0;
   const memoryUsed = latest?.memoryUsedBytes ?? 0;
   const memoryPct = memoryTotal > 0 ? (memoryUsed / memoryTotal) * 100 : 0;
@@ -219,7 +233,10 @@ export default function VmLiveDashboard({
         <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
           Métricas en vivo
         </h2>
-        <ConnectionBadge phase={phase} status={status} />
+        <div className="flex items-center gap-2">
+          {range === "live" ? <FreshnessBadge ageSec={lastSampleAgeSec} /> : null}
+          <ConnectionBadge phase={phase} status={status} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
@@ -365,6 +382,39 @@ function BigStat({
       </CardContent>
     </Card>
   );
+}
+
+function FreshnessBadge({ ageSec }: { ageSec: number | null }) {
+  if (ageSec === null) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+        <span className="size-1.5 rounded-full bg-muted-foreground" />
+        sin muestras
+      </span>
+    );
+  }
+  const stale = ageSec > 30;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+        stale
+          ? "border-warning/30 bg-warning/10 text-warning-foreground"
+          : "border-success/30 bg-success/10 text-success-foreground",
+      )}
+      title="Tiempo desde la última muestra recibida del satélite"
+    >
+      <span className={cn("size-1.5 rounded-full", stale ? "bg-warning" : "bg-success")} />
+      {stale ? "sin datos hace " : "hace "}
+      {formatAge(ageSec)}
+    </span>
+  );
+}
+
+function formatAge(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`;
+  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
 }
 
 function ConnectionBadge({
