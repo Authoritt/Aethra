@@ -202,8 +202,9 @@ export default function VmLiveDashboard({
   const diskFree = Math.max(0, diskTotal - diskUsed);
   const diskPct = diskTotal > 0 ? (diskUsed / diskTotal) * 100 : 0;
   const cpuPct = latest?.cpuPercent ?? 0;
-  const netRx = latest?.netBytesReceived ?? 0;
-  const netTx = latest?.netBytesSent ?? 0;
+  // Tasa de red (bytes/s): delta entre las dos últimas muestras del stream / delta de tiempo. Los
+  // contadores del satélite son acumulativos; un reinicio baja el contador → se hace clamp a 0.
+  const netRate = computeNetRate(points);
 
   // En "vivo" graficamos el stream; en histórico, la ventana cargada por REST.
   const displayPoints = range === "live" ? points : history;
@@ -265,8 +266,12 @@ export default function VmLiveDashboard({
         />
         <BigStat
           label="Red"
-          value={`${formatBytes(netRx)} ↓  ${formatBytes(netTx)} ↑`}
-          sub="acumulado del satélite"
+          value={
+            netRate
+              ? `${formatBytes(netRate.rx)}/s ↓  ${formatBytes(netRate.tx)}/s ↑`
+              : "—"
+          }
+          sub={netRate ? "tasa actual (rx / tx)" : "esperando muestras"}
         />
       </div>
 
@@ -487,6 +492,21 @@ function formatBytes(bytes: number): string {
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+/** Tasa de red en bytes/s entre las dos últimas muestras del stream (contadores acumulativos). */
+function computeNetRate(
+  points: VmMetricPoint[],
+): { rx: number; tx: number } | null {
+  if (points.length < 2) return null;
+  const a = points[points.length - 2];
+  const b = points[points.length - 1];
+  const dt = (Date.parse(b.timestamp) - Date.parse(a.timestamp)) / 1000;
+  if (!(dt > 0)) return null;
+  return {
+    rx: Math.max(0, b.netBytesReceived - a.netBytesReceived) / dt,
+    tx: Math.max(0, b.netBytesSent - a.netBytesSent) / dt,
+  };
 }
 
 /** Eje X para el rango de 7 días: incluye día/mes además de la hora. */
