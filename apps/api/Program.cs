@@ -126,6 +126,14 @@ builder.Services.AddSingleton<Aethra.Shared.Contracts.Containers.ISatelliteRpcCl
 builder.Services.AddSingleton<Aethra.Shared.Contracts.Containers.ISatelliteRpcCallbacks>(
     sp => sp.GetRequiredService<SignalRSatelliteRpcClient>());
 
+// Capacidad de satélites (disco libre) + backend de backups satellite:// — viven en el host porque
+// dependen de ISatelliteRpcClient/Vms. SatelliteBackupStorage se suma al IEnumerable<IBackupStorage>
+// que inyecta el BackupOrchestrator (junto a volume:// y s3://).
+builder.Services.AddScoped<Aethra.Shared.Contracts.Containers.ISatelliteCapacityProvider,
+    Aethra.Api.Hubs.MediatrSatelliteCapacityProvider>();
+builder.Services.AddScoped<Aethra.Modules.Services.Infrastructure.Backup.IBackupStorage,
+    Aethra.Modules.Services.Infrastructure.Backup.SatelliteBackupStorage>();
+
 // F11.4 — Notifier que reenvía progreso de install al frontend via DashboardHub.
 builder.Services.AddSingleton<Aethra.Shared.Contracts.Vms.IInstallProgressNotifier,
     InstallProgressNotifier>();
