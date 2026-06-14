@@ -24,6 +24,7 @@ public sealed class SatelliteCommandHandler(
     IOptions<SatelliteOptions> options)
 {
     private readonly int _imageRetentionKeep = options.Value.ImageRetentionKeep;
+    private readonly int _buildCacheMaxAgeHours = options.Value.BuildCacheMaxAgeHours;
 
     /// <summary>Deriva el repositorio (sin el <c>:tag</c>) de un image ref, respetando un puerto
     /// de registry (<c>host:5000/repo:tag</c>): el separador es el último ':' después del último '/'.</summary>
@@ -87,6 +88,25 @@ public sealed class SatelliteCommandHandler(
                     catch (Exception ex)
                     {
                         logger.LogWarning(ex, "Retención de imágenes falló para {Repo} (no bloquea el build).", repo);
+                    }
+                }
+
+                // Prune del build cache tras build exitoso: el git-mode (un build por commit) acumula
+                // capas de BuildKit sin límite (~15 GB/ciclo). Best-effort, sólo cache viejo, nunca bloquea.
+                if (build.Success && _buildCacheMaxAgeHours > 0)
+                {
+                    try
+                    {
+                        var summary = await runtime.PruneBuildCacheAsync(_buildCacheMaxAgeHours, CancellationToken.None);
+                        if (!string.IsNullOrWhiteSpace(summary))
+                        {
+                            logger.LogInformation(
+                                "Prune de build cache (no usado >{Hours}h): {Summary}", _buildCacheMaxAgeHours, summary);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Prune de build cache falló (no bloquea el build).");
                     }
                 }
             });

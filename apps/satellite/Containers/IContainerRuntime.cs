@@ -54,4 +54,14 @@ public interface IContainerRuntime
     /// nada. Devuelve los refs efectivamente borrados.
     /// </summary>
     Task<IReadOnlyList<string>> PruneImageRepoAsync(string repository, int keepLast, CancellationToken ct);
+
+    /// <summary>
+    /// Poda el build cache del runtime (capas intermedias de BuildKit/buildah que el flujo git-mode
+    /// acumula sin límite — ~15 GB por ciclo de builds → fuga de disco). Sólo borra cache no usado en
+    /// las últimas <paramref name="maxAgeHours"/> horas, conservando el reciente para rebuilds rápidos;
+    /// no toca imágenes ni contenedores. Best-effort e idempotente: con <paramref name="maxAgeHours"/>
+    /// &lt;= 0 no hace nada. Devuelve un resumen legible (ej. <c>"Total reclaimed space: 12GB"</c>) o
+    /// <c>null</c> si no aplicó o falló.
+    /// </summary>
+    Task<string?> PruneBuildCacheAsync(int maxAgeHours, CancellationToken ct);
 }

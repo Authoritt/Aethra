@@ -17,6 +17,14 @@ public sealed class SatelliteOptions
     public int ImageRetentionKeep { get; set; } = 3;
 
     /// <summary>
+    /// Tras cada build git-mode, poda el build cache del runtime no usado en las últimas N horas
+    /// (BuildKit/buildah acumula capas intermedias sin límite — ~15 GB por ciclo de builds → fuga de
+    /// disco). Conserva el cache reciente para que los rebuilds sigan siendo rápidos. 0 o negativo
+    /// desactiva el prune. Default 48 (2 días).
+    /// </summary>
+    public int BuildCacheMaxAgeHours { get; set; } = 48;
+
+    /// <summary>
     /// Path al archivo SQLite del buffer de snapshots. Si es null/empty, se resuelve por
     /// env var <c>AETHRA_SATELLITE_BUFFER_PATH</c> o default por OS (Linux: <c>/var/lib/aethra/buffer.db</c>,
     /// Windows: <c>%LOCALAPPDATA%\aethra\buffer.db</c>).

@@ -474,6 +474,28 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
         return removed;
     }
 
+    public async Task<string?> PruneBuildCacheAsync(int maxAgeHours, CancellationToken ct)
+    {
+        if (maxAgeHours <= 0)
+        {
+            return null;
+        }
+
+        // `docker builder prune -f --filter until=<h>h`: borra cache de build no referenciado en las
+        // últimas N horas. No toca el cache reciente (rebuilds siguen rápidos) ni imágenes/contenedores.
+        var until = "until=" + maxAgeHours.ToString(CultureInfo.InvariantCulture) + "h";
+        var (code, stdout, _) = await RunProcessAsync(
+            "docker", ["builder", "prune", "-f", "--filter", until], ct).ConfigureAwait(false);
+        if (code != 0)
+        {
+            return null;
+        }
+
+        // La CLI imprime "Total reclaimed space: <N>" al final; devolvemos esa línea como resumen.
+        return SplitLines(stdout).LastOrDefault(l => l.Contains("reclaimed", StringComparison.OrdinalIgnoreCase))
+            ?? "build cache pruned";
+    }
+
     /// <summary>
     /// Streamea logs en formato multiplexado. Docker antepone un header de 8 bytes por frame:
     /// <c>[StreamType, 0,0,0, BigEndianSizeUInt32]</c>. Docker.DotNet expone

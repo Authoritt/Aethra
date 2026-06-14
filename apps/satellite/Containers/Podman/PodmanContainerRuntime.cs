@@ -453,6 +453,26 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
         return removed;
     }
 
+    public async Task<string?> PruneBuildCacheAsync(int maxAgeHours, CancellationToken ct)
+    {
+        if (maxAgeHours <= 0)
+        {
+            return null;
+        }
+
+        // Podman 4+ soporta `podman builder prune`. Best-effort: si no existe o falla, no-op.
+        var until = "until=" + maxAgeHours.ToString(CultureInfo.InvariantCulture) + "h";
+        var (code, stdout, _) = await RunPodmanAsync(
+            ["builder", "prune", "-f", "--filter", until], ct).ConfigureAwait(false);
+        if (code != 0)
+        {
+            return null;
+        }
+
+        return SplitLines(stdout).LastOrDefault(l => l.Contains("reclaimed", StringComparison.OrdinalIgnoreCase))
+            ?? "build cache pruned";
+    }
+
     public async IAsyncEnumerable<string> StreamLogsAsync(
         string nameOrId, int tailLines, [EnumeratorCancellation] CancellationToken ct)
     {
