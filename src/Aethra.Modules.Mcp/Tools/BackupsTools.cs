@@ -54,13 +54,17 @@ public sealed class BackupsTools(IMediator mediator, IMcpCallerContext caller)
 
     [McpServerTool(Name = "aethra_set_backup_policy", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Configura (o limpia) la política de backups AUTOMÁTICOS de un Managed Service: cron + retención + "
-        + "destino. Destino: 'volume://ruta' (disco local) o 's3://bucket/prefix'. Pasar cron vacío/null limpia la "
-        + "política (desactiva los backups programados; los on-demand vía aethra_backup_service siguen disponibles).")]
+        + "destino. Destinos: 'volume://ruta' (disco local del central), 's3://bucket/prefix', o "
+        + "'satellite://auto' / 'satellite://<vmId>' (guarda el backup en el disco de un SATÉLITE con espacio libre "
+        + "para no llenar el central; 'auto' elige el satélite conectado con más disco; cap ~60 MiB/backup, para más "
+        + "grande usar s3://). Pasar cron vacío/null limpia la política (desactiva los backups programados; los "
+        + "on-demand vía aethra_backup_service siguen disponibles).")]
     public async Task<object> SetBackupPolicyAsync(
         [Description("ID del Managed Service (formato 'svc_...').")] string serviceId,
         [Description("Cron (ej. '0 2 * * *' = 02:00 diario). Vacío/null = desactivar backups automáticos.")] string? cronExpression,
         [Description("Cuántos backups retener (>0). Requerido cuando se setea cron.")] int? retentionCount,
-        [Description("Destino: 'volume://path' o 's3://bucket/prefix'. Requerido cuando se setea cron.")] string? destination,
+        [Description("Destino: 'volume://path', 's3://bucket/prefix', o 'satellite://auto' (satélite con más disco "
+            + "libre) / 'satellite://<vmId>'. Requerido cuando se setea cron.")] string? destination,
         CancellationToken ct)
     {
         if (!caller.HasScope(McpScopes.ServicesWrite))
