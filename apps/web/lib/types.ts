@@ -1130,6 +1130,8 @@ export const NOTIFICATION_EVENT_TYPES = [
   "deployment.rolled_back",
   "cert.expired",
   "cert.failed",
+  "machine.disconnected",
+  "machine.connected",
 ] as const;
 
 /* -------------------------------------------------------------------------- */

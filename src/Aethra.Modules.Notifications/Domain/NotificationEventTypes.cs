@@ -17,6 +17,8 @@ public static class NotificationEventTypes
     public const string DeploymentRolledBack = "deployment.rolled_back";
     public const string CertificateExpired = "cert.expired";
     public const string CertificateFailed = "cert.failed";
+    public const string MachineDisconnected = "machine.disconnected";
+    public const string MachineConnected = "machine.connected";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -27,5 +29,7 @@ public static class NotificationEventTypes
         DeploymentRolledBack,
         CertificateExpired,
         CertificateFailed,
+        MachineDisconnected,
+        MachineConnected,
     };
 }
