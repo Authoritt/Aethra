@@ -24,6 +24,8 @@ internal static class McpScopes
     public const string MonitoringRead = "monitoring:read";
     public const string MonitoringWrite = "monitoring:write";
 
+    public const string ProxyRead = "proxy:read";
+
     public const string MetricsRead = "metrics:read";
 
     public const string CloudflareRead = "cloudflare:read";
