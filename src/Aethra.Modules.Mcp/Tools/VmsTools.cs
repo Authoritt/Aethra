@@ -22,6 +22,54 @@ public sealed class VmsTools(IMediator mediator, IMcpCallerContext caller)
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_cluster_disk_overview", ReadOnly = true, OpenWorld = false)]
+    [Description("Resumen de disco RAÍZ por VM del clúster: total/libre y % libre de cada nodo, total "
+        + "distribuible (suma del libre de los Connected) y qué nodos tienen capacidad de sobra. Sirve para "
+        + "decidir dónde distribuir backups/artefactos (satellite://auto va al nodo Connected con más disco "
+        + "libre). Read-only; sólo números de disco + slug/estado (sin datos sensibles).")]
+    public async Task<object> ClusterDiskOverviewAsync(CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.VmsRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.VmsRead);
+        }
+        var result = await mediator.Send(new ListVmsQuery(), ct).ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            return McpResponses.FromError(result.Error);
+        }
+
+        var nodes = result.Value
+            .Where(v => v.RootDiskTotalBytes is > 0)
+            .Select(v =>
+            {
+                var total = v.RootDiskTotalBytes ?? 0L;
+                var free = v.RootDiskAvailableBytes ?? 0L;
+                var connected = string.Equals(v.Status, "Connected", StringComparison.OrdinalIgnoreCase);
+                return new
+                {
+                    vm_id = v.Id,
+                    slug = v.Slug,
+                    status = v.Status,
+                    root_total_bytes = total,
+                    root_free_bytes = free,
+                    free_percent = total > 0 ? Math.Round(100.0 * free / total, 1) : 0,
+                    connected,
+                    has_spare = connected && total > 0 && (double)free / total >= 0.5,
+                };
+            })
+            .OrderByDescending(n => n.root_free_bytes)
+            .ToList();
+
+        return McpResponses.Ok(new
+        {
+            nodes,
+            node_count = nodes.Count,
+            distributable_free_bytes = nodes.Where(n => n.connected).Sum(n => n.root_free_bytes),
+            note = "satellite://auto coloca el backup en el nodo Connected con más disco libre.",
+        });
+    }
+
     [McpServerTool(Name = "aethra_get_vm", ReadOnly = true, OpenWorld = false)]
     [Description("Detalle de una VM por ID.")]
     public async Task<object> GetAsync(
