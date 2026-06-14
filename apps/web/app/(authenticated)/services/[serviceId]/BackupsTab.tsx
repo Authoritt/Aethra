@@ -26,7 +26,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError, api } from "@/lib/api";
-import type { ServiceBackupDto, ServiceBackupStatus } from "@/lib/types";
+import type {
+  ServiceBackupDto,
+  ServiceBackupStatus,
+  BackupPolicyDto,
+} from "@/lib/types";
 
 const STATUS_VARIANTS: Record<
   ServiceBackupStatus,
@@ -41,6 +45,7 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
   const t = useTranslations("pages.services_detail.backups");
   const router = useRouter();
   const [rows, setRows] = useState<ServiceBackupDto[]>([]);
+  const [policy, setPolicy] = useState<BackupPolicyDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyRun, setBusyRun] = useState(false);
   const [confirmRestore, setConfirmRestore] = useState<ServiceBackupDto | null>(
@@ -55,6 +60,14 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
         `/api/services/${encodeURIComponent(serviceId)}/backups?limit=100`,
       );
       setRows(data);
+      try {
+        const pol = await api<BackupPolicyDto | null>(
+          `/api/services/${encodeURIComponent(serviceId)}/backup-policy`,
+        );
+        setPolicy(pol ?? null);
+      } catch {
+        // La política es secundaria: no rompemos la vista de backups si falla.
+      }
     } catch (e) {
       const msg =
         e instanceof ApiError
@@ -160,6 +173,36 @@ export function BackupsTab({ serviceId }: { serviceId: string }) {
           {t("run_now")}
         </Button>
       </div>
+
+      <Card>
+        <CardContent className="p-4 text-sm">
+          {policy ? (
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+              <span className="font-medium text-foreground">Política automática</span>
+              <span>
+                <span className="text-muted-foreground">cron </span>
+                <code className="font-mono text-xs">{policy.cronExpression}</code>
+              </span>
+              <span>
+                <span className="text-muted-foreground">retiene </span>
+                {policy.retentionCount}
+              </span>
+              <span className="inline-flex min-w-0 items-center gap-1">
+                <span className="text-muted-foreground">destino </span>
+                <code className="truncate font-mono text-xs" title={policy.destination}>
+                  {policy.destination}
+                </code>
+              </span>
+            </div>
+          ) : (
+            <span className="text-muted-foreground">
+              Sin política automática. Los backups on-demand siguen disponibles con
+              “{t("run_now")}”; configurá una con destino volume://, s3:// o
+              satellite://auto (disco de un satélite con espacio libre).
+            </span>
+          )}
+        </CardContent>
+      </Card>
 
       {loading ? (
         <Card>

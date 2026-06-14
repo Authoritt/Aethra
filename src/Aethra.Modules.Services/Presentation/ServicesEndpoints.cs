@@ -191,6 +191,11 @@ public static class ServicesEndpoints
         .RequireAuthorization(ScopeWrite)
         .WithName("DeleteServiceBackup");
 
+        services.MapGet("/{serviceId}/backup-policy", async (string serviceId, IMediator m, CancellationToken ct) =>
+            ToResult(await m.Send(new GetBackupPolicyQuery(serviceId), ct)))
+            .RequireAuthorization(ScopeRead)
+            .WithName("GetBackupPolicy");
+
         services.MapPut("/{serviceId}/backup-policy", async (string serviceId, [FromBody] SetBackupPolicyRequest body,
             IMediator m, CancellationToken ct) =>
         {
