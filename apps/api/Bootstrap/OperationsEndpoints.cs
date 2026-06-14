@@ -1489,6 +1489,32 @@ public static class OperationsEndpoints
                     readiness.Status == "offline" ? "Reconnect satellite" : "Check machine setup",
                     $"/vms/{vm.id}"));
             }
+
+            // Presión de disco: alerta proactiva (antes de que se llene) — disco raíz por debajo del
+            // 15% libre = warning, 5% = critical. Complementa la retención/prune ("evitar fugas de disco").
+            if (vm.rootDiskTotalBytes is > 0 && vm.rootDiskAvailableBytes is not null)
+            {
+                var freeRatio = (double)vm.rootDiskAvailableBytes.Value / vm.rootDiskTotalBytes.Value;
+                if (freeRatio < 0.15)
+                {
+                    var freePct = (int)Math.Round(freeRatio * 100);
+                    issues.Add(new OperationalIssueDto(
+                        $"machine:{vm.id}:disk_pressure",
+                        "machine.disk_pressure",
+                        freeRatio < 0.05 ? "critical" : "warning",
+                        $"{vm.name}: disco raíz {freePct}% libre",
+                        "Machine",
+                        vm.id,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        vm.updatedAt,
+                        "Liberar disco (retención/prune) o distribuir backups a otro nodo (satellite://)",
+                        $"/vms/{vm.id}"));
+                }
+            }
         }
 
         var failedBuilds = await deploymentsDb.Builds.AsNoTracking()
