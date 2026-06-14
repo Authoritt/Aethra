@@ -36,14 +36,22 @@ internal sealed class PatchChannelHandler(
         }
 
         var now = clock.UtcNow;
+
+        // Si se provee config nuevo, validar su shape contra el TIPO del canal ANTES de mutar nada
+        // (igual que CreateChannel). Antes se cifraba/guardaba sin validar → un patch podía dejar el
+        // canal con config inválida y los envíos fallaban en silencio.
+        if (request.Config is JsonElement cfg)
+        {
+            var configError = NotificationConfigShape.Validate(channel.Type, cfg);
+            if (configError is not null)
+            {
+                return configError;
+            }
+            channel.UpdateConfig(codec.Encode(cfg.GetRawText()), now);
+        }
         if (request.IsActive is bool active)
         {
             channel.SetActive(active, now);
-        }
-        if (request.Config is JsonElement cfg && cfg.ValueKind == JsonValueKind.Object)
-        {
-            var cipher = codec.Encode(cfg.GetRawText());
-            channel.UpdateConfig(cipher, now);
         }
         if (request.EventFilters is not null)
         {
