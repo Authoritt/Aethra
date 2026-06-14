@@ -86,6 +86,22 @@ public sealed class BackupsTools(IMediator mediator, IMcpCallerContext caller)
             : McpResponses.FromError(result.Error);
     }
 
+    [McpServerTool(Name = "aethra_get_backup_policy", ReadOnly = true, OpenWorld = false)]
+    [Description("Lee la política de backups AUTOMÁTICOS vigente de un Managed Service (cron + retención + destino). "
+        + "Contraparte read de aethra_set_backup_policy (que era write-only vía MCP). Devuelve null si no hay "
+        + "política configurada (en ese caso sólo hay backups on-demand vía aethra_backup_service).")]
+    public async Task<object> GetBackupPolicyAsync(
+        [Description("ID del Managed Service (formato 'svc_...').")] string serviceId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ServicesRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ServicesRead);
+        }
+        var result = await mediator.Send(new GetBackupPolicyQuery(serviceId), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
     [McpServerTool(Name = "aethra_list_service_backups", ReadOnly = true, OpenWorld = false)]
     [Description("Lista los backups del servicio (más recientes primero). Read-only.")]
     public async Task<object> ListBackupsAsync(
