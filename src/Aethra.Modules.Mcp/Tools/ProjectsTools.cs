@@ -6,6 +6,7 @@ using Aethra.Modules.Projects.UseCases.Instances.Commands;
 using Aethra.Modules.Projects.UseCases.Instances.Queries;
 using Aethra.Modules.Projects.UseCases.Projects.Commands;
 using Aethra.Modules.Projects.UseCases.Templates.Commands;
+using Aethra.Modules.Projects.UseCases.Templates.Queries;
 using Aethra.Modules.Projects.UseCases.Projects.Queries;
 using MediatR;
 using ModelContextProtocol.Server;
@@ -149,6 +150,38 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
             return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
         }
         var result = await mediator.Send(new GetClientByIdQuery(clientId), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_list_templates", ReadOnly = true, OpenWorld = false)]
+    [Description("Lista los app-templates (definiciones de app desde repo Git) de un proyecto: slug, nombre, repo, "
+        + "branch, buildType. Read-only. NO incluye el webhook secret. (Distinto de aethra_list_service_templates, "
+        + "que son plantillas de Managed Services Postgres/Redis.)")]
+    public async Task<object> ListTemplatesAsync(
+        [Description("ID del proyecto (formato 'prj_...').")] string projectId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
+        }
+        var result = await mediator.Send(new ListTemplatesQuery(projectId), ct).ConfigureAwait(false);
+        return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
+    }
+
+    [McpServerTool(Name = "aethra_get_template", ReadOnly = true, OpenWorld = false)]
+    [Description("Detalle de un app-template: repo, branch, base dir, dockerfile/compose path, buildType, mapeos "
+        + "environment→branch, auto-preview y el NOMBRE de la credencial de acceso (no el token). Read-only. NO "
+        + "incluye el webhook secret (sólo se muestra al crear; rotalo con aethra_rotate_webhook_secret).")]
+    public async Task<object> GetTemplateAsync(
+        [Description("ID del template (formato 'tpl_...').")] string templateId,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsRead))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsRead);
+        }
+        var result = await mediator.Send(new GetTemplateByIdQuery(templateId), ct).ConfigureAwait(false);
         return result.IsSuccess ? McpResponses.Ok(result.Value) : McpResponses.FromError(result.Error);
     }
 
