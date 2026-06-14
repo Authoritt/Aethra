@@ -51,6 +51,10 @@ public static class NotificationsModule
         services.AddSingleton<NotificationDispatcher>();
         services.AddHostedService(sp => sp.GetRequiredService<NotificationDispatcher>());
 
+        // Retención del historial de envíos (evita el crecimiento ilimitado) — sección "Notifications".
+        services.Configure<NotificationsRetentionOptions>(configuration.GetSection("Notifications"));
+        services.AddHostedService<NotificationDeliveryRetentionWorker>();
+
         return services;
     }
 
