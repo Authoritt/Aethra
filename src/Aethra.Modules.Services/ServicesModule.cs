@@ -57,6 +57,10 @@ public static class ServicesModule
         services.AddSingleton<ScheduledJobWorker>();
         services.AddHostedService(sp => sp.GetRequiredService<ScheduledJobWorker>());
 
+        // Retención de corridas (stdout/stderr por run) — evita crecimiento ilimitado. Sección "ScheduledJobs".
+        services.Configure<ScheduledJobRunRetentionOptions>(configuration.GetSection("ScheduledJobs"));
+        services.AddHostedService<ScheduledJobRunRetentionWorker>();
+
         return services;
     }
 
