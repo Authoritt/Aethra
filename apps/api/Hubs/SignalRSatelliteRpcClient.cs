@@ -138,6 +138,33 @@ public sealed class SignalRSatelliteRpcClient : ISatelliteRpcClient, ISatelliteR
         return resp.Result;
     }
 
+    public async Task<StoreFileResponse> SendStoreFileAsync(
+        string vmId, string relativePath, byte[] content, CancellationToken ct)
+    {
+        var correlationId = NewCorrelationId();
+        // Usamos el timeout de build (largo): transferir un blob de varios MB puede tardar.
+        return await SendAndAwaitAsync<StoreFileResponse>(
+            vmId, correlationId, "StoreFile",
+            new StoreFileRequest(correlationId, relativePath, content), _buildTimeout, ct).ConfigureAwait(false);
+    }
+
+    public async Task<byte[]> SendReadFileAsync(string vmId, string relativePath, CancellationToken ct)
+    {
+        var correlationId = NewCorrelationId();
+        var resp = await SendAndAwaitAsync<ReadFileResponse>(
+            vmId, correlationId, "ReadFile",
+            new ReadFileRequest(correlationId, relativePath), _buildTimeout, ct).ConfigureAwait(false);
+        return resp.Content;
+    }
+
+    public async Task SendDeleteFileAsync(string vmId, string relativePath, CancellationToken ct)
+    {
+        var correlationId = NewCorrelationId();
+        await SendAndAwaitAsync<object>(
+            vmId, correlationId, "DeleteFile",
+            new DeleteFileRequest(correlationId, relativePath), _defaultTimeout, ct).ConfigureAwait(false);
+    }
+
     // -------------------------------------------------------------------------
     // ISatelliteRpcClient — streams.
     // -------------------------------------------------------------------------

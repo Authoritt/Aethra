@@ -51,4 +51,13 @@ public interface ISatelliteRpcClient
     /// <param name="timeoutSeconds">Timeout maximo en segundos.</param>
     Task<ExecResult> SendExecAsync(
         string vmId, string containerNameOrId, string command, int timeoutSeconds, CancellationToken ct);
+
+    /// <summary>File store: guarda un blob (p.ej. un backup) en el disco del satélite de la VM indicada.</summary>
+    Task<StoreFileResponse> SendStoreFileAsync(string vmId, string relativePath, byte[] content, CancellationToken ct);
+
+    /// <summary>File store: lee un blob previamente guardado en el satélite de la VM indicada.</summary>
+    Task<byte[]> SendReadFileAsync(string vmId, string relativePath, CancellationToken ct);
+
+    /// <summary>File store: borra un blob del satélite de la VM indicada (idempotente).</summary>
+    Task SendDeleteFileAsync(string vmId, string relativePath, CancellationToken ct);
 }

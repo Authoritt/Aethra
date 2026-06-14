@@ -171,6 +171,24 @@ public sealed class SatelliteHub(
         return Task.CompletedTask;
     }
 
+    public Task StoreFileResponse(StoreFileResponse response)
+    {
+        rpcCallbacks.CompleteRequest(response.CorrelationId, response);
+        return Task.CompletedTask;
+    }
+
+    public Task ReadFileResponse(ReadFileResponse response)
+    {
+        rpcCallbacks.CompleteRequest(response.CorrelationId, response);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteFileAck(string correlationId)
+    {
+        rpcCallbacks.CompleteRequest(correlationId, new object());
+        return Task.CompletedTask;
+    }
+
     public Task RpcFailed(string correlationId, string errorMessage)
     {
         rpcCallbacks.FailRequest(correlationId, new InvalidOperationException(errorMessage));
