@@ -25,6 +25,14 @@ public sealed class SatelliteOptions
     public int BuildCacheMaxAgeHours { get; set; } = 48;
 
     /// <summary>
+    /// Directorio base donde el central guarda blobs (p.ej. backups) en este satélite vía RPC
+    /// (file store). Si es null/empty se resuelve a <c>{DataVolumePath}/aethra-store</c> o
+    /// <c>/var/lib/aethra/store</c>. Permite usar el disco libre de satélites como almacenamiento.
+    /// Env: <c>AETHRA_REMOTE_STORE_PATH</c>.
+    /// </summary>
+    public string? RemoteStorePath { get; set; }
+
+    /// <summary>
     /// Path al archivo SQLite del buffer de snapshots. Si es null/empty, se resuelve por
     /// env var <c>AETHRA_SATELLITE_BUFFER_PATH</c> o default por OS (Linux: <c>/var/lib/aethra/buffer.db</c>,
     /// Windows: <c>%LOCALAPPDATA%\aethra\buffer.db</c>).

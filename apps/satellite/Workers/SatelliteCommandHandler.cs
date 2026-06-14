@@ -1,4 +1,5 @@
 using Aethra.Satellite.Containers;
+using Aethra.Satellite.Storage;
 using Aethra.Shared.Contracts.Containers;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
@@ -20,6 +21,7 @@ namespace Aethra.Satellite.Workers;
 /// </summary>
 public sealed class SatelliteCommandHandler(
     IContainerRuntime runtime,
+    ISatelliteFileStore fileStore,
     ILogger<SatelliteCommandHandler> logger,
     IOptions<SatelliteOptions> options)
 {
@@ -231,6 +233,48 @@ public sealed class SatelliteCommandHandler(
                     "ExecInContainerResponse",
                     new ExecInContainerResponse(req.CorrelationId, result),
                     CancellationToken.None);
+            });
+        });
+
+        // File store — el central guarda/lee/borra blobs (p.ej. backups) en el disco de este satélite.
+        connection.On<StoreFileRequest>("StoreFile", async (req) =>
+        {
+            await HandleAsync(connection, req.CorrelationId, "StoreFile", async () =>
+            {
+                logger.LogInformation("Central → StoreFile (corr={Corr}, path={Path}, bytes={Bytes})",
+                    req.CorrelationId, req.RelativePath, req.Content?.Length ?? 0);
+                var (stored, size) = await fileStore.StoreAsync(
+                    req.RelativePath, req.Content ?? [], CancellationToken.None);
+                await connection.InvokeAsync(
+                    "StoreFileResponse",
+                    new StoreFileResponse(req.CorrelationId, stored, size),
+                    CancellationToken.None);
+            });
+        });
+
+        connection.On<ReadFileRequest>("ReadFile", async (req) =>
+        {
+            await HandleAsync(connection, req.CorrelationId, "ReadFile", async () =>
+            {
+                logger.LogInformation("Central → ReadFile (corr={Corr}, path={Path})",
+                    req.CorrelationId, req.RelativePath);
+                var bytes = await fileStore.ReadAsync(req.RelativePath, CancellationToken.None);
+                await connection.InvokeAsync(
+                    "ReadFileResponse",
+                    new ReadFileResponse(req.CorrelationId, bytes),
+                    CancellationToken.None);
+            });
+        });
+
+        connection.On<DeleteFileRequest>("DeleteFile", async (req) =>
+        {
+            await HandleAsync(connection, req.CorrelationId, "DeleteFile", async () =>
+            {
+                logger.LogInformation("Central → DeleteFile (corr={Corr}, path={Path})",
+                    req.CorrelationId, req.RelativePath);
+                await fileStore.DeleteAsync(req.RelativePath, CancellationToken.None);
+                await connection.InvokeAsync(
+                    "DeleteFileAck", req.CorrelationId, CancellationToken.None);
             });
         });
     }

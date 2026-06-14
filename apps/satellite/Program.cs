@@ -45,6 +45,8 @@ builder.Services.Configure<SatelliteOptions>(opts =>
         ?? "docker").ToLowerInvariant();
     opts.DataVolumePath = Environment.GetEnvironmentVariable("AETHRA_DATA_VOLUME_PATH")
         ?? section["DataVolumePath"];
+    opts.RemoteStorePath = Environment.GetEnvironmentVariable("AETHRA_REMOTE_STORE_PATH")
+        ?? section["RemoteStorePath"];
     if (int.TryParse(
             Environment.GetEnvironmentVariable("AETHRA_IMAGE_RETENTION_KEEP"),
             NumberStyles.Integer,
@@ -93,6 +95,9 @@ switch (runtimeKind)
         throw new InvalidOperationException(
             $"Container runtime no soportado: '{runtimeKind}'. Valores válidos: 'docker', 'podman'.");
 }
+
+builder.Services.AddSingleton<Aethra.Satellite.Storage.ISatelliteFileStore,
+    Aethra.Satellite.Storage.FilesystemSatelliteFileStore>();
 
 builder.Services.AddSingleton<SatelliteCommandHandler>();
 
