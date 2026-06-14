@@ -52,6 +52,10 @@ public static class DeploymentsModule
         services.AddScoped<IDeploymentOrchestrator, DeploymentOrchestrator>();
         services.AddHostedService<DeploymentWorker>();
 
+        // Retención de builds/deployments + sus logs (crecen por cada build/deploy) — sección "Deployments".
+        services.Configure<DeploymentsRetentionOptions>(configuration.GetSection("Deployments"));
+        services.AddHostedService<DeploymentsRetentionWorker>();
+
         return services;
     }
 
