@@ -15,6 +15,10 @@ public static class MetricsModule
         var conn = configuration.GetConnectionString("Aethra")
             ?? throw new InvalidOperationException("ConnectionStrings:Aethra no configurado.");
         services.AddAethraModuleDbContext<MetricsDbContext>(conn);
+
+        // Retención de métricas crudas (evita el crecimiento ilimitado del disco) — sección "Metrics".
+        services.Configure<MetricsRetentionOptions>(configuration.GetSection("Metrics"));
+        services.AddHostedService<MetricsRetentionWorker>();
         return services;
     }
 

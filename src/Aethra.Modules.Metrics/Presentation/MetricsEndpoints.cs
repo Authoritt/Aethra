@@ -25,6 +25,16 @@ public static class MetricsEndpoints
         .WithName("GetLatestVmMetrics")
         .WithDescription("Últimas N muestras de métricas de una VM (cronológico ascendente).");
 
+        group.MapGet("/vms/{vmId}/history", async (string vmId, int? hours, int? points, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetMetricsHistoryQuery(vmId, hours ?? 24, points ?? 240), ct);
+            return ToResult(result);
+        })
+        .RequireAuthorization(ScopeRead)
+        .WithName("GetVmMetricsHistory")
+        .WithDescription("Historial de métricas de una VM en una ventana (hours, default 24, máx 168) "
+            + "downsampled a 'points' puntos (default 240). Para rangos largos sin miles de muestras.");
+
         return app;
     }
 
