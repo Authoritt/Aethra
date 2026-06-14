@@ -8,12 +8,37 @@ import {
   LogLevel,
 } from "@microsoft/signalr";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MetricsChart } from "@/components/aethra/metrics-chart";
-import { API_URL } from "@/lib/api";
+import { MetricsChart, type MetricsChartSeries } from "@/components/aethra/metrics-chart";
+import { API_URL, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { VmMetricPoint, VmStatus } from "@/lib/types";
 
 const MAX_POINTS = 60;
+
+/**
+ * Rangos del gráfico. "live" mantiene el stream SignalR (últimos {MAX_POINTS} puntos);
+ * los demás llaman a GET /api/metrics/vms/{id}/history?hours=H (downsampled a 240 puntos).
+ * El historial no trae disco (la query lo omite) → en histórico sólo se grafica CPU/RAM.
+ */
+const RANGES = [
+  { key: "live", label: "Vivo", hours: 0, chartLabel: `últimos ${MAX_POINTS} puntos` },
+  { key: "1h", label: "1 h", hours: 1, chartLabel: "última hora" },
+  { key: "24h", label: "24 h", hours: 24, chartLabel: "últimas 24 h" },
+  { key: "7d", label: "7 d", hours: 168, chartLabel: "últimos 7 días" },
+] as const;
+
+type RangeKey = (typeof RANGES)[number]["key"];
+
+const LIVE_SERIES: MetricsChartSeries[] = [
+  { dataKey: "cpu", label: "CPU", tone: "info" },
+  { dataKey: "ram", label: "RAM", tone: "primary" },
+  { dataKey: "disk", label: "Disco", tone: "warning" },
+];
+
+const HISTORY_SERIES: MetricsChartSeries[] = [
+  { dataKey: "cpu", label: "CPU", tone: "info" },
+  { dataKey: "ram", label: "RAM", tone: "primary" },
+];
 
 type ConnectionPhase =
   | "idle"
@@ -45,6 +70,12 @@ export default function VmLiveDashboard({
   const [status, setStatus] = useState<VmStatus>(initialStatus);
   const [phase, setPhase] = useState<ConnectionPhase>("idle");
   const connectionRef = useRef<HubConnection | null>(null);
+
+  // Rango del gráfico: "live" usa el stream SignalR; los demás cargan historial REST.
+  const [range, setRange] = useState<RangeKey>("live");
+  const [history, setHistory] = useState<VmMetricPoint[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +146,39 @@ export default function VmLiveDashboard({
     };
   }, [vmId]);
 
+  // Carga (y refresca cada 60s) el historial cuando el rango no es "vivo".
+  useEffect(() => {
+    if (range === "live") return;
+    const cfg = RANGES.find((r) => r.key === range);
+    if (!cfg) return;
+
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    const load = () =>
+      api<VmMetricPoint[]>(
+        `/api/metrics/vms/${vmId}/history?hours=${cfg.hours}&points=240`,
+      )
+        .then((data) => {
+          if (cancelled) return;
+          setHistory(data);
+          setHistoryLoading(false);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setHistoryError("No se pudo cargar el historial.");
+          setHistoryLoading(false);
+        });
+
+    load();
+    const id = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [range, vmId]);
+
   const latest = points.length > 0 ? points[points.length - 1] : null;
   const memoryTotal = latest?.memoryTotalBytes ?? totalMemoryBytes ?? 0;
   const memoryUsed = latest?.memoryUsedBytes ?? 0;
@@ -127,9 +191,14 @@ export default function VmLiveDashboard({
   const netRx = latest?.netBytesReceived ?? 0;
   const netTx = latest?.netBytesSent ?? 0;
 
+  // En "vivo" graficamos el stream; en histórico, la ventana cargada por REST.
+  const displayPoints = range === "live" ? points : history;
+  const activeRange = RANGES.find((r) => r.key === range) ?? RANGES[0];
+  const chartSeries = range === "live" ? LIVE_SERIES : HISTORY_SERIES;
+
   const chartData = useMemo(
     () =>
-      points.map((p) => ({
+      displayPoints.map((p) => ({
         timestamp: p.timestamp,
         cpu: round1(p.cpuPercent),
         ram:
@@ -141,7 +210,7 @@ export default function VmLiveDashboard({
             ? round1((p.diskUsedBytes / p.diskTotalBytes) * 100)
             : 0,
       })),
-    [points],
+    [displayPoints],
   );
 
   return (
@@ -185,29 +254,63 @@ export default function VmLiveDashboard({
       </div>
 
       <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-base">
-            CPU · RAM · Disco (%) — últimos {MAX_POINTS} puntos
-          </CardTitle>
-          <span className="text-xs text-muted-foreground">
-            {points.length} muestras
-          </span>
+        <CardHeader className="flex-col items-stretch gap-3 space-y-0 pb-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-0.5">
+            <CardTitle className="text-base">
+              CPU · RAM{range === "live" ? " · Disco" : ""} (%)
+            </CardTitle>
+            <span className="text-xs text-muted-foreground">
+              {activeRange.chartLabel}
+              {historyLoading && range !== "live"
+                ? " · cargando…"
+                : ` · ${displayPoints.length} muestras`}
+            </span>
+          </div>
+          <div
+            className="inline-flex items-center gap-0.5 self-start rounded-md border border-border bg-muted/40 p-0.5 sm:self-auto"
+            role="group"
+            aria-label="Rango del gráfico"
+          >
+            {RANGES.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => setRange(r.key)}
+                aria-pressed={range === r.key}
+                className={cn(
+                  "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                  range === r.key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </CardHeader>
         <CardContent>
-          {chartData.length === 0 ? (
+          {range !== "live" && historyError ? (
+            <div className="flex h-56 items-center justify-center text-sm text-destructive">
+              {historyError}
+            </div>
+          ) : range !== "live" && historyLoading && displayPoints.length === 0 ? (
             <div className="flex h-56 items-center justify-center text-sm text-muted-foreground">
-              Esperando muestras del satélite…
+              Cargando historial…
+            </div>
+          ) : chartData.length === 0 ? (
+            <div className="flex h-56 items-center justify-center text-sm text-muted-foreground">
+              {range === "live"
+                ? "Esperando muestras del satélite…"
+                : "Sin datos en este rango."}
             </div>
           ) : (
             <MetricsChart
               data={chartData}
-              series={[
-                { dataKey: "cpu", label: "CPU", tone: "info" },
-                { dataKey: "ram", label: "RAM", tone: "primary" },
-                { dataKey: "disk", label: "Disco", tone: "warning" },
-              ]}
+              series={chartSeries}
               variant="line"
               formatValue={(v) => `${v}%`}
+              formatX={range === "7d" ? formatDayTime : undefined}
               height={224}
             />
           )}
@@ -334,4 +437,20 @@ function formatBytes(bytes: number): string {
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+/** Eje X para el rango de 7 días: incluye día/mes además de la hora. */
+function formatDayTime(v: string | number): string {
+  try {
+    const d = new Date(v);
+    return d.toLocaleString("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return String(v);
+  }
 }
