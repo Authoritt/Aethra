@@ -20,14 +20,20 @@ public sealed record InstanceProvisionedIntegrationEvent(
     DateTimeOffset CreatedAt) : IntegrationEvent;
 
 /// <summary>
-/// Se publica cuando una <c>Instance</c> se borra de la BD. El Proxy debe eliminar la Route
-/// asociada para que YARP deje de aceptar tráfico al hostname.
+/// Se publica cuando una <c>Instance</c> se borra de la BD. Dispara el teardown COMPLETO en los
+/// módulos consumidores: Proxy elimina TODAS sus Routes, Cloudflare borra el/los DNS del hostname,
+/// Monitoring borra el/los monitor(es) de la instance, y Deployments elimina los contenedores en
+/// el satélite (<see cref="TargetVmId"/> + <see cref="ContainerNames"/>). Los dos últimos campos son
+/// opcionales (eventos viejos en outbox deserializan a null) — sin ellos el teardown de contenedor
+/// se omite (best-effort).
 /// </summary>
 public sealed record InstanceRemovedIntegrationEvent(
     string InstanceId,
     string? AutoHostname,
     string? CustomDomain,
-    DateTimeOffset RemovedAt) : IntegrationEvent;
+    DateTimeOffset RemovedAt,
+    string? TargetVmId = null,
+    IReadOnlyList<string>? ContainerNames = null) : IntegrationEvent;
 
 /// <summary>
 /// Se publica cuando el operador define o cambia el dominio custom de una <c>Instance</c>.

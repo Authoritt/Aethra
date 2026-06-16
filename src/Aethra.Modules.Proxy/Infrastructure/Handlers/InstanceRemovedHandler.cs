@@ -1,6 +1,5 @@
 using Aethra.Modules.Proxy.Infrastructure.Yarp;
 using Aethra.Shared.Contracts.Projects;
-using Aethra.Shared.Kernel.Primitives;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -8,9 +7,12 @@ using Microsoft.Extensions.Logging;
 namespace Aethra.Modules.Proxy.Infrastructure.Handlers;
 
 /// <summary>
-/// Suscriptor cross-module: cuando Projects borra una <c>Instance</c>, el Proxy elimina la
-/// <c>Route</c> YARP asociada para que YARP deje de aceptar tráfico al hostname. Es idempotente:
-/// si no existe la Route (lifecycle inverso, p. ej. Instance creada en modo headless), no falla.
+/// Suscriptor cross-module: cuando Projects borra una <c>Instance</c>, el Proxy elimina TODAS sus
+/// <c>Route</c>s YARP para que deje de aceptar tráfico. Una app multi-path (p. ej. <c>/</c>, <c>/api</c>,
+/// <c>/hubs</c>) tiene varias rutas para el mismo hostname; antes este handler quitaba sólo UNA
+/// (FirstOrDefault) y dejaba huérfanas las demás. Ahora matchea por owner (<c>OperationalOwnerId ==
+/// instanceId</c>, cubre todas las rutas de la instance) y por hostname (custom + auto, cubre rutas
+/// sin owner). Idempotente: si no hay rutas, no-op.
 /// </summary>
 internal sealed class InstanceRemovedHandler(
     ProxyDbContext db,
@@ -22,43 +24,38 @@ internal sealed class InstanceRemovedHandler(
     {
         ArgumentNullException.ThrowIfNull(notification);
 
-        var hostnameValue = notification.CustomDomain ?? notification.AutoHostname;
-        if (string.IsNullOrWhiteSpace(hostnameValue))
+        var hostnames = new[] { notification.CustomDomain, notification.AutoHostname }
+            .Where(h => !string.IsNullOrWhiteSpace(h))
+            .Select(h => h!.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // La tabla Routes es chica (decenas de filas); traerla y filtrar en memoria evita traducir
+        // el value object Hostname + un OR complejo a SQL.
+        var allRoutes = await db.Routes.ToListAsync(cancellationToken).ConfigureAwait(false);
+        var toRemove = allRoutes
+            .Where(r =>
+                string.Equals(r.OperationalOwnerId, notification.InstanceId, StringComparison.Ordinal)
+                || hostnames.Contains(r.Hostname.Value))
+            .ToList();
+
+        if (toRemove.Count == 0)
         {
             logger.LogInformation(
-                "InstanceRemoved {Id}: sin hostname asociado — nada que limpiar",
-                notification.InstanceId);
+                "InstanceRemoved {Id}: no había Routes (owner/hostname) — no-op", notification.InstanceId);
             return;
         }
 
-        var hostnameResult = Hostname.Create(hostnameValue);
-        if (hostnameResult.IsFailure)
+        foreach (var route in toRemove)
         {
-            logger.LogWarning(
-                "InstanceRemoved {Id}: hostname inválido '{Hostname}' ({Code}) — skip",
-                notification.InstanceId, hostnameValue, hostnameResult.Error.Code);
-            return;
+            route.MarkRemoved();
+            db.Routes.Remove(route);
         }
-        var hostname = hostnameResult.Value;
-
-        var existing = await db.Routes
-            .FirstOrDefaultAsync(r => r.Hostname == hostname, cancellationToken)
-            .ConfigureAwait(false);
-        if (existing is null)
-        {
-            logger.LogInformation(
-                "InstanceRemoved {Id}: no había Route para '{Hostname}' — no-op",
-                notification.InstanceId, hostname.Value);
-            return;
-        }
-
-        existing.MarkRemoved();
-        db.Routes.Remove(existing);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         config.Reload();
 
         logger.LogInformation(
-            "InstanceRemoved {Id}: Route {RouteId} eliminada ({Hostname})",
-            notification.InstanceId, existing.Id, hostname.Value);
+            "InstanceRemoved {Id}: {Count} Route(s) eliminadas ({Hosts})",
+            notification.InstanceId, toRemove.Count,
+            string.Join(", ", toRemove.Select(r => r.Hostname.Value).Distinct()));
     }
 }

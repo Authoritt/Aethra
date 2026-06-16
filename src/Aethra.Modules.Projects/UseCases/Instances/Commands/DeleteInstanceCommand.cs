@@ -1,4 +1,5 @@
 using Aethra.Modules.Projects.Domain.Instances;
+using Aethra.Modules.Projects.Domain.Templates;
 using Aethra.Modules.Projects.Infrastructure;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Infrastructure.Cqrs;
@@ -45,14 +46,46 @@ internal sealed class DeleteInstanceHandler(
             // separado con auditoria adicional (no introducido en F12.3).
         }
 
+        // Nombres de contenedor a derribar: {slug}-{servicio} por cada servicio del template
+        // (deploy nativo multi-contenedor) + el ContainerName legacy. El template puede no existir
+        // (instance huérfana) → solo el legacy.
+        var template = await db.Templates
+            .FirstOrDefaultAsync(t => t.Id == instance.TemplateId, cancellationToken)
+            .ConfigureAwait(false);
+        var containerNames = ResolveContainerNames(instance.Slug, instance.ContainerName, template);
+
         await outbox.EnqueueAsync(new InstanceRemovedIntegrationEvent(
             InstanceId: instance.Id.ToString(),
             AutoHostname: instance.AutoHostname,
             CustomDomain: instance.CustomDomain,
-            RemovedAt: clock.UtcNow), cancellationToken).ConfigureAwait(false);
+            RemovedAt: clock.UtcNow,
+            TargetVmId: instance.TargetVmId,
+            ContainerNames: containerNames), cancellationToken).ConfigureAwait(false);
 
         db.Instances.Remove(instance);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Nombres de los contenedores desplegados de una Instance: <c>{slug}-{servicio}</c> por cada
+    /// servicio del template (deploy nativo multi-contenedor) más el <c>ContainerName</c> legacy
+    /// (deploy de un solo contenedor). Deduplicado; vacíos descartados. Usado para el teardown.
+    /// </summary>
+    internal static IReadOnlyList<string> ResolveContainerNames(string slug, string? legacyContainerName, Template? template)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        if (!string.IsNullOrWhiteSpace(legacyContainerName))
+        {
+            names.Add(legacyContainerName);
+        }
+        if (template is not null)
+        {
+            foreach (var service in template.Services)
+            {
+                names.Add($"{slug}-{service.Name}");
+            }
+        }
+        return names.ToList();
     }
 }

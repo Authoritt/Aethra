@@ -1,5 +1,6 @@
 using Aethra.Modules.Projects.Domain.Templates;
 using Aethra.Modules.Projects.Infrastructure;
+using Aethra.Modules.Projects.UseCases.Instances.Commands;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Infrastructure.Outbox;
@@ -50,7 +51,10 @@ internal sealed class DeleteTemplateHandler(
                 InstanceId: inst.Id.ToString(),
                 AutoHostname: inst.AutoHostname,
                 CustomDomain: inst.CustomDomain,
-                RemovedAt: clock.UtcNow), cancellationToken).ConfigureAwait(false);
+                RemovedAt: clock.UtcNow,
+                TargetVmId: inst.TargetVmId,
+                ContainerNames: DeleteInstanceHandler.ResolveContainerNames(
+                    inst.Slug, inst.ContainerName, template)), cancellationToken).ConfigureAwait(false);
         }
 
         var scopeIds = new List<string> { templateId.ToString() };
