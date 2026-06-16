@@ -70,6 +70,18 @@ internal sealed class CreateMonitorHandler(MonitoringDbContext db, IClock clock)
             return Error.Conflict("monitor.slug_taken", $"Ya existe un monitor con slug '{slug}'.");
         }
 
+        // Anti-duplicado por URL normalizada (trim + sin '/' final + lowercase): evita dos monitores
+        // chequeando EXACTAMENTE el mismo endpoint — el caso que dejó "myapp" y "myapp-admin"
+        // apuntando a la misma URL. Monitores de distinto path (p.ej. '/' vs '/health') siguen siendo válidos.
+        static string NormalizeUrl(string u) => u.Trim().TrimEnd('/').ToLowerInvariant();
+        var targetUrl = NormalizeUrl(request.Url);
+        var existingUrls = await db.Monitors.Select(m => m.Url).ToListAsync(ct).ConfigureAwait(false);
+        if (existingUrls.Any(u => NormalizeUrl(u) == targetUrl))
+        {
+            return Error.Conflict("monitor.url_taken",
+                $"Ya existe un monitor para la URL '{request.Url.Trim()}'. Editá el existente en vez de duplicarlo.");
+        }
+
         Monitor monitor;
         try
         {
