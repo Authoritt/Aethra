@@ -1,7 +1,13 @@
 namespace Aethra.Shared.Contracts.Containers;
 
-/// <summary>Capacidad de disco de un satélite, para elegir dónde colocar blobs (backups, etc.).</summary>
-public sealed record SatelliteCapacity(string VmId, string Slug, long? FreeBytes, bool Connected);
+/// <summary>Capacidad de un satélite, para elegir dónde colocar trabajo o blobs.</summary>
+public sealed record SatelliteCapacity(
+    string VmId,
+    string Slug,
+    long? FreeBytes,
+    bool Connected,
+    int? CpuCores = null,
+    long? TotalMemoryBytes = null);
 
 /// <summary>
 /// Provee la capacidad de disco de los satélites conocidos. Vive en <c>Shared.Contracts</c> (como
@@ -10,6 +16,6 @@ public sealed record SatelliteCapacity(string VmId, string Slug, long? FreeBytes
 /// </summary>
 public interface ISatelliteCapacityProvider
 {
-    /// <summary>Lista los satélites con su disco libre (root) y si están conectados.</summary>
+    /// <summary>Lista los satélites con capacidad conocida y si están conectados.</summary>
     Task<IReadOnlyList<SatelliteCapacity>> GetSatellitesAsync(CancellationToken ct);
 }

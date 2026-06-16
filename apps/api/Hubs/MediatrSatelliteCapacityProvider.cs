@@ -24,7 +24,9 @@ public sealed class MediatrSatelliteCapacityProvider(IMediator mediator) : ISate
                 v.Id,
                 v.Slug,
                 v.RootDiskAvailableBytes,
-                string.Equals(v.Status, "Connected", StringComparison.OrdinalIgnoreCase)))
+                string.Equals(v.Status, "Connected", StringComparison.OrdinalIgnoreCase),
+                v.CpuCores,
+                v.TotalMemoryBytes))
             .ToList();
     }
 }

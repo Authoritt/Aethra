@@ -2,10 +2,18 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Boxes, Loader2 } from "lucide-react";
+import { Boxes, ChevronDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ApiError, api } from "@/lib/api";
+import type { TemplateServiceDef } from "@/lib/types";
 
 /**
  * F13 — dispara el deploy NATIVO multi-contenedor de la instancia (un contenedor por servicio
@@ -14,21 +22,27 @@ import { ApiError, api } from "@/lib/api";
 export function DeployNativeButton({
   instanceId,
   hostname,
+  services = [],
 }: {
   instanceId: string;
   hostname?: string | null;
+  services?: TemplateServiceDef[];
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  async function deploy() {
-    setBusy(true);
+  async function deploy(serviceName?: string) {
+    const busyKey = serviceName ?? "__all__";
+    setBusy(busyKey);
     try {
       const r = await api<{ healthy: boolean; services: string[] }>(
         `/api/instances/${encodeURIComponent(instanceId)}/deploy-native`,
         {
           method: "POST",
-          body: JSON.stringify(hostname ? { hostname } : {}),
+          body: JSON.stringify({
+            ...(hostname ? { hostname } : {}),
+            ...(serviceName ? { serviceName } : {}),
+          }),
         },
       );
       toast.success(
@@ -47,18 +61,50 @@ export function DeployNativeButton({
             : "Error desconocido";
       toast.error(msg);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
+  const isBusy = busy !== null;
+  const icon = isBusy ? (
+    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+  ) : (
+    <Boxes className="mr-2 h-4 w-4" />
+  );
+
+  if (services.length <= 1) {
+    return (
+      <Button type="button" onClick={() => deploy()} disabled={isBusy}>
+        {icon}
+        Deploy nativo
+      </Button>
+    );
+  }
+
   return (
-    <Button type="button" onClick={deploy} disabled={busy}>
-      {busy ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-      ) : (
-        <Boxes className="mr-2 h-4 w-4" />
-      )}
-      Deploy nativo
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" disabled={isBusy}>
+          {icon}
+          Deploy nativo
+          <ChevronDown className="ml-2 h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuItem onClick={() => deploy()} disabled={isBusy}>
+          Todos los servicios
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {services.map((service) => (
+          <DropdownMenuItem
+            key={service.name}
+            onClick={() => deploy(service.name)}
+            disabled={isBusy}
+          >
+            {service.name}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

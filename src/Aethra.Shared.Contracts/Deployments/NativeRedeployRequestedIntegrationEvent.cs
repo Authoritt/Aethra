@@ -8,4 +8,5 @@ namespace Aethra.Shared.Contracts.Deployments;
 /// </summary>
 public sealed record NativeRedeployRequestedIntegrationEvent(
     string InstanceId,
-    string Reason) : IntegrationEvent;
+    string Reason,
+    string? ServiceName = null) : IntegrationEvent;

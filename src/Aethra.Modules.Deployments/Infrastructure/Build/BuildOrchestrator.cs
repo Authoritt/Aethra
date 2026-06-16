@@ -30,6 +30,7 @@ public sealed class BuildOrchestrator(
     IBuildContextBuilder buildContextBuilder,
     ISatelliteRpcClient satelliteClient,
     ISatelliteConnectionRegistry satelliteRegistry,
+    ISatelliteCapacityProvider capacityProvider,
     IOutboxWriter<DeploymentsDbContext> outbox,
     IIntegrationCredentialResolver credentialResolver,
     IClock clock,
@@ -158,9 +159,9 @@ public sealed class BuildOrchestrator(
                     clock.UtcNow);
             }
 
-            // El build necesita un satélite conectado para ejecutar BuildImage. Si ninguno está
-            // conectado, falla con errorCode estable.
-            var targetVmId = satelliteRegistry.ConnectedVmIds.FirstOrDefault();
+            // El build necesita un satélite conectado para ejecutar BuildImage. Elegimos el más
+            // capaz por RAM/CPU/disco; nunca dependemos del orden de un ConcurrentDictionary.
+            var targetVmId = await PickBuildSatelliteAsync(ct).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(targetVmId))
             {
                 FailAndPersist(build, "no_satellite",
@@ -288,6 +289,24 @@ public sealed class BuildOrchestrator(
             "docker-compose" => BuildMode.DockerCompose,
             _ => BuildMode.Dockerfile,
         };
+
+    private async Task<string?> PickBuildSatelliteAsync(CancellationToken ct)
+    {
+        var capacities = await capacityProvider.GetSatellitesAsync(ct).ConfigureAwait(false);
+        var best = capacities
+            .Where(s => s.Connected)
+            .OrderByDescending(s => s.TotalMemoryBytes ?? 0)
+            .ThenByDescending(s => s.CpuCores ?? 0)
+            .ThenByDescending(s => s.FreeBytes ?? 0)
+            .FirstOrDefault();
+
+        if (best is not null)
+        {
+            return best.VmId;
+        }
+
+        return satelliteRegistry.ConnectedVmIds.Order(StringComparer.Ordinal).FirstOrDefault();
+    }
 
     private void FailAndPersist(Domain.Build.Build build, string code, string message,
         long? durationMs = null)

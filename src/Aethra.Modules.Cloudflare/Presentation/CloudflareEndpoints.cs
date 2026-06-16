@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 
 namespace Aethra.Modules.Cloudflare.Presentation;
 
@@ -169,10 +170,76 @@ public static class CloudflareEndpoints
         .RequireAuthorization(ScopeWrite)
         .WithName("PromoteCloudflareTunnelRemote");
 
-        tunnels.MapPost("/ensure-hostname", async ([FromBody] TunnelHostnameRequest body, IMediator m, CancellationToken ct) =>
+        tunnels.MapPost("/ensure-hostname", async (
+            [FromBody] TunnelHostnameRequest body,
+            IMediator m,
+            IConfiguration configuration,
+            CancellationToken ct) =>
         {
             var r = await m.Send(new EnsureTunnelHostnameCommand(body.Hostname), ct);
-            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+            if (r.IsFailure)
+            {
+                return MapError(r.Error);
+            }
+
+            var tunnelCname = configuration["NativeDeploy:TunnelCname"];
+            if (string.IsNullOrWhiteSpace(tunnelCname))
+            {
+                return MapError(Error.Conflict(
+                    "cloudflare.tunnel_cname_missing",
+                    "NativeDeploy:TunnelCname no esta configurado; no se puede crear el CNAME."));
+            }
+
+            var hostname = body.Hostname.Trim();
+            var zones = await m.Send(new ListZonesQuery(), ct);
+            if (zones.IsFailure)
+            {
+                return MapError(zones.Error);
+            }
+            var zone = zones.Value
+                .Where(z => hostname.Equals(z.Name, StringComparison.OrdinalIgnoreCase)
+                    || hostname.EndsWith("." + z.Name, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(z => z.Name.Length)
+                .FirstOrDefault();
+            if (zone is null)
+            {
+                return MapError(Error.NotFound(
+                    "cloudflare.zone_not_found_for_hostname",
+                    $"No hay una zona Cloudflare registrada que cubra '{hostname}'."));
+            }
+
+            var records = await m.Send(new ListDnsRecordsQuery(zone.Id), ct);
+            if (records.IsFailure)
+            {
+                return MapError(records.Error);
+            }
+            var existing = records.Value
+                .FirstOrDefault(x => string.Equals(x.Name, hostname, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null
+                && !string.Equals(existing.Type, "CNAME", StringComparison.OrdinalIgnoreCase))
+            {
+                return MapError(Error.Conflict(
+                    "cloudflare.hostname_record_conflict",
+                    $"Ya existe un record {existing.Type} para '{hostname}'."));
+            }
+            if (existing is null)
+            {
+                var created = await m.Send(new CreateDnsRecordCommand(
+                    zone.Id, "CNAME", hostname, tunnelCname, 1, true,
+                    "aethra tunnel ensure-hostname"), ct);
+                return created.IsSuccess ? Results.NoContent() : MapError(created.Error);
+            }
+
+            if (!string.Equals(existing.Content, tunnelCname, StringComparison.OrdinalIgnoreCase)
+                || existing.Ttl != 1
+                || !existing.Proxied)
+            {
+                var updated = await m.Send(new UpdateDnsRecordCommand(
+                    existing.Id, tunnelCname, 1, true, existing.Comment), ct);
+                return updated.IsSuccess ? Results.NoContent() : MapError(updated.Error);
+            }
+
+            return Results.NoContent();
         })
         .RequireAuthorization(ScopeWrite)
         .WithName("EnsureCloudflareTunnelHostname");

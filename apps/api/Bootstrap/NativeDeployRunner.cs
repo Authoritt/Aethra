@@ -2,6 +2,8 @@ using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Queries;
 using Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands;
 using Aethra.Modules.Cloudflare.UseCases.Zones.Queries;
+using Aethra.Modules.Deployments.Domain.Deployment;
+using Aethra.Modules.Deployments.Infrastructure;
 using Aethra.Modules.Deployments.Infrastructure.Build;
 using Aethra.Modules.Monitoring.UseCases.Commands;
 using Aethra.Modules.Proxy.UseCases.Routes.Commands;
@@ -9,6 +11,7 @@ using Aethra.Modules.Proxy.UseCases.Routes.Queries;
 using Aethra.Shared.Contracts.Containers;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Contracts.Settings;
+using Aethra.Shared.Kernel.Time;
 using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -43,6 +46,8 @@ public sealed class NativeDeployRunner(
     IBuildContextBuilder buildContext,
     IIntegrationCredentialResolver credentialResolver,
     IMediator mediator,
+    DeploymentsDbContext deploymentsDb,
+    IClock clock,
     IConfiguration config,
     ILogger<NativeDeployRunner> log)
 {
@@ -53,7 +58,11 @@ public sealed class NativeDeployRunner(
     // el deploy crea automáticamente el DNS record del hostname (best-effort). Null = no auto-DNS.
     private readonly string? _tunnelCname = config["NativeDeploy:TunnelCname"];
 
-    public async Task<NativeDeployResult> DeployAsync(string instanceId, string? hostnameOverride, CancellationToken ct)
+    public async Task<NativeDeployResult> DeployAsync(
+        string instanceId,
+        string? hostnameOverride,
+        CancellationToken ct,
+        string? serviceName = null)
     {
         var instance = await instanceLookup.GetByIdAsync(instanceId, ct).ConfigureAwait(false);
         if (instance is null)
@@ -70,14 +79,46 @@ public sealed class NativeDeployRunner(
         {
             return Fail("El template no define servicios (Services).");
         }
+        if (!string.IsNullOrWhiteSpace(serviceName))
+        {
+            services = services
+                .Where(s => string.Equals(s.Name, serviceName.Trim(), StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (services.Count == 0)
+            {
+                return Fail($"El template no define un servicio llamado '{serviceName}'.");
+            }
+        }
         // Hostname para (re)crear rutas + monitor. En un REDEPLOY (webhook) puede no haber: los
         // contenedores tienen nombre estable {slug}-{service}, así que las rutas existentes siguen
         // sirviendo y solo refrescamos contenedores (se omiten rutas/monitor).
         var hostname = hostnameOverride ?? instance.CustomDomain ?? instance.AutoHostname;
 
-        var baseEnv = await envResolver.ResolveRuntimeEnvAsync(
-            new EnvironmentScopeChain(instance.ProjectId, instance.TemplateId, instance.ClientId, instance.InstanceId), ct)
-            .ConfigureAwait(false);
+        var deployment = Deployment.Queue(
+            buildId: $"native:{Guid.NewGuid():N}"[..39],
+            instanceId: instance.InstanceId,
+            newImageRef: string.IsNullOrWhiteSpace(serviceName)
+                ? $"native/{instance.Slug}:multi-service"
+                : $"native/{instance.Slug}:{serviceName.Trim()}",
+            trigger: DeploymentTrigger.Manual,
+            triggeredBy: "deploy-native",
+            now: clock.UtcNow);
+        deployment.AppendLog(DeploymentLogLevel.Info, "pending",
+            string.IsNullOrWhiteSpace(serviceName)
+                ? $"Deploy nativo iniciado para {services.Count} servicio(s)."
+                : $"Deploy nativo incremental iniciado para servicio '{serviceName.Trim()}'.",
+            clock.UtcNow);
+        deploymentsDb.Deployments.Add(deployment);
+        await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        try
+        {
+            deployment.Transition(DeploymentStatus.Pulling, clock.UtcNow);
+            await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
+
+            var baseEnv = await envResolver.ResolveRuntimeEnvAsync(
+                new EnvironmentScopeChain(instance.ProjectId, instance.TemplateId, instance.ClientId, instance.InstanceId), ct)
+                .ConfigureAwait(false);
 
         // Modo git: clonar el repo UNA vez (al branch trackeado) y construir cada imagen.
         BuildContextResult? gitCtx = null;
@@ -95,6 +136,9 @@ public sealed class NativeDeployRunner(
             shortSha = gitCtx.ResolvedSha.Length >= 7 ? gitCtx.ResolvedSha[..7] : gitCtx.ResolvedSha;
             log.LogInformation("native-deploy {Inst}: contexto git {Repo}@{Branch} → {Sha}", instance.Slug, template.GitRepoUrl, branch, shortSha);
         }
+
+        deployment.Transition(DeploymentStatus.Starting, clock.UtcNow);
+        await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
 
         var deployedServices = new List<string>();
         foreach (var svc in services)
@@ -119,6 +163,16 @@ public sealed class NativeDeployRunner(
                     Mode: BuildMode.Dockerfile,
                     BuildContextDir: svc.BuildContext);
                 var br = await satellite.SendBuildAsync(instance.TargetVmId, buildSpec, pushTo: null, ct).ConfigureAwait(false);
+                foreach (var line in br.LogLines)
+                {
+                    deployment.AppendLog(DeploymentLogLevel.Info, "starting", line, clock.UtcNow);
+                }
+                await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
+                if (!br.Success)
+                {
+                    await FailNativeDeploymentAsync(deployment, "build_failed",
+                        $"Build git del servicio '{svc.Name}' fallo: {br.ErrorMessage}", ct).ConfigureAwait(false);
+                }
                 if (!br.Success)
                 {
                     return Fail($"Build (git) del servicio '{svc.Name}' falló: {br.ErrorMessage}", hostname);
@@ -161,6 +215,11 @@ public sealed class NativeDeployRunner(
             var run = await satellite.SendRunAsync(instance.TargetVmId, spec, pullFrom: null, ct).ConfigureAwait(false);
             if (!run.Success)
             {
+                await FailNativeDeploymentAsync(deployment, "run_failed",
+                    $"Servicio '{svc.Name}' no arranco: {run.ErrorMessage}", ct).ConfigureAwait(false);
+            }
+            if (!run.Success)
+            {
                 return Fail($"Servicio '{svc.Name}' no arrancó: {run.ErrorMessage}", hostname);
             }
             deployedServices.Add($"{svc.Name} ({svc.BuildMode}) → {image}");
@@ -168,6 +227,9 @@ public sealed class NativeDeployRunner(
 
         // Healthcheck: todos los contenedores Up.
         var names = services.Select(s => $"{instance.Slug}-{s.Name}").ToHashSet(StringComparer.Ordinal);
+        deployment.RecordNewContainer(names.First(), clock.UtcNow);
+        deployment.Transition(DeploymentStatus.Healthcheck, clock.UtcNow);
+        await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
         var healthy = false;
         for (var attempt = 1; attempt <= 15 && !healthy; attempt++)
         {
@@ -177,6 +239,17 @@ public sealed class NativeDeployRunner(
                 string.Equals(c.Name, nm, StringComparison.Ordinal)
                 && c.Status.StartsWith("Up", StringComparison.OrdinalIgnoreCase)));
         }
+        if (!healthy)
+        {
+            await FailNativeDeploymentAsync(deployment, "healthcheck_failed",
+                "Uno o mas servicios no alcanzaron estado Up dentro del tiempo de espera.", ct).ConfigureAwait(false);
+            return new NativeDeployResult(false,
+                "Uno o mas servicios no alcanzaron estado Up dentro del tiempo de espera.",
+                hostname, false, deployedServices, []);
+        }
+
+        deployment.Transition(DeploymentStatus.Swapping, clock.UtcNow);
+        await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
 
         var routes = new List<string>();
         var anyServiceHost = services.Any(s => !string.IsNullOrWhiteSpace(s.Hostname));
@@ -190,8 +263,18 @@ public sealed class NativeDeployRunner(
             log.LogInformation("native-deploy {Inst}: sin hostname → redeploy de contenedores (rutas/monitor existentes intactos)", instance.Slug);
         }
 
+        deployment.Complete(clock.UtcNow);
+        await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
+
         log.LogInformation("native-deploy {Inst} OK (healthy={H}, {N} servicios)", instance.Slug, healthy, deployedServices.Count);
         return new NativeDeployResult(true, null, hostname, healthy, deployedServices, routes);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogError(ex, "native-deploy {Inst} fallo", instance.Slug);
+            await FailNativeDeploymentAsync(deployment, "internal_error", ex.Message, ct).ConfigureAwait(false);
+            return Fail(ex.Message, hostname);
+        }
     }
 
     public async Task<NativeRestartResult> RestartAsync(string instanceId, CancellationToken ct)
@@ -420,4 +503,14 @@ public sealed class NativeDeployRunner(
 
     private static NativeRestartResult RestartFail(string error)
         => new(false, error, []);
+
+    private async Task FailNativeDeploymentAsync(
+        Deployment deployment,
+        string code,
+        string message,
+        CancellationToken ct)
+    {
+        deployment.Fail(code, message, clock.UtcNow);
+        await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
 }

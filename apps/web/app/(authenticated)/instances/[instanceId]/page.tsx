@@ -190,7 +190,11 @@ export default async function InstanceDetailPage({
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {hasServices ? (
-              <DeployNativeButton instanceId={instance.id} hostname={effectiveHost} />
+              <DeployNativeButton
+                instanceId={instance.id}
+                hostname={effectiveHost}
+                services={template?.services ?? []}
+              />
             ) : null}
             {openUrl ? (
               <Button asChild variant="outline">
@@ -583,7 +587,11 @@ export default async function InstanceDetailPage({
                 canRestartForConfigDrift ? (
                   <RestartNativeButton instanceId={instance.id} />
                 ) : hasServices ? (
-                  <DeployNativeButton instanceId={instance.id} hostname={effectiveHost} />
+                  <DeployNativeButton
+                    instanceId={instance.id}
+                    hostname={effectiveHost}
+                    services={template?.services ?? []}
+                  />
                 ) : currentRelease ? (
                   <DeployBuildButton
                     buildId={currentRelease.buildId}

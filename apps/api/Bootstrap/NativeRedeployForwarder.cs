@@ -27,7 +27,11 @@ internal sealed class NativeRedeployForwarder(
             var runner = scope.ServiceProvider.GetRequiredService<NativeDeployRunner>();
             try
             {
-                var r = await runner.DeployAsync(notification.InstanceId, hostnameOverride: null, CancellationToken.None)
+                var r = await runner.DeployAsync(
+                        notification.InstanceId,
+                        hostnameOverride: null,
+                        CancellationToken.None,
+                        notification.ServiceName)
                     .ConfigureAwait(false);
                 if (r.Success)
                 {

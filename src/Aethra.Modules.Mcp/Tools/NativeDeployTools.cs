@@ -71,13 +71,24 @@ public sealed class NativeDeployTools(IMediator mediator, IMcpCallerContext call
     [Description("Dispara el deploy NATIVO multi-contenedor de una Instance en background (un contenedor por servicio del template, build-from-git/registry, healthcheck + rutas). Devuelve al instante; el deploy corre async.")]
     public async Task<object> DeployAsync(
         [Description("ID de la instance (formato 'ins_...').")] string instanceId,
+        [Description("Servicio puntual a desplegar. Null/vacío = todos los servicios del template.")]
+        string? serviceName,
         CancellationToken ct)
     {
         if (!caller.HasScope(McpScopes.DeploymentsTrigger))
         {
             return McpResponses.InsufficientScope(McpScopes.DeploymentsTrigger);
         }
-        await mediator.Publish(new NativeRedeployRequestedIntegrationEvent(instanceId, "mcp"), ct).ConfigureAwait(false);
-        return McpResponses.Ok(new { instanceId, status = "queued", note = "Deploy nativo corriendo en background." });
+        var normalizedService = string.IsNullOrWhiteSpace(serviceName) ? null : serviceName.Trim();
+        await mediator.Publish(new NativeRedeployRequestedIntegrationEvent(instanceId, "mcp", normalizedService), ct).ConfigureAwait(false);
+        return McpResponses.Ok(new
+        {
+            instanceId,
+            serviceName = normalizedService,
+            status = "queued",
+            note = normalizedService is null
+                ? "Deploy nativo corriendo en background."
+                : "Deploy nativo de servicio corriendo en background.",
+        });
     }
 }

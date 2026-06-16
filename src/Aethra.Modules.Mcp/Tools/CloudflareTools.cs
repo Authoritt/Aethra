@@ -3,16 +3,19 @@ using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Queries;
 using Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands;
 using Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries;
+using Aethra.Modules.Cloudflare.UseCases.Zones.Queries;
 using Aethra.Modules.Mcp.Security;
 using Aethra.Modules.Mcp.UseCases;
 using Aethra.Shared.Contracts.Cloudflare;
+using Aethra.Shared.Kernel.Errors;
 using MediatR;
+using Microsoft.Extensions.Configuration;
 using ModelContextProtocol.Server;
 
 namespace Aethra.Modules.Mcp.Tools;
 
 [McpServerToolType]
-public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller)
+public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller, IConfiguration configuration)
 {
     [McpServerTool(Name = "aethra_create_dns_record", Destructive = false, Idempotent = false, OpenWorld = true)]
     [Description("Crea un DNS record en Cloudflare (y persiste la copia local con su id externo). Tipos: A, AAAA, "
@@ -175,8 +178,89 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
         {
             return McpResponses.InsufficientScope(McpScopes.CloudflareWrite);
         }
-        var r = await mediator.Send(new EnsureTunnelHostnameCommand(hostname), ct).ConfigureAwait(false);
-        return r.IsSuccess ? McpResponses.Ok(new { hostname, status = "ensured" }) : McpResponses.FromError(r.Error);
+        var normalizedHost = hostname.Trim();
+        var r = await mediator.Send(new EnsureTunnelHostnameCommand(normalizedHost), ct).ConfigureAwait(false);
+        if (r.IsFailure)
+        {
+            return McpResponses.FromError(r.Error);
+        }
+
+        var tunnelCname = configuration["NativeDeploy:TunnelCname"];
+        if (string.IsNullOrWhiteSpace(tunnelCname))
+        {
+            return McpResponses.FromError(Error.Conflict(
+                "cloudflare.tunnel_cname_missing",
+                "NativeDeploy:TunnelCname no esta configurado; no se puede crear el CNAME."));
+        }
+
+        var zones = await mediator.Send(new ListZonesQuery(), ct).ConfigureAwait(false);
+        if (zones.IsFailure)
+        {
+            return McpResponses.FromError(zones.Error);
+        }
+        var zone = zones.Value
+            .Where(z => normalizedHost.Equals(z.Name, StringComparison.OrdinalIgnoreCase)
+                || normalizedHost.EndsWith("." + z.Name, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(z => z.Name.Length)
+            .FirstOrDefault();
+        if (zone is null)
+        {
+            return McpResponses.FromError(Error.NotFound(
+                "cloudflare.zone_not_found_for_hostname",
+                $"No hay una zona Cloudflare registrada que cubra '{normalizedHost}'."));
+        }
+
+        var records = await mediator.Send(new ListDnsRecordsQuery(zone.Id), ct).ConfigureAwait(false);
+        if (records.IsFailure)
+        {
+            return McpResponses.FromError(records.Error);
+        }
+        var existing = records.Value
+            .FirstOrDefault(x => string.Equals(x.Name, normalizedHost, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null
+            && !string.Equals(existing.Type, "CNAME", StringComparison.OrdinalIgnoreCase))
+        {
+            return McpResponses.FromError(Error.Conflict(
+                "cloudflare.hostname_record_conflict",
+                $"Ya existe un record {existing.Type} para '{normalizedHost}'."));
+        }
+
+        string dnsStatus;
+        if (existing is null)
+        {
+            var created = await mediator.Send(new CreateDnsRecordCommand(
+                zone.Id, "CNAME", normalizedHost, tunnelCname, 1, true,
+                "aethra tunnel ensure-hostname"), ct).ConfigureAwait(false);
+            if (created.IsFailure)
+            {
+                return McpResponses.FromError(created.Error);
+            }
+            dnsStatus = "created";
+        }
+        else if (!string.Equals(existing.Content, tunnelCname, StringComparison.OrdinalIgnoreCase)
+            || existing.Ttl != 1
+            || !existing.Proxied)
+        {
+            var updated = await mediator.Send(new UpdateDnsRecordCommand(
+                existing.Id, tunnelCname, 1, true, existing.Comment), ct).ConfigureAwait(false);
+            if (updated.IsFailure)
+            {
+                return McpResponses.FromError(updated.Error);
+            }
+            dnsStatus = "updated";
+        }
+        else
+        {
+            dnsStatus = "already_configured";
+        }
+
+        return McpResponses.Ok(new
+        {
+            hostname = normalizedHost,
+            ingress = "ensured",
+            dns = dnsStatus,
+            target = tunnelCname,
+        });
     }
 
     [McpServerTool(Name = "aethra_remove_tunnel_hostname", Destructive = true, Idempotent = true, OpenWorld = false)]

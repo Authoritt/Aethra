@@ -20,7 +20,7 @@ public static class NativeDeployEndpoints
             NativeDeployRunner runner,
             CancellationToken ct) =>
         {
-            var r = await runner.DeployAsync(instanceId, body?.Hostname, ct);
+            var r = await runner.DeployAsync(instanceId, body?.Hostname, ct, body?.ServiceName);
             if (!r.Success)
             {
                 return Results.Problem(r.Error);
@@ -97,7 +97,7 @@ public static class NativeDeployEndpoints
         return app;
     }
 
-    public sealed record DeployNativeRequest(string? Hostname);
+    public sealed record DeployNativeRequest(string? Hostname, string? ServiceName = null);
 
     public sealed record DeployConnectorRequest(string? VmId);
 
