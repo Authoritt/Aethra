@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
+import { MultiSelectFilter } from "@/components/aethra/MultiSelectFilter";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { serverFetch } from "@/lib/server-fetch";
 import type { AppOverviewDto, ReleaseOverviewDto } from "@/lib/types";
@@ -69,34 +70,29 @@ export default async function ReleasesPage({
             </div>
             <div className="space-y-1">
               <Label htmlFor="status">Status</Label>
-              <select
+              <MultiSelectFilter
                 id="status"
                 name="status"
-                defaultValue={filters.status ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todos</option>
-                <option value="healthy">Healthy</option>
-                <option value="active">Active</option>
-                <option value="failed">Failed</option>
-                <option value="unknown">Unknown</option>
-              </select>
+                value={filters.status}
+                allLabel="Todos"
+                options={[
+                  { value: "healthy", label: "Healthy" },
+                  { value: "active", label: "Active" },
+                  { value: "failed", label: "Failed" },
+                  { value: "unknown", label: "Unknown" },
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="appId">App</Label>
-              <select
+              <MultiSelectFilter
                 id="appId"
                 name="appId"
-                defaultValue={filters.appId ?? ""}
-                className="flex h-10 max-w-64 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todas</option>
-                {apps.map((app) => (
-                  <option key={app.id} value={app.id}>
-                    {app.name}
-                  </option>
-                ))}
-              </select>
+                value={filters.appId}
+                allLabel="Todas"
+                className="max-w-64"
+                options={apps.map((app) => ({ value: app.id, label: app.name }))}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="gitRef">Ref</Label>

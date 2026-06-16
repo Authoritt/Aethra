@@ -2152,19 +2152,19 @@ public static class OperationsEndpoints
         string? environment,
         string? machineId)
     {
-        if (!string.IsNullOrWhiteSpace(appId) && !string.Equals(row.AppId, appId, StringComparison.Ordinal))
+        if (!MatchesAny(row.AppId, appId, StringComparison.Ordinal))
         {
             return false;
         }
-        if (!string.IsNullOrWhiteSpace(environment) && !string.Equals(row.Environment, environment, StringComparison.OrdinalIgnoreCase))
+        if (!MatchesAny(row.Environment, environment, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
-        if (!string.IsNullOrWhiteSpace(machineId) && !string.Equals(row.MachineId, machineId, StringComparison.Ordinal))
+        if (!MatchesAny(row.MachineId, machineId, StringComparison.Ordinal))
         {
             return false;
         }
-        if (!string.IsNullOrWhiteSpace(status) && !string.Equals(row.HealthStatus, status, StringComparison.OrdinalIgnoreCase))
+        if (!MatchesAny(row.HealthStatus, status, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -2189,11 +2189,11 @@ public static class OperationsEndpoints
         string? appId,
         string? gitRef)
     {
-        if (!string.IsNullOrWhiteSpace(appId) && !string.Equals(row.AppId, appId, StringComparison.Ordinal))
+        if (!MatchesAny(row.AppId, appId, StringComparison.Ordinal))
         {
             return false;
         }
-        if (!string.IsNullOrWhiteSpace(status) && !string.Equals(row.Status, status, StringComparison.OrdinalIgnoreCase))
+        if (!MatchesAny(row.Status, status, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -2341,15 +2341,15 @@ public static class OperationsEndpoints
         string? tunnel,
         string? monitor)
     {
-        if (!string.IsNullOrWhiteSpace(health) && !string.Equals(row.HealthStatus, health, StringComparison.OrdinalIgnoreCase))
+        if (!MatchesAny(row.HealthStatus, health, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
-        if (!string.IsNullOrWhiteSpace(appId) && !string.Equals(row.AppId, appId, StringComparison.Ordinal))
+        if (!MatchesAny(row.AppId, appId, StringComparison.Ordinal))
         {
             return false;
         }
-        if (!string.IsNullOrWhiteSpace(environment) && !string.Equals(row.Environment, environment, StringComparison.OrdinalIgnoreCase))
+        if (!MatchesAny(row.Environment, environment, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -2382,21 +2382,21 @@ public static class OperationsEndpoints
     }
 
     private static bool MatchesDnsFilter(PublicEndpointOverviewDto row, string? dns)
-        => string.IsNullOrWhiteSpace(dns)
-            || dns.Equals("ok", StringComparison.OrdinalIgnoreCase) && row.DnsConfigured && (row.ExpectedDnsTarget is null || string.Equals(row.DnsTarget, row.ExpectedDnsTarget, StringComparison.OrdinalIgnoreCase))
-            || dns.Equals("missing", StringComparison.OrdinalIgnoreCase) && !row.DnsConfigured
-            || dns.Equals("wrong", StringComparison.OrdinalIgnoreCase) && row.DnsConfigured && row.ExpectedDnsTarget is not null && !string.Equals(row.DnsTarget, row.ExpectedDnsTarget, StringComparison.OrdinalIgnoreCase);
+        => MatchesAnyPredicate(dns, value =>
+            value.Equals("ok", StringComparison.OrdinalIgnoreCase) && row.DnsConfigured && (row.ExpectedDnsTarget is null || string.Equals(row.DnsTarget, row.ExpectedDnsTarget, StringComparison.OrdinalIgnoreCase))
+            || value.Equals("missing", StringComparison.OrdinalIgnoreCase) && !row.DnsConfigured
+            || value.Equals("wrong", StringComparison.OrdinalIgnoreCase) && row.DnsConfigured && row.ExpectedDnsTarget is not null && !string.Equals(row.DnsTarget, row.ExpectedDnsTarget, StringComparison.OrdinalIgnoreCase));
 
     private static bool MatchesTunnelFilter(PublicEndpointOverviewDto row, string? tunnel)
-        => string.IsNullOrWhiteSpace(tunnel)
-            || tunnel.Equals("ok", StringComparison.OrdinalIgnoreCase) && row.TunnelConfigured
-            || tunnel.Equals("missing", StringComparison.OrdinalIgnoreCase) && !row.TunnelConfigured;
+        => MatchesAnyPredicate(tunnel, value =>
+            value.Equals("ok", StringComparison.OrdinalIgnoreCase) && row.TunnelConfigured
+            || value.Equals("missing", StringComparison.OrdinalIgnoreCase) && !row.TunnelConfigured);
 
     private static bool MatchesMonitorFilter(PublicEndpointOverviewDto row, string? monitor)
-        => string.IsNullOrWhiteSpace(monitor)
-            || monitor.Equals("missing", StringComparison.OrdinalIgnoreCase) && row.MonitorId is null
-            || monitor.Equals("down", StringComparison.OrdinalIgnoreCase) && string.Equals(row.MonitorStatus, "Down", StringComparison.OrdinalIgnoreCase)
-            || monitor.Equals("up", StringComparison.OrdinalIgnoreCase) && string.Equals(row.MonitorStatus, "Up", StringComparison.OrdinalIgnoreCase);
+        => MatchesAnyPredicate(monitor, value =>
+            value.Equals("missing", StringComparison.OrdinalIgnoreCase) && row.MonitorId is null
+            || value.Equals("down", StringComparison.OrdinalIgnoreCase) && string.Equals(row.MonitorStatus, "Down", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("up", StringComparison.OrdinalIgnoreCase) && string.Equals(row.MonitorStatus, "Up", StringComparison.OrdinalIgnoreCase));
 
     private static OperationalIssueDto Issue(string code, string severity, string title, string envId, string? appId, string? appName, string? tenantName, string env, DateTimeOffset? seenAt)
         => new(
@@ -2447,15 +2447,15 @@ public static class OperationsEndpoints
         string? resourceType,
         string? appId)
     {
-        if (!string.IsNullOrWhiteSpace(severity) && !string.Equals(row.Severity, severity, StringComparison.OrdinalIgnoreCase))
+        if (!MatchesAny(row.Severity, severity, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
-        if (!string.IsNullOrWhiteSpace(resourceType) && !string.Equals(row.ResourceType, resourceType, StringComparison.OrdinalIgnoreCase))
+        if (!MatchesAny(row.ResourceType, resourceType, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
-        if (!string.IsNullOrWhiteSpace(appId) && !string.Equals(row.AppId, appId, StringComparison.Ordinal))
+        if (!MatchesAny(row.AppId, appId, StringComparison.Ordinal))
         {
             return false;
         }
@@ -2480,7 +2480,7 @@ public static class OperationsEndpoints
         string? readiness,
         bool? acceptsPreviews)
     {
-        if (!string.IsNullOrWhiteSpace(readiness) && !string.Equals(row.ReadinessStatus, readiness, StringComparison.OrdinalIgnoreCase))
+        if (!MatchesAny(row.ReadinessStatus, readiness, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -2508,15 +2508,15 @@ public static class OperationsEndpoints
         string? type,
         string? appEnvironmentId)
     {
-        if (!string.IsNullOrWhiteSpace(status) && !string.Equals(row.Status, status, StringComparison.OrdinalIgnoreCase))
+        if (!MatchesAny(row.Status, status, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
-        if (!string.IsNullOrWhiteSpace(type) && !string.Equals(row.Type, type, StringComparison.OrdinalIgnoreCase))
+        if (!MatchesAny(row.Type, type, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
-        if (!string.IsNullOrWhiteSpace(appEnvironmentId) && row.Bindings.All(b => !string.Equals(b.AppEnvironmentId, appEnvironmentId, StringComparison.Ordinal)))
+        if (!string.IsNullOrWhiteSpace(appEnvironmentId) && row.Bindings.All(b => !MatchesAny(b.AppEnvironmentId, appEnvironmentId, StringComparison.Ordinal)))
         {
             return false;
         }
@@ -2659,6 +2659,24 @@ public static class OperationsEndpoints
 
     private static bool Contains(string? value, string query)
         => value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+
+    private static bool MatchesAny(string? value, string? filter, StringComparison comparison)
+    {
+        var values = SplitFilter(filter);
+        return values.Length == 0
+            || value is not null && values.Any(filterValue => string.Equals(value, filterValue, comparison));
+    }
+
+    private static bool MatchesAnyPredicate(string? filter, Func<string, bool> predicate)
+    {
+        var values = SplitFilter(filter);
+        return values.Length == 0 || values.Any(predicate);
+    }
+
+    private static string[] SplitFilter(string? filter)
+        => string.IsNullOrWhiteSpace(filter)
+            ? []
+            : filter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static bool MatchesSearch(string query, params string?[] values)
         => values.Any(value => Contains(value, query));

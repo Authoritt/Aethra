@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
+import { MultiSelectFilter } from "@/components/aethra/MultiSelectFilter";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { serverFetch } from "@/lib/server-fetch";
 import type { AppOverviewDto, OperationalIssueDto } from "@/lib/types";
@@ -86,48 +87,37 @@ export default async function OperationalIssuesPage({
             </div>
             <div className="space-y-1">
               <Label htmlFor="severity">Severity</Label>
-              <select
+              <MultiSelectFilter
                 id="severity"
                 name="severity"
-                defaultValue={filters.severity ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todas</option>
-                <option value="critical">Critical</option>
-                <option value="warning">Warning</option>
-              </select>
+                value={filters.severity}
+                allLabel="Todas"
+                options={[
+                  { value: "critical", label: "Critical" },
+                  { value: "warning", label: "Warning" },
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="resourceType">Resource</Label>
-              <select
+              <MultiSelectFilter
                 id="resourceType"
                 name="resourceType"
-                defaultValue={filters.resourceType ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todos</option>
-                {resourceTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
+                value={filters.resourceType}
+                allLabel="Todos"
+                options={resourceTypes.map((type) => ({ value: type, label: type }))}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="appId">App</Label>
-              <select
+              <MultiSelectFilter
                 id="appId"
                 name="appId"
-                defaultValue={filters.appId ?? ""}
-                className="flex h-10 max-w-64 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todas</option>
-                {apps.map((app) => (
-                  <option key={app.id} value={app.id}>
-                    {app.name}
-                  </option>
-                ))}
-              </select>
+                value={filters.appId}
+                allLabel="Todas"
+                className="max-w-64"
+                options={apps.map((app) => ({ value: app.id, label: app.name }))}
+              />
             </div>
             <Button type="submit">Filtrar</Button>
             {hasFilters ? (

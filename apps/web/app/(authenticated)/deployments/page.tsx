@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
 import { DeploymentStatusPill } from "@/components/aethra/deployment-status-pill";
+import { MultiSelectFilter } from "@/components/aethra/MultiSelectFilter";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   ClientSummary,
@@ -122,8 +123,8 @@ async function aggregate(searchParams: {
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
   if (searchParams.status) {
-    const wanted = searchParams.status.toLowerCase();
-    merged = merged.filter((d) => d.status.toLowerCase() === wanted);
+    const wanted = parseMultiValue(searchParams.status);
+    merged = merged.filter((d) => wanted.includes(d.status.toLowerCase()));
   }
   return merged.slice(0, 50);
 }
@@ -169,19 +170,19 @@ export default async function DeploymentsPage({
             </div>
             <div className="space-y-1">
               <Label htmlFor="status">{t("label_status")}</Label>
-              <select
+              <MultiSelectFilter
                 id="status"
                 name="status"
-                defaultValue={filterStatus}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">{t("all")}</option>
-                <option value="Pending">Pending</option>
-                <option value="Running">Running</option>
-                <option value="Completed">Completed</option>
-                <option value="Failed">Failed</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
+                value={filterStatus}
+                allLabel={t("all")}
+                options={[
+                  { value: "Pending", label: "Pending" },
+                  { value: "Running", label: "Running" },
+                  { value: "Completed", label: "Completed" },
+                  { value: "Failed", label: "Failed" },
+                  { value: "Cancelled", label: "Cancelled" },
+                ]}
+              />
             </div>
             <Button type="submit">{t("filter")}</Button>
             {filterStatus || filterInstance ? (
@@ -288,4 +289,11 @@ function formatDate(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function parseMultiValue(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
 }

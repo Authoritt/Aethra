@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AssignInferredRouteOwnersButton } from "@/components/aethra/AssignInferredRouteOwnersButton";
+import { MultiSelectFilter } from "@/components/aethra/MultiSelectFilter";
 import { PublicAccessReconcileActions } from "@/components/aethra/PublicAccessReconcileActions";
 import { PublicAccessVerifyButton } from "@/components/aethra/PublicAccessVerifyButton";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
@@ -99,90 +100,79 @@ export default async function PublicAccessPage({
             </div>
             <div className="space-y-1">
               <Label htmlFor="health">Health</Label>
-              <select
+              <MultiSelectFilter
                 id="health"
                 name="health"
-                defaultValue={filters.health ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todos</option>
-                <option value="healthy">Healthy</option>
-                <option value="degraded">Degraded</option>
-                <option value="broken">Broken</option>
-              </select>
+                value={filters.health}
+                allLabel="Todos"
+                options={[
+                  { value: "healthy", label: "Healthy" },
+                  { value: "degraded", label: "Degraded" },
+                  { value: "broken", label: "Broken" },
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="dns">DNS</Label>
-              <select
+              <MultiSelectFilter
                 id="dns"
                 name="dns"
-                defaultValue={filters.dns ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todos</option>
-                <option value="ok">OK</option>
-                <option value="missing">Missing</option>
-                <option value="wrong">Wrong target</option>
-              </select>
+                value={filters.dns}
+                allLabel="Todos"
+                options={[
+                  { value: "ok", label: "OK" },
+                  { value: "missing", label: "Missing" },
+                  { value: "wrong", label: "Wrong target" },
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="tunnel">Tunnel</Label>
-              <select
+              <MultiSelectFilter
                 id="tunnel"
                 name="tunnel"
-                defaultValue={filters.tunnel ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todos</option>
-                <option value="ok">OK</option>
-                <option value="missing">Missing</option>
-              </select>
+                value={filters.tunnel}
+                allLabel="Todos"
+                options={[
+                  { value: "ok", label: "OK" },
+                  { value: "missing", label: "Missing" },
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="monitor">Monitor</Label>
-              <select
+              <MultiSelectFilter
                 id="monitor"
                 name="monitor"
-                defaultValue={filters.monitor ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todos</option>
-                <option value="up">Up</option>
-                <option value="down">Down</option>
-                <option value="missing">Missing</option>
-              </select>
+                value={filters.monitor}
+                allLabel="Todos"
+                options={[
+                  { value: "up", label: "Up" },
+                  { value: "down", label: "Down" },
+                  { value: "missing", label: "Missing" },
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="appId">App</Label>
-              <select
+              <MultiSelectFilter
                 id="appId"
                 name="appId"
-                defaultValue={filters.appId ?? ""}
-                className="flex h-10 max-w-64 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todas</option>
-                {apps.map((app) => (
-                  <option key={app.id} value={app.id}>
-                    {app.name}
-                  </option>
-                ))}
-              </select>
+                value={filters.appId}
+                allLabel="Todas"
+                className="max-w-64"
+                options={apps.map((app) => ({ value: app.id, label: app.name }))}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="environment">Environment</Label>
-              <select
+              <MultiSelectFilter
                 id="environment"
                 name="environment"
-                defaultValue={filters.environment ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todos</option>
-                {environmentOptions.map((env) => (
-                  <option key={env} value={env}>
-                    {env}
-                  </option>
-                ))}
-              </select>
+                value={filters.environment}
+                allLabel="Todos"
+                options={environmentOptions.map((env) => ({ value: env, label: env }))}
+              />
             </div>
             <Button type="submit">Filtrar</Button>
             {hasFilters ? (

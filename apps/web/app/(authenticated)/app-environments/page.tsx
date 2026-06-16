@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
+import { MultiSelectFilter } from "@/components/aethra/MultiSelectFilter";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
@@ -85,66 +86,50 @@ export default async function AppEnvironmentsPage({
             </div>
             <div className="space-y-1">
               <Label htmlFor="status">Status</Label>
-              <select
+              <MultiSelectFilter
                 id="status"
                 name="status"
-                defaultValue={filters.status ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todos</option>
-                <option value="healthy">Healthy</option>
-                <option value="degraded">Degraded</option>
-                <option value="deploying">Deploying</option>
-                <option value="failed">Failed</option>
-              </select>
+                value={filters.status}
+                allLabel="Todos"
+                options={[
+                  { value: "healthy", label: "Healthy" },
+                  { value: "degraded", label: "Degraded" },
+                  { value: "deploying", label: "Deploying" },
+                  { value: "failed", label: "Failed" },
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="appId">App</Label>
-              <select
+              <MultiSelectFilter
                 id="appId"
                 name="appId"
-                defaultValue={filters.appId ?? ""}
-                className="flex h-10 max-w-64 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todas</option>
-                {apps.map((app) => (
-                  <option key={app.id} value={app.id}>
-                    {app.name}
-                  </option>
-                ))}
-              </select>
+                value={filters.appId}
+                allLabel="Todas"
+                className="max-w-64"
+                options={apps.map((app) => ({ value: app.id, label: app.name }))}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="environment">Environment</Label>
-              <select
+              <MultiSelectFilter
                 id="environment"
                 name="environment"
-                defaultValue={filters.environment ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todos</option>
-                {environmentOptions.map((env) => (
-                  <option key={env} value={env}>
-                    {env}
-                  </option>
-                ))}
-              </select>
+                value={filters.environment}
+                allLabel="Todos"
+                options={environmentOptions.map((env) => ({ value: env, label: env }))}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="machineId">Machine</Label>
-              <select
+              <MultiSelectFilter
                 id="machineId"
                 name="machineId"
-                defaultValue={filters.machineId ?? ""}
-                className="flex h-10 max-w-64 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todas</option>
-                {machines.map((machine) => (
-                  <option key={machine.id} value={machine.id}>
-                    {machine.name}
-                  </option>
-                ))}
-              </select>
+                value={filters.machineId}
+                allLabel="Todas"
+                className="max-w-64"
+                options={machines.map((machine) => ({ value: machine.id, label: machine.name }))}
+              />
             </div>
             <Button type="submit">Filtrar</Button>
             {hasFilters ? (

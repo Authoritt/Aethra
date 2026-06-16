@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/layout/page-header";
+import { MultiSelectFilter } from "@/components/aethra/MultiSelectFilter";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { serverFetch } from "@/lib/server-fetch";
 import type { DataServiceOverviewDto } from "@/lib/types";
@@ -67,34 +68,28 @@ export default async function DataServicesPage({
             </div>
             <div className="space-y-1">
               <Label htmlFor="status">Status</Label>
-              <select
+              <MultiSelectFilter
                 id="status"
                 name="status"
-                defaultValue={filters.status ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todos</option>
-                <option value="Ready">Ready</option>
-                <option value="Provisioning">Provisioning</option>
-                <option value="Failed">Failed</option>
-                <option value="Stopped">Stopped</option>
-              </select>
+                value={filters.status}
+                allLabel="Todos"
+                options={[
+                  { value: "Ready", label: "Ready" },
+                  { value: "Provisioning", label: "Provisioning" },
+                  { value: "Failed", label: "Failed" },
+                  { value: "Stopped", label: "Stopped" },
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="type">Type</Label>
-              <select
+              <MultiSelectFilter
                 id="type"
                 name="type"
-                defaultValue={filters.type ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todos</option>
-                {typeOptions.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
+                value={filters.type}
+                allLabel="Todos"
+                options={typeOptions.map((type) => ({ value: type, label: type }))}
+              />
             </div>
             <Button type="submit">Filtrar</Button>
             {hasFilters ? (

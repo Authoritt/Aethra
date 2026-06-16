@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/layout/page-header";
 import { KpiCard } from "@/components/aethra/kpi-card";
+import { MultiSelectFilter } from "@/components/aethra/MultiSelectFilter";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { serverFetch } from "@/lib/server-fetch";
 import type { MachineOverviewDto } from "@/lib/types";
@@ -74,19 +75,19 @@ export default async function VmsPage({
             </div>
             <div className="space-y-1">
               <Label htmlFor="readiness">Readiness</Label>
-              <select
+              <MultiSelectFilter
                 id="readiness"
                 name="readiness"
-                defaultValue={filters.readiness ?? ""}
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Todas</option>
-                <option value="ready">Ready</option>
-                <option value="busy">Busy</option>
-                <option value="degraded">Degraded</option>
-                <option value="offline">Offline</option>
-                <option value="unknown">Unknown</option>
-              </select>
+                value={filters.readiness}
+                allLabel="Todas"
+                options={[
+                  { value: "ready", label: "Ready" },
+                  { value: "busy", label: "Busy" },
+                  { value: "degraded", label: "Degraded" },
+                  { value: "offline", label: "Offline" },
+                  { value: "unknown", label: "Unknown" },
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="acceptsPreviews">Preview pool</Label>
