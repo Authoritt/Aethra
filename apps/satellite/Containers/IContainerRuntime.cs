@@ -57,11 +57,24 @@ public interface IContainerRuntime
 
     /// <summary>
     /// Poda el build cache del runtime (capas intermedias de BuildKit/buildah que el flujo git-mode
-    /// acumula sin límite — ~15 GB por ciclo de builds → fuga de disco). Sólo borra cache no usado en
-    /// las últimas <paramref name="maxAgeHours"/> horas, conservando el reciente para rebuilds rápidos;
-    /// no toca imágenes ni contenedores. Best-effort e idempotente: con <paramref name="maxAgeHours"/>
-    /// &lt;= 0 no hace nada. Devuelve un resumen legible (ej. <c>"Total reclaimed space: 12GB"</c>) o
-    /// <c>null</c> si no aplicó o falló.
+    /// acumula sin límite — ~15 GB por ciclo de builds → fuga de disco). Acota el cache por DOS vías:
+    /// <list type="bullet">
+    /// <item><paramref name="keepStorageGb"/> &gt; 0 → tope DURO de tamaño (<c>--reserved-space</c>):
+    /// deja a lo sumo esos GB del cache más reciente y borra el resto. Bound robusto frente a ráfagas
+    /// de builds del mismo día (que un filtro por edad NO reclama).</item>
+    /// <item><paramref name="maxAgeHours"/> &gt; 0 (usado sólo si no hay tope de tamaño) → borra cache
+    /// no usado en las últimas N horas, conservando el reciente para rebuilds rápidos.</item>
+    /// </list>
+    /// No toca imágenes ni contenedores. Best-effort e idempotente: con ambos &lt;= 0 no hace nada.
+    /// Devuelve un resumen legible (ej. <c>"Total reclaimed space: 12GB"</c>) o <c>null</c> si no
+    /// aplicó o falló.
     /// </summary>
-    Task<string?> PruneBuildCacheAsync(int maxAgeHours, CancellationToken ct);
+    Task<string?> PruneBuildCacheAsync(int maxAgeHours, int keepStorageGb, CancellationToken ct);
+
+    /// <summary>
+    /// Borra las imágenes colgantes (<c>&lt;none&gt;</c>: capas sin tag que quedan tras rebuildear un
+    /// tag a una imagen nueva). Nunca toca imágenes con tag ni en uso. Best-effort e idempotente.
+    /// Devuelve un resumen legible o <c>null</c> si no aplicó o falló.
+    /// </summary>
+    Task<string?> PruneDanglingImagesAsync(CancellationToken ct);
 }

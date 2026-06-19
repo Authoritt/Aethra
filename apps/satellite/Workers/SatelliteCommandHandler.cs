@@ -27,6 +27,7 @@ public sealed class SatelliteCommandHandler(
 {
     private readonly int _imageRetentionKeep = options.Value.ImageRetentionKeep;
     private readonly int _buildCacheMaxAgeHours = options.Value.BuildCacheMaxAgeHours;
+    private readonly int _buildCacheKeepStorageGb = options.Value.BuildCacheKeepStorageGb;
 
     /// <summary>Deriva el repositorio (sin el <c>:tag</c>) de un image ref, respetando un puerto
     /// de registry (<c>host:5000/repo:tag</c>): el separador es el último ':' después del último '/'.</summary>
@@ -94,16 +95,17 @@ public sealed class SatelliteCommandHandler(
                 }
 
                 // Prune del build cache tras build exitoso: el git-mode (un build por commit) acumula
-                // capas de BuildKit sin límite (~15 GB/ciclo). Best-effort, sólo cache viejo, nunca bloquea.
-                if (build.Success && _buildCacheMaxAgeHours > 0)
+                // capas de BuildKit sin límite (~15 GB/ciclo). Con keepStorageGb acota por tamaño (tope
+                // duro frente a ráfagas del mismo día); sin él, por edad. Best-effort, nunca bloquea.
+                if (build.Success && (_buildCacheKeepStorageGb > 0 || _buildCacheMaxAgeHours > 0))
                 {
                     try
                     {
-                        var summary = await runtime.PruneBuildCacheAsync(_buildCacheMaxAgeHours, CancellationToken.None);
+                        var summary = await runtime.PruneBuildCacheAsync(
+                            _buildCacheMaxAgeHours, _buildCacheKeepStorageGb, CancellationToken.None);
                         if (!string.IsNullOrWhiteSpace(summary))
                         {
-                            logger.LogInformation(
-                                "Prune de build cache (no usado >{Hours}h): {Summary}", _buildCacheMaxAgeHours, summary);
+                            logger.LogInformation("Prune de build cache: {Summary}", summary);
                         }
                     }
                     catch (Exception ex)

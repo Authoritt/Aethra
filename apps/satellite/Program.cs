@@ -60,6 +60,28 @@ builder.Services.Configure<SatelliteOptions>(opts =>
     {
         opts.ImageRetentionKeep = cfgRetention;
     }
+    if (int.TryParse(
+            Environment.GetEnvironmentVariable("AETHRA_BUILD_CACHE_KEEP_STORAGE_GB"),
+            NumberStyles.Integer, CultureInfo.InvariantCulture, out var keepGb))
+    {
+        opts.BuildCacheKeepStorageGb = keepGb;
+    }
+    else if (int.TryParse(section["BuildCacheKeepStorageGb"], NumberStyles.Integer,
+        CultureInfo.InvariantCulture, out var cfgKeepGb))
+    {
+        opts.BuildCacheKeepStorageGb = cfgKeepGb;
+    }
+    if (int.TryParse(
+            Environment.GetEnvironmentVariable("AETHRA_DISK_JANITOR_INTERVAL_HOURS"),
+            NumberStyles.Integer, CultureInfo.InvariantCulture, out var janitorH))
+    {
+        opts.DiskJanitorIntervalHours = janitorH;
+    }
+    else if (int.TryParse(section["DiskJanitorIntervalHours"], NumberStyles.Integer,
+        CultureInfo.InvariantCulture, out var cfgJanitorH))
+    {
+        opts.DiskJanitorIntervalHours = cfgJanitorH;
+    }
 });
 
 // Elegimos probe según OS. Linux → /proc real; otros → BCL cross-platform (Windows dev).
@@ -102,6 +124,11 @@ builder.Services.AddSingleton<Aethra.Satellite.Storage.ISatelliteFileStore,
 builder.Services.AddSingleton<SatelliteCommandHandler>();
 
 builder.Services.AddHostedService<SatelliteConnectionWorker>();
+
+// Backstop periódico de disco (prune de build cache al tope de tamaño + imágenes colgantes),
+// independiente de los builds. Cubre builds que no pasan por el satélite (rebuild manual del central)
+// e idle. Ver DiskJanitorWorker.
+builder.Services.AddHostedService<DiskJanitorWorker>();
 
 var host = builder.Build();
 host.Run();

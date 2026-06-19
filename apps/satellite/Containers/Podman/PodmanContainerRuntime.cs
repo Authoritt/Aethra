@@ -453,17 +453,24 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
         return removed;
     }
 
-    public async Task<string?> PruneBuildCacheAsync(int maxAgeHours, CancellationToken ct)
+    public async Task<string?> PruneBuildCacheAsync(int maxAgeHours, int keepStorageGb, CancellationToken ct)
     {
-        if (maxAgeHours <= 0)
+        if (keepStorageGb <= 0 && maxAgeHours <= 0)
         {
             return null;
         }
 
-        // Podman 4+ soporta `podman builder prune`. Best-effort: si no existe o falla, no-op.
-        var until = "until=" + maxAgeHours.ToString(CultureInfo.InvariantCulture) + "h";
-        var (code, stdout, _) = await RunPodmanAsync(
-            ["builder", "prune", "-f", "--filter", until], ct).ConfigureAwait(false);
+        // Podman 4+ soporta `podman builder prune`. Con keepStorageGb usamos `--keep-storage <N>GB`
+        // (tope de tamaño); sin él, filtro por edad. Best-effort: si no existe o falla, no-op.
+        string[] args = keepStorageGb > 0
+            ? ["builder", "prune", "-f", "--keep-storage", keepStorageGb.ToString(CultureInfo.InvariantCulture) + "GB"]
+            : ["builder", "prune", "-f", "--filter", "until=" + maxAgeHours.ToString(CultureInfo.InvariantCulture) + "h"];
+
+        var (code, stdout, _) = await RunPodmanAsync(args, ct).ConfigureAwait(false);
+        if (code != 0 && keepStorageGb > 0)
+        {
+            (code, stdout, _) = await RunPodmanAsync(["builder", "prune", "-f"], ct).ConfigureAwait(false);
+        }
         if (code != 0)
         {
             return null;
@@ -471,6 +478,18 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
 
         return SplitLines(stdout).LastOrDefault(l => l.Contains("reclaimed", StringComparison.OrdinalIgnoreCase))
             ?? "build cache pruned";
+    }
+
+    public async Task<string?> PruneDanglingImagesAsync(CancellationToken ct)
+    {
+        // `podman image prune -f`: sólo imágenes colgantes (sin tag). Nunca toca imágenes en uso.
+        var (code, stdout, _) = await RunPodmanAsync(["image", "prune", "-f"], ct).ConfigureAwait(false);
+        if (code != 0)
+        {
+            return null;
+        }
+        return SplitLines(stdout).LastOrDefault(l => l.Contains("reclaimed", StringComparison.OrdinalIgnoreCase))
+            ?? "dangling images pruned";
     }
 
     public async IAsyncEnumerable<string> StreamLogsAsync(

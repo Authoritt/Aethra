@@ -20,9 +20,27 @@ public sealed class SatelliteOptions
     /// Tras cada build git-mode, poda el build cache del runtime no usado en las últimas N horas
     /// (BuildKit/buildah acumula capas intermedias sin límite — ~15 GB por ciclo de builds → fuga de
     /// disco). Conserva el cache reciente para que los rebuilds sigan siendo rápidos. 0 o negativo
-    /// desactiva el prune. Default 48 (2 días).
+    /// desactiva el prune. Sólo se usa si <see cref="BuildCacheKeepStorageGb"/> &lt;= 0 (el tope por
+    /// tamaño es preferible). Default 48 (2 días).
     /// </summary>
     public int BuildCacheMaxAgeHours { get; set; } = 48;
+
+    /// <summary>
+    /// Tope DURO de tamaño del build cache en GB (<c>docker builder prune --reserved-space</c>). Cuando
+    /// &gt; 0 acota el cache por tamaño en vez de por edad: deja a lo sumo estos GB del cache más
+    /// reciente y borra el resto tras cada build Y en el janitor periódico. Robusto frente a ráfagas de
+    /// builds del mismo día (que el filtro por edad NO reclama → fue la causa de que el disco se
+    /// volviera a llenar). 0 o negativo desactiva el tope por tamaño. Default 5.
+    /// </summary>
+    public int BuildCacheKeepStorageGb { get; set; } = 5;
+
+    /// <summary>
+    /// Cada cuántas horas corre el janitor de disco (backstop periódico, independiente de los builds):
+    /// poda build cache al tope de tamaño + imágenes colgantes. Cubre el caso de que los builds paren
+    /// (los huérfanos no se reclamarían) y el de builds que NO pasan por el satélite (ej. rebuild manual
+    /// del central). 0 o negativo lo desactiva. Default 6.
+    /// </summary>
+    public int DiskJanitorIntervalHours { get; set; } = 6;
 
     /// <summary>
     /// Directorio base donde el central guarda blobs (p.ej. backups) en este satélite vía RPC

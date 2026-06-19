@@ -474,18 +474,28 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
         return removed;
     }
 
-    public async Task<string?> PruneBuildCacheAsync(int maxAgeHours, CancellationToken ct)
+    public async Task<string?> PruneBuildCacheAsync(int maxAgeHours, int keepStorageGb, CancellationToken ct)
     {
-        if (maxAgeHours <= 0)
+        if (keepStorageGb <= 0 && maxAgeHours <= 0)
         {
             return null;
         }
 
-        // `docker builder prune -f --filter until=<h>h`: borra cache de build no referenciado en las
-        // últimas N horas. No toca el cache reciente (rebuilds siguen rápidos) ni imágenes/contenedores.
-        var until = "until=" + maxAgeHours.ToString(CultureInfo.InvariantCulture) + "h";
-        var (code, stdout, _) = await RunProcessAsync(
-            "docker", ["builder", "prune", "-f", "--filter", until], ct).ConfigureAwait(false);
+        // Tope DURO por tamaño cuando hay keepStorageGb: `docker builder prune -f --reserved-space <bytes>`
+        // (BuildKit ≥0.16 / Docker ≥28 — reemplazo de `--keep-storage`). Deja a lo sumo esos GB del
+        // cache más reciente y borra el resto, así una ráfaga de builds del mismo día no puede crecer
+        // sin límite (un filtro por edad NO la reclama). Sin keepStorageGb, cae al filtro por edad.
+        string[] args = keepStorageGb > 0
+            ? ["builder", "prune", "-f", "--reserved-space", (keepStorageGb * 1_000_000_000L).ToString(CultureInfo.InvariantCulture)]
+            : ["builder", "prune", "-f", "--filter", "until=" + maxAgeHours.ToString(CultureInfo.InvariantCulture) + "h"];
+
+        var (code, stdout, _) = await RunProcessAsync("docker", args, ct).ConfigureAwait(false);
+        if (code != 0 && keepStorageGb > 0)
+        {
+            // Fallback por si la versión de docker no acepta --reserved-space: prune de todo el cache
+            // no usado (más agresivo, rebuilds más lentos, pero garantiza acotar el disco).
+            (code, stdout, _) = await RunProcessAsync("docker", ["builder", "prune", "-f"], ct).ConfigureAwait(false);
+        }
         if (code != 0)
         {
             return null;
@@ -494,6 +504,28 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
         // La CLI imprime "Total reclaimed space: <N>" al final; devolvemos esa línea como resumen.
         return SplitLines(stdout).LastOrDefault(l => l.Contains("reclaimed", StringComparison.OrdinalIgnoreCase))
             ?? "build cache pruned";
+    }
+
+    public async Task<string?> PruneDanglingImagesAsync(CancellationToken ct)
+    {
+        // Filtro dangling=true: sólo capas <none> sin tag. PruneImagesAsync nunca borra imágenes con
+        // tag ni en uso por un contenedor, así que es seguro como rutina periódica.
+        try
+        {
+            var result = await _client.Images.PruneImagesAsync(
+                new ImagesPruneParameters { Filters = new Dictionary<string, IDictionary<string, bool>>
+                {
+                    ["dangling"] = new Dictionary<string, bool> { ["true"] = true },
+                } }, ct).ConfigureAwait(false);
+            var freed = result.SpaceReclaimed;
+            var count = result.ImagesDeleted?.Count ?? 0;
+            return count == 0 ? null : $"dangling images pruned: {count} (≈{freed / 1_000_000L} MB)";
+        }
+        catch (DockerApiException ex)
+        {
+            _logger.LogDebug(ex, "Prune de imágenes colgantes falló (se omite).");
+            return null;
+        }
     }
 
     /// <summary>
