@@ -79,6 +79,10 @@ public sealed class NativeDeployRunner(
         {
             return Fail("El template no define servicios (Services).");
         }
+        // Set COMPLETO de servicios del template (antes de filtrar por serviceName). La limpieza de
+        // contenedores zombi se basa en ÉSTE, no en el subconjunto filtrado: un deploy incremental de
+        // un solo servicio no debe borrar los contenedores de los demás servicios legítimos.
+        var allTemplateServices = services;
         if (!string.IsNullOrWhiteSpace(serviceName))
         {
             services = services
@@ -263,6 +267,19 @@ public sealed class NativeDeployRunner(
             log.LogInformation("native-deploy {Inst}: sin hostname → redeploy de contenedores (rutas/monitor existentes intactos)", instance.Slug);
         }
 
+        // Limpieza post-deploy de contenedores zombi/vestigiales (problema #1: split-brain). Sólo
+        // tras un deploy sano: los nuevos targets ya están Up y sirviendo. Elimina cualquier
+        // {slug}-* que NO sea target del template (ej. {slug}-api-bgbak/-bak/-new/-qqi…, o un
+        // servicio retirado) — corren TODOS los hosted services contra el Postgres compartido pero
+        // sin las conexiones SignalR del PoS → reclaman docs y los expiran. Best-effort.
+        var cleaned = await CleanupStaleContainersAsync(
+            instance.TargetVmId, instance.Slug, allTemplateServices, ct).ConfigureAwait(false);
+        foreach (var name in cleaned)
+        {
+            deployment.AppendLog(DeploymentLogLevel.Info, "swapping",
+                $"Contenedor obsoleto/zombi eliminado: {name}", clock.UtcNow);
+        }
+
         deployment.Complete(clock.UtcNow);
         await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
 
@@ -305,6 +322,59 @@ public sealed class NativeDeployRunner(
 
         log.LogInformation("native-restart {Inst} OK ({N} servicios)", instance.Slug, restarted.Count);
         return new NativeRestartResult(true, null, restarted);
+    }
+
+    /// <summary>
+    /// Problema #1 (split-brain) — elimina los contenedores <c>{slug}-*</c> de esta Instance que NO
+    /// son target de NINGÚN servicio del template. El deploy nombra sus targets de forma estable
+    /// (<c>{slug}-{service}</c>) y recrea cada uno (remove + run); pero los blue-green/renames manuales
+    /// (<c>{slug}-api-bgbak</c>, <c>-bak</c>, <c>-new</c>, sufijos <c>-qqi…</c>) o un servicio retirado
+    /// del template dejan contenedores viejos corriendo. Como el productor (<c>DianProcessorJob</c>,
+    /// <c>ExpirationJob</c>…) NO es leader-only y SignalR no tiene backplane, ese duplicado corre TODOS
+    /// los hosted services contra el Postgres compartido pero sin las conexiones SignalR del PoS →
+    /// reclama documentos, manda sus fetches al vacío (docs colgados en "Construyendo") y los expira.
+    /// Por eso la limpieza usa el set COMPLETO de servicios del template (no el subconjunto de un
+    /// deploy incremental). Best-effort e idempotente: cualquier fallo se loguea y no rompe el deploy.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> CleanupStaleContainersAsync(
+        string vmId, string slug, IReadOnlyList<TemplateServiceView> allServices, CancellationToken ct)
+    {
+        var removed = new List<string>();
+        try
+        {
+            var legit = allServices
+                .Select(s => $"{slug}-{s.Name}")
+                .ToHashSet(StringComparer.Ordinal);
+            // El separador "-" evita que un slug que es prefijo de otro (p.ej. "app" vs "app2") se
+            // confunda: "app2-api" no empieza por "app-".
+            var prefix = $"{slug}-";
+
+            var containers = await satellite.SendListContainersAsync(vmId, ct).ConfigureAwait(false);
+            foreach (var c in containers)
+            {
+                if (!c.Name.StartsWith(prefix, StringComparison.Ordinal) || legit.Contains(c.Name))
+                {
+                    continue;
+                }
+                try
+                {
+                    await satellite.SendRemoveAsync(vmId, c.Name, force: true, ct).ConfigureAwait(false);
+                    removed.Add(c.Name);
+                    log.LogWarning(
+                        "native-deploy {Slug}: contenedor obsoleto/zombi eliminado: {Name} (img {Image}, estado {Status})",
+                        slug, c.Name, c.Image, c.Status);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    log.LogWarning(ex, "native-deploy {Slug}: no se pudo eliminar contenedor obsoleto {Name}", slug, c.Name);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex, "native-deploy {Slug}: limpieza de contenedores obsoletos falló (ignorada)", slug);
+        }
+        return removed;
     }
 
     /// <summary>
