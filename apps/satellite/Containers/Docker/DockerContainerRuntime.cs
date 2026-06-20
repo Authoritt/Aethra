@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using Aethra.Shared.Contracts.Containers;
 using Docker.DotNet;
 using Docker.DotNet.Models;
@@ -17,7 +18,7 @@ namespace Aethra.Satellite.Containers.Docker;
 /// Implementación de <see cref="IContainerRuntime"/> sobre <c>Docker.DotNet</c>.
 /// Habla contra el socket Docker local: Unix socket en Linux, named pipe en Windows.
 /// </summary>
-public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
+public sealed partial class DockerContainerRuntime : IContainerRuntime, IDisposable
 {
     // Usamos el tipo concreto DockerClient (no IDockerClient de Docker.DotNet) para evitar el
     // boxing/dispatch virtual cuando solo tenemos una implementación (CA1859).
@@ -527,6 +528,54 @@ public sealed class DockerContainerRuntime : IContainerRuntime, IDisposable
             return null;
         }
     }
+
+    public async Task<string?> PruneAnonymousVolumesAsync(CancellationToken ct)
+    {
+        // dangling=true → volúmenes sin contenedor montado. OJO: el daemon también marca como dangling
+        // a named volumes cuyo contenedor está caído entre deploys, así que NO basta el filtro: filtramos
+        // además por nombre anónimo (64 hex) para nunca tocar datos/DP-keys.
+        try
+        {
+            var list = await _client.Volumes.ListAsync(
+                new VolumesListParameters
+                {
+                    Filters = new Dictionary<string, IDictionary<string, bool>>
+                    {
+                        ["dangling"] = new Dictionary<string, bool> { ["true"] = true },
+                    },
+                }, ct).ConfigureAwait(false);
+
+            var anon = (list.Volumes ?? [])
+                .Where(v => v.Name is not null && AnonymousVolumeName().IsMatch(v.Name))
+                .ToList();
+
+            var removed = 0;
+            foreach (var v in anon)
+            {
+                try
+                {
+                    // force:false → un volumen en uso lo rechaza el daemon y lo dejamos intacto.
+                    await _client.Volumes.RemoveAsync(v.Name, force: false, ct).ConfigureAwait(false);
+                    removed++;
+                }
+                catch (DockerApiException ex)
+                {
+                    _logger.LogDebug(ex, "Prune de volúmenes: no se pudo borrar {Name} (en uso?); se omite.", v.Name);
+                }
+            }
+            return removed == 0 ? null : $"volúmenes anónimos podados: {removed}";
+        }
+        catch (DockerApiException ex)
+        {
+            _logger.LogDebug(ex, "Prune de volúmenes anónimos falló (se omite).");
+            return null;
+        }
+    }
+
+    // Nombre de volumen anónimo de Docker: 64 caracteres hex en minúscula. Excluye todos los named
+    // volumes (que llevan slug/sufijos descriptivos) → red de seguridad para no borrar datos.
+    [GeneratedRegex("^[0-9a-f]{64}$")]
+    private static partial Regex AnonymousVolumeName();
 
     /// <summary>
     /// Streamea logs en formato multiplexado. Docker antepone un header de 8 bytes por frame:

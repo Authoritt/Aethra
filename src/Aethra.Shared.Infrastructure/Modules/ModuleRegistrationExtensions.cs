@@ -41,6 +41,9 @@ public static class ModuleRegistrationExtensions
         services.AddScoped<IOutboxStore<TDbContext>, EfOutboxStore<TDbContext>>();
 
         services.AddHostedService<ModuleOutboxDispatcherHost<TDbContext>>();
+        // Purga periódica de mensajes ya procesados de la outbox de este módulo (la tabla crecía sin
+        // tope: el dispatcher marca ProcessedAt pero nunca borra). Solo toca procesados antiguos.
+        services.AddHostedService<ModuleOutboxPurgeHost<TDbContext>>();
 
         return services;
     }
@@ -119,5 +122,87 @@ internal sealed class ModuleOutboxDispatcherHost<TDbContext>(
         var baseSeconds = Math.Min(Math.Pow(2, attempts), 300);
         var jitter = Random.Shared.NextDouble() * 0.3 * baseSeconds;
         return TimeSpan.FromSeconds(baseSeconds + jitter);
+    }
+}
+
+/// <summary>
+/// Hosted service por módulo que purga los mensajes de outbox YA procesados
+/// (<c>ProcessedAt &lt; now - RetentionDays</c>) de la tabla del módulo. El dispatcher marca
+/// <c>ProcessedAt</c> pero nunca borra la fila → sin esto cada <c>outbox_messages</c> crece sin tope.
+/// Mismo patrón que <see cref="ModuleOutboxDispatcherHost{TDbContext}"/> (un host genérico por
+/// DbContext de módulo). Solo borra procesados antiguos vía <c>ExecuteDeleteAsync</c>: un mensaje
+/// pendiente o fallido (reintentándose) nunca se toca. Best-effort: cualquier fallo se loguea y se
+/// reintenta en el próximo ciclo sin tumbar el host.
+/// </summary>
+internal sealed class ModuleOutboxPurgeHost<TDbContext>(
+    IServiceScopeFactory scopeFactory,
+    IOptions<OutboxDispatcherOptions> options,
+    TimeProvider clock,
+    ILogger<ModuleOutboxPurgeHost<TDbContext>> logger)
+    : BackgroundService
+    where TDbContext : AethraModuleDbContext
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var retentionDays = options.Value.OutboxRetentionDays;
+        var moduleName = typeof(TDbContext).Name;
+        if (retentionDays <= 0)
+        {
+            logger.LogInformation("OutboxPurge {Module} desactivado (OutboxRetentionDays <= 0).", moduleName);
+            return;
+        }
+        var sweep = TimeSpan.FromHours(Math.Max(1, options.Value.OutboxSweepIntervalHours));
+
+        // Delay inicial para no pegarle al boot (migraciones + arranque de dispatchers primero).
+        try
+        {
+            await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        using var timer = new PeriodicTimer(sweep);
+        do
+        {
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
+                var cutoff = clock.GetUtcNow() - TimeSpan.FromDays(retentionDays);
+                var deleted = await db.OutboxMessages
+                    .Where(m => m.ProcessedAt != null && m.ProcessedAt < cutoff)
+                    .ExecuteDeleteAsync(stoppingToken)
+                    .ConfigureAwait(false);
+                if (deleted > 0)
+                {
+                    logger.LogInformation(
+                        "OutboxPurge {Module}: {Count} mensaje(s) procesado(s) borrado(s) (> {Days}d)",
+                        moduleName, deleted, retentionDays);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "OutboxPurge {Module} falló (se reintenta en el próximo ciclo)", moduleName);
+            }
+        }
+        while (await SafeWaitAsync(timer, stoppingToken).ConfigureAwait(false));
+    }
+
+    private static async Task<bool> SafeWaitAsync(PeriodicTimer timer, CancellationToken ct)
+    {
+        try
+        {
+            return await timer.WaitForNextTickAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
     }
 }

@@ -492,6 +492,43 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
             ?? "dangling images pruned";
     }
 
+    public async Task<string?> PruneAnonymousVolumesAsync(CancellationToken ct)
+    {
+        // dangling=true lista volúmenes sin contenedor. Filtramos además por nombre anónimo (64 hex)
+        // para NUNCA tocar named volumes de datos/DP-keys (que el daemon también marca dangling cuando
+        // su contenedor está caído entre deploys). rm sin -f: un volumen en uso lo rechaza podman.
+        var (code, stdout, _) = await RunPodmanAsync(
+            ["volume", "ls", "--filter", "dangling=true", "--format", "{{.Name}}"], ct).ConfigureAwait(false);
+        if (code != 0)
+        {
+            return null;
+        }
+
+        var anon = SplitLines(stdout)
+            .Select(l => l.Trim())
+            .Where(n => n.Length > 0 && AnonymousVolumeNameRegex().IsMatch(n))
+            .ToList();
+
+        var removed = 0;
+        foreach (var name in anon)
+        {
+            var (rc, _, stderr) = await RunPodmanAsync(["volume", "rm", name], ct).ConfigureAwait(false);
+            if (rc == 0)
+            {
+                removed++;
+            }
+            else
+            {
+                _logger.LogDebug("Prune podman: no se pudo borrar volumen {Name} (en uso?): {Err}", name, stderr);
+            }
+        }
+        return removed == 0 ? null : $"volúmenes anónimos podados: {removed}";
+    }
+
+    // Nombre de volumen anónimo: 64 hex en minúscula. Excluye todos los named volumes.
+    [GeneratedRegex("^[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
+    private static partial Regex AnonymousVolumeNameRegex();
+
     public async IAsyncEnumerable<string> StreamLogsAsync(
         string nameOrId, int tailLines, [EnumeratorCancellation] CancellationToken ct)
     {

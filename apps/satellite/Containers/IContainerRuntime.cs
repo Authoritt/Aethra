@@ -77,4 +77,20 @@ public interface IContainerRuntime
     /// Devuelve un resumen legible o <c>null</c> si no aplicó o falló.
     /// </summary>
     Task<string?> PruneDanglingImagesAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Borra los volúmenes <b>anónimos</b> colgantes (dangling): los que el runtime creó con nombre
+    /// hash de 64 hex (ej. <c>27b96b5d…7473df</c>) y ya no están montados por ningún contenedor —
+    /// quedan tras eliminar contenedores con volúmenes anónimos y nadie los reclama → fuga de disco.
+    /// <para>
+    /// <b>Seguro por construcción:</b> SOLO toca nombres que matchean <c>^[0-9a-f]{64}$</c>, por lo
+    /// que NUNCA borra named volumes de datos/DataProtection (<c>*-dpkeys</c>, <c>aethra-pgdata</c>,
+    /// <c>*-almacen</c>, …) aunque su contenedor esté momentáneamente caído entre deploys (que el
+    /// daemon también reporta como "dangling"). El borrado es sin --force: un volumen en uso lo
+    /// rechaza el runtime y se omite. Best-effort e idempotente.
+    /// </para>
+    /// Devuelve un resumen legible (ej. <c>"volúmenes anónimos podados: 3"</c>) o <c>null</c> si no
+    /// aplicó o falló.
+    /// </summary>
+    Task<string?> PruneAnonymousVolumesAsync(CancellationToken ct);
 }

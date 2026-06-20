@@ -16,8 +16,9 @@ namespace Aethra.Satellite.Workers;
 /// <item>Builds que NO pasan por el satélite — p.ej. el rebuild manual del central
 /// (<c>aethra-central</c>) genera build cache que ningún hook post-build poda.</item>
 /// </list>
-/// Acota el build cache al tope de tamaño (<see cref="SatelliteOptions.BuildCacheKeepStorageGb"/>) y
-/// borra imágenes colgantes. Best-effort: nunca toca imágenes con tag ni contenedores en uso, y
+/// Acota el build cache al tope de tamaño (<see cref="SatelliteOptions.BuildCacheKeepStorageGb"/>),
+/// borra imágenes colgantes y poda volúmenes anónimos colgantes (hash 64-hex, nunca named volumes de
+/// datos). Best-effort: nunca toca imágenes con tag ni contenedores/volúmenes en uso, y
 /// cualquier fallo se loguea sin tumbar el satélite. La retención de tags por repo sigue en el hook
 /// post-build (keep-last-N), que es donde se conoce el repo recién construido.
 /// </summary>
@@ -71,6 +72,12 @@ public sealed class DiskJanitorWorker(
             if (!string.IsNullOrWhiteSpace(dangling))
             {
                 logger.LogInformation("DiskJanitor — {Summary}", dangling);
+            }
+
+            var volumes = await runtime.PruneAnonymousVolumesAsync(ct).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(volumes))
+            {
+                logger.LogInformation("DiskJanitor — {Summary}", volumes);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
