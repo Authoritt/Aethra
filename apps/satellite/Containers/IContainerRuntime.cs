@@ -1,4 +1,5 @@
 using Aethra.Shared.Contracts.Containers;
+using VmContainerInfo = Aethra.Shared.Contracts.Vms.ContainerInfo;
 
 namespace Aethra.Satellite.Containers;
 
@@ -39,6 +40,16 @@ public interface IContainerRuntime
 
     /// <summary>Lista los contenedores conocidos por el runtime (incluidos los detenidos).</summary>
     Task<IReadOnlyList<ContainerInfo>> ListContainersAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Lista TODOS los contenedores del host (gestionados por Aethra o no, incluidos los detenidos)
+    /// con sus stats de uso para los que están corriendo: CPU%, memoria usada/límite, red RX/TX,
+    /// block IO y tamaño en disco (capa escribible + total). Para el panel de contenedores de la VM.
+    /// Best-effort por contenedor: si las stats de uno fallan, ese va sin stats (campos null) y el
+    /// resto sigue. Más pesado que <see cref="ListContainersAsync"/> (una llamada de stats por
+    /// contenedor corriendo), por eso se reporta a una cadencia más lenta que las métricas de host.
+    /// </summary>
+    Task<IReadOnlyList<VmContainerInfo>> ListContainerStatsAsync(CancellationToken ct);
 
     /// <summary>F12.1A — ejecuta un comando shell (<c>sh -c "command"</c>) dentro de un
     /// contenedor corriendo. Captura stdout/stderr y exit code. Si el comando excede

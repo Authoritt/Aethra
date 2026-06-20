@@ -5,6 +5,16 @@ public sealed class SatelliteOptions
     public string CentralUrl { get; set; } = "http://localhost:5080";
     public string Token { get; set; } = string.Empty;
     public int MetricsIntervalSeconds { get; set; } = 5;
+
+    /// <summary>
+    /// Cada cuántos segundos el satélite reporta el inventario de contenedores del host (TODOS,
+    /// gestionados por Aethra o no) con stats de uso (CPU/mem/red/disco). Más pesado que las métricas
+    /// de host (una llamada de stats por contenedor corriendo) → cadencia más lenta. Es estado actual,
+    /// no time-series: si el central está caído se omite (no se bufferea). 0 o negativo lo desactiva.
+    /// Default 15.
+    /// </summary>
+    public int ContainerReportIntervalSeconds { get; set; } = 15;
+
     public string ContainerRuntime { get; set; } = "docker";
     public string? DataVolumePath { get; set; }
 

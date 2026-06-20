@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using Aethra.Satellite.Buffer;
+using Aethra.Satellite.Containers;
 using Aethra.Satellite.Probes;
 using Aethra.Shared.Contracts.Vms;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -25,16 +26,20 @@ public sealed class SatelliteConnectionWorker(
     IMetricsProbe probe,
     ISnapshotBuffer buffer,
     SatelliteCommandHandler commandHandler,
+    IContainerRuntime containerRuntime,
     ILogger<SatelliteConnectionWorker> logger) : BackgroundService
 {
     private const string ReportMetricsMethod = "ReportMetrics";
+    private const string ReportContainersMethod = "ReportContainers";
     private const int DrainBatchSize = 50;
     private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan ContainerReportTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan PruneInterval = TimeSpan.FromHours(1);
     private static readonly TimeSpan RetentionWindow = TimeSpan.FromHours(24);
 
     private HubConnection? _connection;
     private DateTimeOffset _lastPruneAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastContainerReportAt = DateTimeOffset.MinValue;
     private int _enqueueCounter;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -98,7 +103,10 @@ public sealed class SatelliteConnectionWorker(
                 _enqueueCounter = 0;
                 await DrainAndSendAsync(stoppingToken);
 
-                // 3) Prune oportunista (cada PruneInterval) para mantener el ring buffer de 24h.
+                // 3) Inventario de contenedores con stats (cadencia propia, estado actual, sin buffer).
+                await MaybeReportContainersAsync(opts, stoppingToken);
+
+                // 4) Prune oportunista (cada PruneInterval) para mantener el ring buffer de 24h.
                 await MaybePruneAsync(stoppingToken);
             }
             catch (OperationCanceledException) { break; }
@@ -160,6 +168,47 @@ public sealed class SatelliteConnectionWorker(
         {
             await buffer.MarkSentAsync(sentIds, ct);
             logger.LogInformation("Drenando buffer: enviadas {N} muestras pendientes", sentIds.Count);
+        }
+    }
+
+    /// <summary>
+    /// Cada <see cref="SatelliteOptions.ContainerReportIntervalSeconds"/> reúne el inventario de
+    /// contenedores del host con stats y lo envía vía <c>ReportContainers</c>. A diferencia de las
+    /// métricas, esto es estado ACTUAL: no se bufferea (si falla, el próximo ciclo lo supersede) y
+    /// solo corre con conexión viva. Best-effort: cualquier fallo se loguea y no rompe el loop.
+    /// </summary>
+    private async Task MaybeReportContainersAsync(SatelliteOptions opts, CancellationToken ct)
+    {
+        if (opts.ContainerReportIntervalSeconds <= 0 || _connection is null)
+        {
+            return;
+        }
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastContainerReportAt < TimeSpan.FromSeconds(opts.ContainerReportIntervalSeconds))
+        {
+            return;
+        }
+        _lastContainerReportAt = now;
+
+        try
+        {
+            var containers = await containerRuntime.ListContainerStatsAsync(ct);
+            if (_connection.State != HubConnectionState.Connected)
+            {
+                return;
+            }
+            using var sendCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            sendCts.CancelAfter(ContainerReportTimeout);
+            var snapshot = new ContainerListSnapshot(now, containers);
+            await _connection.InvokeAsync(ReportContainersMethod, snapshot, sendCts.Token);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Reporte de contenedores falló (se reintenta en el próximo ciclo)");
         }
     }
 

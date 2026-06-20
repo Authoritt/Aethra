@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Aethra.Shared.Contracts.Containers;
+using VmContainerInfo = Aethra.Shared.Contracts.Vms.ContainerInfo;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -608,6 +609,42 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "podman ps devolvió JSON no parseable");
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<VmContainerInfo>> ListContainerStatsAsync(CancellationToken ct)
+    {
+        // Inventario completo (todos los contenedores). Podman es el runtime secundario (prod usa
+        // Docker): devolvemos estado/puertos correctos pero dejamos las stats de uso en null —
+        // parsear `podman stats` (strings tipo "1.2MB / 4GB", formato variable entre versiones) es
+        // frágil; el contrato admite null y la UI degrada con guiones.
+        var (exitCode, stdout, stderr) = await RunPodmanAsync(["ps", "-a", "--format=json"], ct).ConfigureAwait(false);
+        if (exitCode != 0 || string.IsNullOrWhiteSpace(stdout))
+        {
+            if (exitCode != 0)
+            {
+                _logger.LogWarning("podman ps (stats) salió con código {Code}: {Stderr}", exitCode, stderr);
+            }
+            return [];
+        }
+        try
+        {
+            var rows = JsonSerializer.Deserialize<List<PodmanPsRow>>(stdout, JsonOptions) ?? [];
+            return [.. rows.Select(r => new VmContainerInfo(
+                Id: r.Id ?? string.Empty,
+                Name: r.Names is { Count: > 0 } ? r.Names[0] : string.Empty,
+                Image: r.Image ?? string.Empty,
+                Status: r.Status ?? r.State ?? string.Empty,
+                State: r.State ?? string.Empty,
+                CreatedAt: default,
+                Ports: r.Ports is { Count: > 0 }
+                    ? [.. r.Ports.Where(p => p.ContainerPort > 0).Select(p => p.ContainerPort)]
+                    : []))];
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "podman ps (stats) devolvió JSON no parseable");
             return [];
         }
     }

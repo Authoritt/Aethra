@@ -161,6 +161,43 @@ export interface VmMetricPoint {
   netBytesSent: number;
 }
 
+/**
+ * Un contenedor del host con sus stats de uso. Lo devuelve GET /api/metrics/vms/{id}/containers
+ * (carga inicial) y llega también en el evento SignalR `VmContainersUpdated` (mismo shape, dentro de
+ * `ContainerListSnapshot.containers`). Incluye TODOS los contenedores del host (gestionados por
+ * Aethra o no). Los campos de stats son null si el contenedor no corre o el runtime no los expone.
+ */
+export interface ContainerStat {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  state: string;
+  createdAt: string;
+  ports: number[];
+  cpuPercent: number | null;
+  memoryUsedBytes: number | null;
+  memoryLimitBytes: number | null;
+  netRxBytes: number | null;
+  netTxBytes: number | null;
+  blockReadBytes: number | null;
+  blockWriteBytes: number | null;
+  sizeRwBytes: number | null;
+  sizeRootFsBytes: number | null;
+}
+
+/** Respuesta de GET /api/metrics/vms/{id}/containers: último snapshot de contenedores de la VM. */
+export interface VmContainersDto {
+  timestamp: string | null;
+  containers: ContainerStat[];
+}
+
+/** Payload del evento SignalR `VmContainersUpdated` (ContainerListSnapshot). */
+export interface ContainerListSnapshot {
+  timestamp: string;
+  containers: ContainerStat[];
+}
+
 /** Uso de disco de una tabla: bytes totales (heap+índices+TOAST) y filas estimadas. */
 export interface TableDiskUsageDto {
   schema: string;

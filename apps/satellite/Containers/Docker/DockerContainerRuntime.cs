@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Aethra.Shared.Contracts.Containers;
+using VmContainerInfo = Aethra.Shared.Contracts.Vms.ContainerInfo;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Logging;
@@ -714,6 +715,152 @@ public sealed partial class DockerContainerRuntime : IContainerRuntime, IDisposa
                 ? [.. c.Ports.Select(p => (int)p.PrivatePort)]
                 : []))
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<VmContainerInfo>> ListContainerStatsAsync(CancellationToken ct)
+    {
+        // Size=true para SizeRw/SizeRootFs (Docker camina las capas → algo más lento, aceptable a
+        // la cadencia del worker de contenedores). All=true incluye los detenidos.
+        var raw = await _client.Containers.ListContainersAsync(
+            new ContainersListParameters { All = true, Size = true }, ct).ConfigureAwait(false);
+
+        // Una llamada de stats por contenedor corriendo; acotamos la concurrencia para no saturar
+        // el daemon en hosts con muchos contenedores.
+        using var gate = new SemaphoreSlim(8);
+        var tasks = raw.Select(async c =>
+        {
+            var name = c.Names is { Count: > 0 } ? c.Names[0].TrimStart('/') : string.Empty;
+            var ports = c.Ports is { Count: > 0 }
+                ? c.Ports.Where(p => p.PrivatePort > 0).Select(p => (int)p.PrivatePort).Distinct().ToList()
+                : [];
+            var info = new VmContainerInfo(
+                Id: c.ID,
+                Name: name,
+                Image: c.Image ?? string.Empty,
+                Status: c.Status ?? string.Empty,
+                State: c.State ?? string.Empty,
+                CreatedAt: c.Created,
+                Ports: ports,
+                SizeRwBytes: c.SizeRw > 0 ? c.SizeRw : null,
+                SizeRootFsBytes: c.SizeRootFs > 0 ? c.SizeRootFs : null);
+
+            if (!string.Equals(c.State, "running", StringComparison.OrdinalIgnoreCase))
+            {
+                return info; // detenido → sin stats de uso.
+            }
+
+            await gate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                var stat = await ReadOneShotStatsAsync(c.ID, ct).ConfigureAwait(false);
+                return stat is null ? info : Merge(info, stat);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+
+        return await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Lee una única muestra de stats (<c>stream=false</c>) de un contenedor. Docker reporta cpu_stats
+    /// + precpu_stats en la misma respuesta, así que el delta de CPU es calculable. El callback de
+    /// <see cref="Progress{T}"/> corre en un hop del thread-pool → esperamos su materialización con un
+    /// pequeño timeout. Best-effort: cualquier fallo devuelve null (el contenedor va sin stats).
+    /// </summary>
+    private async Task<ContainerStatsResponse?> ReadOneShotStatsAsync(string id, CancellationToken ct)
+    {
+        var tcs = new TaskCompletionSource<ContainerStatsResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var progress = new Progress<ContainerStatsResponse>(s => tcs.TrySetResult(s));
+        using var statsCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        statsCts.CancelAfter(TimeSpan.FromSeconds(8));
+        try
+        {
+            await _client.Containers.GetContainerStatsAsync(
+                id, new ContainerStatsParameters { Stream = false }, progress, statsCts.Token).ConfigureAwait(false);
+            var done = await Task.WhenAny(tcs.Task, Task.Delay(250, ct)).ConfigureAwait(false);
+            return done == tcs.Task ? await tcs.Task.ConfigureAwait(false) : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogDebug(ex, "stats one-shot de {Id} falló; se omite.", id);
+            return null;
+        }
+    }
+
+    /// <summary>Funde una muestra de stats de Docker sobre el <see cref="VmContainerInfo"/> base.</summary>
+    private static VmContainerInfo Merge(VmContainerInfo info, ContainerStatsResponse s)
+    {
+        // CPU% estilo `docker stats`: (Δcpu / Δsystem) * nCPUs * 100.
+        double? cpu = null;
+        var cpuDelta = (double)s.CPUStats.CPUUsage.TotalUsage - s.PreCPUStats.CPUUsage.TotalUsage;
+        var sysDelta = (double)s.CPUStats.SystemUsage - s.PreCPUStats.SystemUsage;
+        if (sysDelta > 0 && cpuDelta >= 0)
+        {
+            var cpus = s.CPUStats.OnlineCPUs;
+            if (cpus == 0)
+            {
+                cpus = (uint)(s.CPUStats.CPUUsage.PercpuUsage?.Count ?? 1);
+            }
+            cpu = cpuDelta / sysDelta * Math.Max(cpus, 1u) * 100.0;
+        }
+
+        // Memoria usada estilo `docker stats`: Usage menos cache (inactive_file en cgroup v2 / cache v1).
+        long memUsed = (long)s.MemoryStats.Usage;
+        if (s.MemoryStats.Stats is { } mstats)
+        {
+            if (mstats.TryGetValue("inactive_file", out var inactive))
+            {
+                memUsed -= (long)inactive;
+            }
+            else if (mstats.TryGetValue("cache", out var cache))
+            {
+                memUsed -= (long)cache;
+            }
+        }
+        if (memUsed < 0)
+        {
+            memUsed = (long)s.MemoryStats.Usage;
+        }
+
+        long rx = 0, tx = 0;
+        if (s.Networks is { } nets)
+        {
+            foreach (var n in nets.Values)
+            {
+                rx += (long)n.RxBytes;
+                tx += (long)n.TxBytes;
+            }
+        }
+
+        long blkRead = 0, blkWrite = 0;
+        if (s.BlkioStats?.IoServiceBytesRecursive is { } io)
+        {
+            foreach (var e in io)
+            {
+                if (string.Equals(e.Op, "read", StringComparison.OrdinalIgnoreCase))
+                {
+                    blkRead += (long)e.Value;
+                }
+                else if (string.Equals(e.Op, "write", StringComparison.OrdinalIgnoreCase))
+                {
+                    blkWrite += (long)e.Value;
+                }
+            }
+        }
+
+        return info with
+        {
+            CpuPercent = cpu,
+            MemoryUsedBytes = memUsed,
+            MemoryLimitBytes = s.MemoryStats.Limit > 0 ? (long)s.MemoryStats.Limit : null,
+            NetRxBytes = rx,
+            NetTxBytes = tx,
+            BlockReadBytes = blkRead,
+            BlockWriteBytes = blkWrite,
+        };
     }
 
     /// <summary>

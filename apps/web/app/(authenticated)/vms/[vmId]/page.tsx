@@ -8,8 +8,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { VmStatusPill } from "@/components/aethra/vm-status-pill";
 import { API_URL } from "@/lib/api";
-import type { VmDto, VmMetricPoint } from "@/lib/types";
+import type { VmContainersDto, VmDto, VmMetricPoint } from "@/lib/types";
 import VmLiveDashboard from "./VmLiveDashboard";
+import VmContainers from "./VmContainers";
 import { DeleteVmButton } from "./DeleteVmButton";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,16 @@ async function fetchLatestMetrics(vmId: string): Promise<VmMetricPoint[]> {
   return (await res.json()) as VmMetricPoint[];
 }
 
+async function fetchContainers(vmId: string): Promise<VmContainersDto> {
+  const cookieHeader = await buildCookieHeader();
+  const res = await fetch(`${API_URL}/api/metrics/vms/${vmId}/containers`, {
+    headers: { cookie: cookieHeader },
+    cache: "no-store",
+  });
+  if (!res.ok) return { timestamp: null, containers: [] };
+  return (await res.json()) as VmContainersDto;
+}
+
 export default async function VmDetailPage({
   params,
 }: {
@@ -74,7 +85,10 @@ export default async function VmDetailPage({
   }
 
   const vm = data;
-  const initialMetrics = await fetchLatestMetrics(vmId);
+  const [initialMetrics, initialContainers] = await Promise.all([
+    fetchLatestMetrics(vmId),
+    fetchContainers(vmId),
+  ]);
 
   const totalGb = vm.totalMemoryBytes
     ? (vm.totalMemoryBytes / 1024 / 1024 / 1024).toFixed(1)
@@ -127,6 +141,8 @@ export default async function VmDetailPage({
         initialMetrics={initialMetrics}
         totalMemoryBytes={vm.totalMemoryBytes}
       />
+
+      <VmContainers vmId={vm.id} initial={initialContainers} />
     </div>
   );
 }

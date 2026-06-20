@@ -35,6 +35,16 @@ public static class MetricsEndpoints
         .WithDescription("Historial de métricas de una VM en una ventana (hours, default 24, máx 168) "
             + "downsampled a 'points' puntos (default 240). Para rangos largos sin miles de muestras.");
 
+        group.MapGet("/vms/{vmId}/containers", async (string vmId, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetVmContainersQuery(vmId), ct);
+            return ToResult(result);
+        })
+        .RequireAuthorization(ScopeRead)
+        .WithName("GetVmContainers")
+        .WithDescription("Último snapshot de contenedores de una VM: TODOS los del host (Aethra o no) "
+            + "con stats de uso (CPU/mem/red/disco) para los que corren. Para el panel de contenedores.");
+
         group.MapGet("/database", async (int? top, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(new GetDatabaseDiskUsageQuery(top ?? 30), ct);
