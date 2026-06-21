@@ -483,18 +483,20 @@ public sealed partial class DockerContainerRuntime : IContainerRuntime, IDisposa
             return null;
         }
 
-        // Tope DURO por tamaño cuando hay keepStorageGb: `docker builder prune -f --reserved-space <bytes>`
-        // (BuildKit ≥0.16 / Docker ≥28 — reemplazo de `--keep-storage`). Deja a lo sumo esos GB del
-        // cache más reciente y borra el resto, así una ráfaga de builds del mismo día no puede crecer
-        // sin límite (un filtro por edad NO la reclama). Sin keepStorageGb, cae al filtro por edad.
+        // Tope DURO por tamaño cuando hay keepStorageGb: `docker builder prune -f --max-used-space <bytes>`
+        // (Docker ≥28). ⚠️ Usar `--max-used-space` (TOPE: "maximum amount of disk space allowed"), NO
+        // `--reserved-space` (que es un PISO: "amount always allowed to keep" → no recorta nada por
+        // encima → era el bug por el que el cache nunca se acotaba). Sin keepStorageGb, cae al filtro
+        // por edad. Nota: el cache que comparte capas con imágenes vivas (keep-N) no es reclamable;
+        // esto recorta las capas de etapas de build descartadas (SDK/node_modules) que sí se acumulan.
         string[] args = keepStorageGb > 0
-            ? ["builder", "prune", "-f", "--reserved-space", (keepStorageGb * 1_000_000_000L).ToString(CultureInfo.InvariantCulture)]
+            ? ["builder", "prune", "-f", "--max-used-space", (keepStorageGb * 1_000_000_000L).ToString(CultureInfo.InvariantCulture)]
             : ["builder", "prune", "-f", "--filter", "until=" + maxAgeHours.ToString(CultureInfo.InvariantCulture) + "h"];
 
         var (code, stdout, _) = await RunProcessAsync("docker", args, ct).ConfigureAwait(false);
         if (code != 0 && keepStorageGb > 0)
         {
-            // Fallback por si la versión de docker no acepta --reserved-space: prune de todo el cache
+            // Fallback por si la versión de docker no acepta --max-used-space: prune de todo el cache
             // no usado (más agresivo, rebuilds más lentos, pero garantiza acotar el disco).
             (code, stdout, _) = await RunProcessAsync("docker", ["builder", "prune", "-f"], ct).ConfigureAwait(false);
         }

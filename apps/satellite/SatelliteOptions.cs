@@ -22,9 +22,11 @@ public sealed class SatelliteOptions
     /// Retención de imágenes tras cada build git-mode: cuántos tags más recientes conservar por
     /// repositorio (ej. 'aethra/myapp-api'). Los más viejos se borran (sin --force, así que
     /// nunca toca imágenes en uso) para que los flujos de build/deploy no saturen el disco.
-    /// 0 o negativo desactiva la retención. Default 3 (imagen corriendo + margen de rollback).
+    /// 0 o negativo desactiva la retención. Default 2 (imagen corriendo + 1 anterior para rollback
+    /// instantáneo). Cada tag extra cuesta disco único (~1.2 GB en el caso de myapp-api), por
+    /// eso 2 es el equilibrio: rollback inmediato a la última versión buena sin acumular de más.
     /// </summary>
-    public int ImageRetentionKeep { get; set; } = 3;
+    public int ImageRetentionKeep { get; set; } = 2;
 
     /// <summary>
     /// Tras cada build git-mode, poda el build cache del runtime no usado en las últimas N horas
