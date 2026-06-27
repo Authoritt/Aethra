@@ -12,6 +12,18 @@ del central via SignalR. Cross-platform (Linux production, Windows dev).</Descri
     <ProjectReference Include="..\..\src\Aethra.Shared.Kernel\Aethra.Shared.Kernel.csproj" />
   </ItemGroup>
 
+  <!-- CVE-2025-6965 / GHSA-2m69-gcr7-jv3q: SQLite < 3.50.2 vía el transitivo
+       SQLitePCLRaw.lib.e_sqlite3 2.1.11 (lo arrastra Microsoft.Data.Sqlite). NO existe aún
+       una versión parcheada de SQLitePCLRaw (ver ericsink/SQLitePCL.raw#664) → no se puede
+       "bumpear de raíz". El satélite SOLO abre un buffer.db LOCAL y de confianza (la CVE
+       requiere SQL/entrada maliciosa), así que el riesgo real es bajo. Se suprime SOLO este
+       advisory para que TreatWarningsAsErrors no bloquee el build del satélite (antes exigía
+       un flag manual one-off no commiteado). El NuGetAudit sigue ESTRICTO para todo lo demás.
+       QUITAR cuando SQLitePCLRaw publique un bundle con SQLite >= 3.50.2. -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Docker.DotNet" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
