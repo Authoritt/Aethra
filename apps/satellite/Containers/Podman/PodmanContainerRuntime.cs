@@ -481,6 +481,20 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
             ?? "build cache pruned";
     }
 
+    public async Task<string?> PruneAllBuildCacheAsync(CancellationToken ct)
+    {
+        // Backstop DURO: `podman builder prune -af` reclama TODO el build cache, incl. cache mounts
+        // (lo único que los acota de forma fiable; el tope por tamaño/edad no los toca). El próximo
+        // build queda "frío"; aceptable para un backstop periódico que garantiza no llenar el disco.
+        var (code, stdout, _) = await RunPodmanAsync(["builder", "prune", "-af"], ct).ConfigureAwait(false);
+        if (code != 0)
+        {
+            return null;
+        }
+        return SplitLines(stdout).LastOrDefault(l => l.Contains("reclaimed", StringComparison.OrdinalIgnoreCase))
+            ?? "all build cache pruned (--all)";
+    }
+
     public async Task<string?> PruneDanglingImagesAsync(CancellationToken ct)
     {
         // `podman image prune -f`: sólo imágenes colgantes (sin tag). Nunca toca imágenes en uso.

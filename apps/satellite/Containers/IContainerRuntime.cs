@@ -83,6 +83,16 @@ public interface IContainerRuntime
     Task<string?> PruneBuildCacheAsync(int maxAgeHours, int keepStorageGb, CancellationToken ct);
 
     /// <summary>
+    /// Backstop DURO del disco: reclama TODO el build cache del runtime, <b>incluidos los cache mounts
+    /// de BuildKit</b> (<c>RUN --mount=type=cache</c>, ej. el <c>pnpm-store</c> de los fronts). Es lo
+    /// ÚNICO que acota esos mounts de forma fiable: <c>--max-used-space</c> y <c>--filter until</c> NO
+    /// los tocan (un mount reusado en cada build siempre es "reciente"), por lo que crecían sin tope y
+    /// llenaban el disco. El precio es que el siguiente build queda "frío" (sin cache) — aceptable para
+    /// un backstop periódico. Best-effort. Devuelve un resumen legible o <c>null</c> si no aplicó/falló.
+    /// </summary>
+    Task<string?> PruneAllBuildCacheAsync(CancellationToken ct);
+
+    /// <summary>
     /// Borra las imágenes colgantes (<c>&lt;none&gt;</c>: capas sin tag que quedan tras rebuildear un
     /// tag a una imagen nueva). Nunca toca imágenes con tag ni en uso. Best-effort e idempotente.
     /// Devuelve un resumen legible o <c>null</c> si no aplicó o falló.

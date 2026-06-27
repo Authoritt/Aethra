@@ -16,9 +16,13 @@ namespace Aethra.Satellite.Workers;
 /// <item>Builds que NO pasan por el satélite — p.ej. el rebuild manual del central
 /// (<c>aethra-central</c>) genera build cache que ningún hook post-build poda.</item>
 /// </list>
-/// Acota el build cache al tope de tamaño (<see cref="SatelliteOptions.BuildCacheKeepStorageGb"/>),
-/// borra imágenes colgantes y poda volúmenes anónimos colgantes (hash 64-hex, nunca named volumes de
-/// datos). Best-effort: nunca toca imágenes con tag ni contenedores/volúmenes en uso, y
+/// Reclama TODO el build cache con <c>--all</c> (<see cref="IContainerRuntime.PruneAllBuildCacheAsync"/>),
+/// INCLUIDOS los cache mounts de BuildKit (ej. el <c>pnpm-store</c> de los fronts): es lo ÚNICO que los
+/// acota de forma fiable — el tope por tamaño/edad (<c>--max-used-space</c>/<c>--filter until</c>) NO los
+/// toca (un mount reusado en cada build siempre es "reciente"), así que crecían sin tope y llenaban el
+/// disco aunque el janitor corriera. El precio es que el próximo build queda "frío"; aceptable para un
+/// backstop periódico. Además borra imágenes colgantes y poda volúmenes anónimos colgantes (hash 64-hex,
+/// nunca named volumes de datos). Best-effort: nunca toca imágenes con tag ni contenedores/volúmenes en uso, y
 /// cualquier fallo se loguea sin tumbar el satélite. La retención de tags por repo sigue en el hook
 /// post-build (keep-last-N), que es donde se conoce el repo recién construido.
 /// </summary>
@@ -28,8 +32,6 @@ public sealed class DiskJanitorWorker(
     ILogger<DiskJanitorWorker> logger) : BackgroundService
 {
     private readonly int _intervalHours = options.Value.DiskJanitorIntervalHours;
-    private readonly int _keepStorageGb = options.Value.BuildCacheKeepStorageGb;
-    private readonly int _maxAgeHours = options.Value.BuildCacheMaxAgeHours;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -62,7 +64,11 @@ public sealed class DiskJanitorWorker(
     {
         try
         {
-            var cache = await runtime.PruneBuildCacheAsync(_maxAgeHours, _keepStorageGb, ct).ConfigureAwait(false);
+            // Backstop DURO: prune con --all (PruneAllBuildCacheAsync), NO el suave por edad/tamaño.
+            // Es lo único que reclama los CACHE MOUNTS de BuildKit (ej. el pnpm-store de los fronts),
+            // que `--max-used-space`/`--filter until` NO tocan → crecían sin tope y llenaban el disco
+            // (el janitor "podaba" cada ciclo pero reclamaba 0B). El próximo build queda frío; aceptable.
+            var cache = await runtime.PruneAllBuildCacheAsync(ct).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(cache))
             {
                 logger.LogInformation("DiskJanitor — build cache: {Summary}", cache);

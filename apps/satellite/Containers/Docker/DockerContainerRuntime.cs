@@ -483,23 +483,18 @@ public sealed partial class DockerContainerRuntime : IContainerRuntime, IDisposa
             return null;
         }
 
-        // Tope DURO por tamaño cuando hay keepStorageGb: `docker builder prune -f --max-used-space <bytes>`
-        // (Docker ≥28). ⚠️ Usar `--max-used-space` (TOPE: "maximum amount of disk space allowed"), NO
-        // `--reserved-space` (que es un PISO: "amount always allowed to keep" → no recorta nada por
-        // encima → era el bug por el que el cache nunca se acotaba). Sin keepStorageGb, cae al filtro
-        // por edad. Nota: el cache que comparte capas con imágenes vivas (keep-N) no es reclamable;
-        // esto recorta las capas de etapas de build descartadas (SDK/node_modules) que sí se acumulan.
-        string[] args = keepStorageGb > 0
-            ? ["builder", "prune", "-f", "--max-used-space", (keepStorageGb * 1_000_000_000L).ToString(CultureInfo.InvariantCulture)]
-            : ["builder", "prune", "-f", "--filter", "until=" + maxAgeHours.ToString(CultureInfo.InvariantCulture) + "h"];
-
-        var (code, stdout, _) = await RunProcessAsync("docker", args, ct).ConfigureAwait(false);
-        if (code != 0 && keepStorageGb > 0)
-        {
-            // Fallback por si la versión de docker no acepta --max-used-space: prune de todo el cache
-            // no usado (más agresivo, rebuilds más lentos, pero garantiza acotar el disco).
-            (code, stdout, _) = await RunProcessAsync("docker", ["builder", "prune", "-f"], ct).ConfigureAwait(false);
-        }
+        // Prune SUAVE: reclama el cache NO usado en las últimas N horas, conservando el reciente para
+        // rebuilds rápidos. ⚠️ `--all` es IMPRESCINDIBLE: sin él (y con `--max-used-space`/`--reserved-space`)
+        // el prune NO toca los CACHE MOUNTS de BuildKit (ej. `id=pnpm-store` de los fronts) ni el cache
+        // reusable → en Docker 29 reclamaba 0B mientras el mount crecía SIN TOPE (fue la causa del disco
+        // al 100%). El tope-por-tamaño (`keepStorageGb`/`--max-used-space`) queda OBSOLETO: no existe un
+        // mecanismo fiable de tope-por-tamaño que alcance los mounts; el bound DURO (incl. mounts vivos)
+        // lo hace el janitor vía PruneAllBuildCacheAsync (--all sin filtro).
+        _ = keepStorageGb;
+        var ageH = maxAgeHours > 0 ? maxAgeHours : 48;
+        var (code, stdout, _) = await RunProcessAsync("docker",
+            ["builder", "prune", "-f", "--all", "--filter", "until=" + ageH.ToString(CultureInfo.InvariantCulture) + "h"],
+            ct).ConfigureAwait(false);
         if (code != 0)
         {
             return null;
@@ -507,7 +502,23 @@ public sealed partial class DockerContainerRuntime : IContainerRuntime, IDisposa
 
         // La CLI imprime "Total reclaimed space: <N>" al final; devolvemos esa línea como resumen.
         return SplitLines(stdout).LastOrDefault(l => l.Contains("reclaimed", StringComparison.OrdinalIgnoreCase))
-            ?? "build cache pruned";
+            ?? "build cache pruned (until=" + ageH.ToString(CultureInfo.InvariantCulture) + "h, --all)";
+    }
+
+    public async Task<string?> PruneAllBuildCacheAsync(CancellationToken ct)
+    {
+        // Backstop DURO del disco: reclama TODO el build cache, INCLUIDOS los cache mounts de BuildKit
+        // (lo único que los acota de forma fiable — `--max-used-space` y `--filter until` no tocan un
+        // mount reusado continuamente, ej. el `pnpm-store` de los fronts, que era lo que llenaba el
+        // disco). El próximo build será "frío" (sin cache); es el costo aceptable de un backstop
+        // periódico que GARANTIZA que el disco no se llene.
+        var (code, stdout, _) = await RunProcessAsync("docker", ["builder", "prune", "-af"], ct).ConfigureAwait(false);
+        if (code != 0)
+        {
+            return null;
+        }
+        return SplitLines(stdout).LastOrDefault(l => l.Contains("reclaimed", StringComparison.OrdinalIgnoreCase))
+            ?? "all build cache pruned (--all)";
     }
 
     public async Task<string?> PruneDanglingImagesAsync(CancellationToken ct)
