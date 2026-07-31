@@ -58,6 +58,14 @@ services:
       Identity__AdminEmail: ${AETHRA_ADMIN_EMAIL:-admin@aethra.local}
       Identity__AdminPasswordSeed: ${AETHRA_ADMIN_PASSWORD:?set AETHRA_ADMIN_PASSWORD in deploy/.env}
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      # Required. TlsOptions is validated with ValidateOnStart, so an empty
+      # AccountEmail aborts the process before it serves anything — and the value
+      # only ships in appsettings.Development.json, which Production never loads.
+      # Leaving this out is why a fresh container came up "running" and dead.
+      Tls__AccountEmail: ${AETHRA_TLS_EMAIL:-admin@aethra.local}
+      # Staging by default: Let's Encrypt's production endpoint has hard rate
+      # limits, and you do not want to burn them while you are still setting up.
+      Tls__UseStaging: ${AETHRA_TLS_STAGING:-true}
     ports:
       - "${AETHRA_API_PORT:-5080}:5080"
     volumes:
