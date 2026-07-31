@@ -73,3 +73,7 @@ AETHRA-HANDOFF.md
 AETHRA-DEPLOY-CONTEXT.md
 appsettings.Local.json
 **/appsettings.Local.json
+
+# Secretos del compose: .env.example se versiona, .env NUNCA.
+.env
+deploy/.env

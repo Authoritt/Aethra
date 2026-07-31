@@ -138,31 +138,52 @@ heartbeats and streaming.
 
 ## Getting started
 
-You will need **.NET 10 SDK**, **Node 24+** and a **PostgreSQL 16** you can reach.
+### With Docker
 
 ```bash
-# 1. Database (or use the compose file in deploy/)
+git clone https://github.com/Authoritt/Aethra.git
+cd Aethra/deploy
+cp .env.example .env        # set POSTGRES_PASSWORD and AETHRA_ADMIN_PASSWORD
+docker compose up -d --build
+```
+
+Panel on <http://localhost:3000>, API on <http://localhost:5080>, OpenAPI at `/openapi/v1.json`.
+Migrations run on boot — there is no separate migration step. The first build compiles the .NET and
+Next images and is not fast.
+
+Compose brings up four containers: the central API, the Next.js panel, Postgres, and a local image
+registry the build pipeline pushes to. The **satellite is deliberately not one of them** — it belongs
+on each machine you want Aethra to manage, and you install it from the UI once the central is up.
+
+Two things worth knowing before you point this at anything real:
+
+- The API container mounts `/var/run/docker.sock`. That is what lets Aethra build and run your
+  containers, and it is also root-equivalent access to the host. It is the same trade every
+  Docker-based deploy tool makes, but you should make it knowingly.
+- Compose refuses to start without both passwords set. There is no `changeme` fallback.
+
+> **Honesty note:** this compose was wired on 2026-07-31. It is statically consistent with the
+> Dockerfiles and with the configuration keys the code actually reads, but **it has not yet been run
+> end to end on a clean machine.** If you are the first to try it, [an issue either way](../../issues)
+> — it worked, or here is where it broke — is the single most useful thing you can send right now.
+
+### From source
+
+You will need **.NET 10 SDK**, **Node 24+**, and a **PostgreSQL 16** you can reach.
+
+```bash
 createdb -U postgres aethra
 
-# 2. Seed the admin account — override the dev default before exposing anything
 export Identity__AdminEmail="you@example.com"
 export Identity__AdminPasswordSeed="a-strong-password"
 
-# 3. Central API — listens on http://localhost:5000, applies migrations on boot
-dotnet run --project apps/api
-
-# 4. Frontend — listens on http://localhost:3000
-cd apps/web && npm install && npm run dev
-
-# 5. Optional: a local satellite wired to the central
-dotnet run --project apps/satellite
+dotnet run --project apps/api            # central, http://localhost:5000
+cd apps/web && npm install && npm run dev # panel,  http://localhost:3000
+dotnet run --project apps/satellite       # optional: a local satellite
 ```
 
 If you do not set `Identity__*`, development falls back to `admin@aethra.local` / `aethra-dev`.
 **Change that before exposing Aethra to anything.**
-
-> A one-command installer (`install.sh`) is [a wanted contribution](CONTRIBUTING.md) — it does not exist yet,
-> and we would rather say so than ship a script nobody has run.
 
 Coming from Coolify? See [`docs/migration-from-coolify.md`](docs/migration-from-coolify.md) and the
 assisted scripts in `scripts/migrate-from-coolify.{sh,ps1}`.

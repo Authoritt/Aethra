@@ -93,9 +93,11 @@ protect your time, not to gate you.
 
 Good places to start, roughly in order of how useful they would be:
 
-- **`install.sh`** — a one-command installer that checks prerequisites, creates the database, applies
-  migrations, seeds the admin password, writes a minimal `appsettings.Local.json` and starts both
-  processes. The README currently points at it and it does not exist.
+- **Run `deploy/docker-compose.yml` on a clean machine and tell us what happened.** It was wired on
+  2026-07-31 and has never been executed end to end — the author has no container runtime on the
+  machine it was written on. It is statically consistent with the Dockerfiles and with the config keys
+  the code reads, which is not the same thing as working. An issue saying "it came up" is as valuable
+  as one saying "it broke here", and right now it is the single most useful contribution available.
 - **Tests for the MCP tools** — `src/Aethra.Modules.Mcp` has no covering tests today.
 - **More managed-service templates** — see `src/Aethra.Modules.Services/Templates/` for the shape.
 - **Documentation for a first deploy end to end**, written by someone who just did it for the first time

@@ -137,31 +137,53 @@ streaming.
 
 ## Cómo arrancar
 
+### Con Docker
+
+```bash
+git clone https://github.com/Authoritt/Aethra.git
+cd Aethra/deploy
+cp .env.example .env        # pon POSTGRES_PASSWORD y AETHRA_ADMIN_PASSWORD
+docker compose up -d --build
+```
+
+Panel en <http://localhost:3000>, API en <http://localhost:5080>, OpenAPI en `/openapi/v1.json`.
+Las migraciones corren al arrancar — no hay paso aparte. El primer build compila las imágenes de .NET
+y de Next, y no es rápido.
+
+El compose levanta cuatro contenedores: el central, el panel Next.js, Postgres y un registry local al
+que empuja el pipeline de build. El **satélite no está ahí a propósito** — va en cada máquina que
+quieras que Aethra administre, y se instala desde la UI cuando el central esté arriba.
+
+Dos cosas que conviene saber antes de apuntar esto a algo real:
+
+- El contenedor del central monta `/var/run/docker.sock`. Eso es lo que le permite construir y correr
+  tus contenedores, y también es acceso equivalente a root sobre el anfitrión. Es el mismo trato que
+  hace cualquier herramienta de despliegue basada en Docker, pero hazlo sabiéndolo.
+- El compose se niega a arrancar sin las dos claves puestas. No hay respaldo `changeme`.
+
+> **Nota de honestidad:** este compose se cableó el 2026-07-31. Es estáticamente consistente con los
+> Dockerfiles y con las claves de configuración que el código realmente lee, pero **todavía no se ha
+> corrido de punta a punta en una máquina limpia.** Si eres el primero en probarlo,
+> [un issue en cualquier sentido](../../issues) —funcionó, o aquí se rompió— es lo más útil que puedes
+> mandarnos ahora mismo.
+
+### Desde el código
+
 Necesitas **.NET 10 SDK**, **Node 24+** y un **PostgreSQL 16** alcanzable.
 
 ```bash
-# 1. Base de datos (o usa el compose de deploy/)
 createdb -U postgres aethra
 
-# 2. Semilla del admin — cambia el default de desarrollo antes de exponer nada
 export Identity__AdminEmail="tu@correo.com"
 export Identity__AdminPasswordSeed="tu-clave-segura"
 
-# 3. Central (escucha en http://localhost:5000, migra al arrancar)
-dotnet run --project apps/api
-
-# 4. Frontend (escucha en http://localhost:3000)
-cd apps/web && npm install && npm run dev
-
-# 5. (Opcional) Satélite local conectado al central
-dotnet run --project apps/satellite
+dotnet run --project apps/api             # central, http://localhost:5000
+cd apps/web && npm install && npm run dev  # panel,   http://localhost:3000
+dotnet run --project apps/satellite        # opcional: satélite local
 ```
 
 Si no seteas `Identity__*`, en desarrollo cae a `admin@aethra.local` / `aethra-dev`.
 **Cámbialo antes de exponer Aethra a cualquier cosa.**
-
-> Un instalador de un solo comando (`install.sh`) es [una contribución buscada](CONTRIBUTING.md): todavía
-> no existe, y preferimos decirlo a publicar un script que nadie ha corrido.
 
 ¿Vienes de Coolify? Mira [`docs/migration-from-coolify.md`](docs/migration-from-coolify.md) y los scripts
 asistidos en `scripts/migrate-from-coolify.{sh,ps1}`.

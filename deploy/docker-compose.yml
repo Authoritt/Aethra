@@ -1,12 +1,16 @@
-# Stack de desarrollo local de Aethra.
-# Levanta Postgres + la API. El frontend Next.js se corre aparte con `npm run dev`
-# durante F0..F1 (más rápido que rebuildear contenedor en cada cambio).
+# Aethra — full local stack.
 #
-# Uso:
-#   docker compose -f deploy/docker-compose.yml up -d postgres
-#   dotnet run --project apps/api
+#   cd deploy && cp .env.example .env   # edit the two passwords
+#   docker compose up -d --build
 #
-# En F2+ se sumarán satellites y servicios gestionados.
+#   UI   http://localhost:3000
+#   API  http://localhost:5080   (OpenAPI at /openapi/v1.json)
+#
+# The central applies its migrations on boot, so there is no separate migration
+# step. First start builds the .NET and Next images and takes a while.
+#
+# The satellite is deliberately NOT here: it runs on each machine you want Aethra
+# to manage, not next to the central. Install it from the UI once you are up.
 
 name: aethra
 
@@ -17,13 +21,16 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: aethra
-      POSTGRES_PASSWORD: changeme
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
       POSTGRES_DB: aethra
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Not published by default: nothing outside this network needs it, and an
+    # exposed 5432 is the most common way a self-hosted box gets owned. Uncomment
+    # only if you want to connect a client from the host.
+    # ports:
+    #   - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aethra -d aethra"]
       interval: 5s
@@ -32,29 +39,78 @@ services:
     networks:
       - aethra-net
 
-  # api se incluye comentado durante F0 — se corre via `dotnet run` para iteración rápida.
-  # Descomentar a partir de F2 cuando hagamos full deploy local.
-  #
-  # api:
-  #   build:
-  #     context: ..
-  #     dockerfile: deploy/api.Dockerfile
-  #   container_name: aethra-api
-  #   restart: unless-stopped
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   environment:
-  #     ConnectionStrings__Aethra: Host=postgres;Port=5432;Database=aethra;Username=aethra;Password=changeme
-  #     ASPNETCORE_URLS: http://+:8080
-  #   ports:
-  #     - "5080:8080"
-  #   networks:
-  #     - aethra-net
+  # Control plane: REST + OpenAPI, YARP reverse proxy, SignalR hubs, MCP server,
+  # and the background workers (build, deployment, monitor, cert renewal, outbox).
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    container_name: aethra-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Port and key directory come from the image (ASPNETCORE_URLS=http://+:5080,
+      # DataProtection__KeyDir=/keys) — do not override them here without also
+      # changing api.Dockerfile.
+      ConnectionStrings__Aethra: "Host=postgres;Port=5432;Database=aethra;Username=aethra;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}"
+      Identity__AdminEmail: ${AETHRA_ADMIN_EMAIL:-admin@aethra.local}
+      Identity__AdminPasswordSeed: ${AETHRA_ADMIN_PASSWORD:?set AETHRA_ADMIN_PASSWORD in deploy/.env}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+    ports:
+      - "${AETHRA_API_PORT:-5080}:5080"
+    volumes:
+      # Data Protection keys. Without this volume every restart makes previously
+      # encrypted secrets, webhook secrets and certificates unreadable.
+      - aethra-keys:/keys
+      # Lets the central build and run containers on this host. This is the whole
+      # point of a deploy platform, and it is also root-equivalent access to the
+      # machine — read deploy/README before pointing this at anything you care about.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - aethra-net
+
+  # Next.js panel. Talks to the API over the browser, so NEXT_PUBLIC_API_URL must
+  # be reachable from YOUR browser, not from inside the network — that is why it
+  # defaults to localhost and not to the service name.
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${AETHRA_PUBLIC_API_URL:-http://localhost:5080}
+    container_name: aethra-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${AETHRA_WEB_PORT:-3000}:3000"
+    networks:
+      - aethra-net
+
+  # Image registry the build pipeline pushes to, so a satellite on another machine
+  # can pull what the central built. Loopback-only: it has no authentication.
+  registry:
+    image: registry:2
+    container_name: aethra-registry
+    restart: unless-stopped
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    volumes:
+      - registry-data:/var/lib/registry
+    ports:
+      - "127.0.0.1:${AETHRA_REGISTRY_PORT:-5001}:5000"
+    networks:
+      - aethra-net
 
 volumes:
   postgres-data:
     name: aethra-postgres-data
+  aethra-keys:
+    name: aethra-keys
+  registry-data:
+    name: aethra-registry-data
 
 networks:
   aethra-net:
