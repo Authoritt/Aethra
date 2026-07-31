@@ -8,6 +8,17 @@
   </PropertyGroup>
   <ItemGroup Label="ASP.NET Core / Microsoft.Extensions">
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <!--
+      Pin directo, no cosmético: Microsoft.AspNetCore.OpenApi declara
+      `Microsoft.OpenApi >= 2.0.0` como piso, y NuGet resuelve exactamente 2.0.0 —
+      que arrastra CVE-2026-49451 (CVSS 7.5): un documento OpenAPI con referencias
+      circulares tumba el proceso por recursión sin control. Parcheado en 2.7.5.
+      Subir Microsoft.AspNetCore.OpenApi NO sirve: hasta 10.0.10 sigue declarando
+      el mismo piso 2.0.0. Solo una referencia directa eleva la resuelta.
+      Con `TreatWarningsAsErrors` (Directory.Build.props) el aviso NU1903 es un
+      error, así que sin esto `dotnet restore` FALLA — incluido el build de deploy.
+    -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />
