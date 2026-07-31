@@ -66,3 +66,10 @@ cookies.txt
 login.json
 /tmp/
 /apps/api/logs/
+
+# Contexto operativo local — NUNCA al repo (credenciales reales, IPs, llaves).
+# Sin esta red, un `git add -A` distraido los publica.
+AETHRA-HANDOFF.md
+AETHRA-DEPLOY-CONTEXT.md
+appsettings.Local.json
+**/appsettings.Local.json
