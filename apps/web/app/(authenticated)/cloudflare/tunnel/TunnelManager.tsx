@@ -247,7 +247,7 @@ export function TunnelManager({
             <Input value={form.tunnelId} onChange={(e) => set("tunnelId", e.target.value)} placeholder="ca75b591-…" className="font-mono text-xs" />
           </Field>
           <Field label="Nombre del túnel">
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="authorit-apps" />
+            <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="my-apps" />
           </Field>
           <Field label="API Token (Tunnel:Edit)">
             <Input value={form.apiToken} onChange={(e) => set("apiToken", e.target.value)} type="password" placeholder={initial ? "(dejar vacío = sin cambio)" : "pega el token"} className="font-mono text-xs" />
