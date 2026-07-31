@@ -1,0 +1,11 @@
+# Shows the "Sponsor" button on the repository.
+#
+# Before this does anything you must create the accounts:
+#   1. GitHub Sponsors — https://github.com/sponsors  (Colombia is a supported payout region;
+#      you connect a bank account through Stripe during signup).
+#   2. Ko-fi — https://ko-fi.com  then replace the username below.
+#
+# Any entry left blank is ignored by GitHub, so an unfinished Ko-fi line is harmless.
+
+github: [Authoritt]
+ko_fi: # your ko-fi username, e.g. authorit

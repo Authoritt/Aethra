@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose something Aethra should do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Good proposals start from a problem you actually hit, not from a feature you saw elsewhere.
+        If you already plan to implement it, say so — we will agree on the shape before you spend a
+        weekend on it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you hitting
+      description: What are you trying to do today, and what makes it painful or impossible?
+      placeholder: |
+        I run the same template for 30 clients. When a build fails I find out from the client,
+        because nothing notifies me.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+      description: Roughly how it should behave. Do not worry about implementation detail.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried or considered
+      description: Workarounds, other tools, or why the existing pieces do not cover it.
+
+  - type: dropdown
+    id: contributing
+    attributes:
+      label: Would you like to implement it?
+      options:
+        - I am just proposing it
+        - I would like to, with some guidance
+        - I am already working on it
+    validations:
+      required: true

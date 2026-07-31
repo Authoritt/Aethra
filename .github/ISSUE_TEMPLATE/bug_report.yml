@@ -1,0 +1,75 @@
+name: Bug report
+description: Something behaves differently than it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The most useful bug reports say what you expected, what happened, and
+        how to get back there. If you are reporting a **security** issue, stop and read
+        [SECURITY.md](../blob/main/SECURITY.md) instead — do not post it here.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, and what did Aethra do instead of what you expected?
+      placeholder: |
+        I attached a custom domain to an Instance. The CNAME was created in Cloudflare, but the
+        route kept serving the auto-hostname until I restarted the central.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Steps from a state someone else can reach. A fresh local install is ideal.
+      placeholder: |
+        1. Create a Template pointing at any public repo
+        2. Create a Client and one Instance
+        3. Attach a custom domain
+        4. curl the domain
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Deploys (Build / Deployment / webhooks)
+        - Proxy and TLS (YARP / Let's Encrypt)
+        - Satellites and metrics (SignalR)
+        - Managed services and bindings
+        - Cloudflare / DNS
+        - MCP server or REST API
+        - Web UI
+        - Install / migrations
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >
+        From the central (`apps/api`) and, if it involves a remote machine, the satellite.
+        **Redact tokens, passwords and private keys before pasting.**
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      placeholder: "git rev-parse --short HEAD"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS of the central, container runtime, PostgreSQL version, number of satellites.
+      placeholder: "Ubuntu 24.04, Docker 27, PostgreSQL 16, 2 satellites (1 arm64)"
