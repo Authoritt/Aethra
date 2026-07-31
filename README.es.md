@@ -146,9 +146,12 @@ cp .env.example .env        # pon POSTGRES_PASSWORD y AETHRA_ADMIN_PASSWORD
 docker compose up -d --build
 ```
 
-Panel en <http://localhost:3000>, API en <http://localhost:5080>, OpenAPI en `/openapi/v1.json`.
-Las migraciones corren al arrancar — no hay paso aparte. El primer build compila las imágenes de .NET
-y de Next, y no es rápido.
+Panel en <http://localhost:3000>, API en <http://localhost:5080>. El primer build compila las imágenes
+de .NET y de Next, y no es rápido.
+
+Las migraciones se aplican al arrancar porque el compose pone `Aethra__ApplyMigrationsOnStart=true`.
+Es opt-in a propósito: un despliegue gestionado las corre desde su pipeline, y no quieres dos
+instancias migrando a la vez. `/openapi/v1.json` se sirve solo en `Development`.
 
 El compose levanta cuatro contenedores: el central, el panel Next.js, Postgres y un registry local al
 que empuja el pipeline de build. El **satélite no está ahí a propósito** — va en cada máquina que

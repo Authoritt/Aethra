@@ -243,10 +243,22 @@ var app = builder.Build();
 
 // -----------------------------------------------------------------------------
 // Migraciones EF — deben correr antes de que cualquier provider singleton (YARP)
-// consulte sus tablas. En producción se aplican explícitamente con `dotnet ef`
-// pero la guarda IsDevelopment las habilita en localhost.
+// consulte sus tablas.
+//
+// En Development se aplican solas. En Production NO, porque en un despliegue
+// gestionado las aplica el pipeline con `dotnet ef` y no queremos que dos
+// instancias migren a la vez.
+//
+// Pero una instalación NUEVA autohospedada (docker compose) corre en Production
+// y no tiene pipeline: sin esto la BD queda vacía PARA SIEMPRE, la API arranca,
+// responde, y cada dispatcher de outbox gira fallando contra tablas que no
+// existen. Se ve viva y no lo está. Por eso existe la bandera explícita:
+// quien se autohospeda pone Aethra__ApplyMigrationsOnStart=true (el compose ya
+// lo hace) y quien tiene pipeline no cambia nada.
 // -----------------------------------------------------------------------------
-if (app.Environment.IsDevelopment())
+var applyMigrations = app.Environment.IsDevelopment()
+    || app.Configuration.GetValue("Aethra:ApplyMigrationsOnStart", false);
+if (applyMigrations)
 {
     await app.Services.ApplyPendingMigrationsAsync();
 }

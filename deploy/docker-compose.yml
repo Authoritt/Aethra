@@ -66,6 +66,10 @@ services:
       # Staging by default: Let's Encrypt's production endpoint has hard rate
       # limits, and you do not want to burn them while you are still setting up.
       Tls__UseStaging: ${AETHRA_TLS_STAGING:-true}
+      # A self-hosted install has no deploy pipeline to run `dotnet ef` for it.
+      # Without this the database stays empty forever while the API happily
+      # answers requests — see the comment in apps/api/Program.cs.
+      Aethra__ApplyMigrationsOnStart: "true"
     ports:
       - "${AETHRA_API_PORT:-5080}:5080"
     volumes:
