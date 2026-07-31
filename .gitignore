@@ -77,3 +77,6 @@ appsettings.Local.json
 # Secretos del compose: .env.example se versiona, .env NUNCA.
 .env
 deploy/.env
+
+# Bitacoras internas de despliegue: nombran VMs, dominios y clientes reales.
+docs/F13-compose-native-deploy.md

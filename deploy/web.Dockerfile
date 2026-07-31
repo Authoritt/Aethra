@@ -15,7 +15,10 @@ COPY apps/web/package.json apps/web/package-lock.json ./
 # opcionales de linux-arm64 (@emnapi/*). npm install resuelve las correctas por plataforma.
 RUN npm install --no-audit --no-fund
 COPY apps/web/ ./
-ARG NEXT_PUBLIC_API_URL=https://aethra.example.com
+# Default is localhost on purpose. This value is BAKED INTO the frontend bundle at
+# build time, so a default pointing at somebody else's deployment means an image
+# built without --build-arg silently talks to a server that is not yours.
+ARG NEXT_PUBLIC_API_URL=http://localhost:5080
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build

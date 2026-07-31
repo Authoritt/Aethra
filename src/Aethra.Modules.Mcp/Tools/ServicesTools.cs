@@ -75,7 +75,7 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
         + "para que aparezca en /services y /data-services SIN provisionarlo ni recrearlo. Ideal para Postgres/"
         + "Redis levantados a mano. No toca el contenedor: solo guarda metadata + credenciales admin cifradas.")]
     public async Task<object> AdoptServiceAsync(
-        [Description("Slug único del servicio (ej. 'aethra-postgres', 'relaycore-redis').")] string slug,
+        [Description("Slug único del servicio (ej. 'main-postgres', 'cache-redis').")] string slug,
         [Description("Nombre display human-readable.")] string name,
         [Description("Tipo: Postgres | Redis | RabbitMQ | MySQL | MongoDB | MariaDB | ClickHouse.")] string type,
         [Description("ID de la VM donde corre el contenedor existente.")] string targetVmId,

@@ -1,7 +1,7 @@
 namespace Aethra.Modules.Projects.Domain.Templates;
 
 /// <summary>
-/// F13 — un servicio de un template multi-contenedor (ej. Acme: backend + frontend).
+/// F13 — un servicio de un template multi-contenedor (ej. una app: backend + frontend).
 /// Se despliega como un contenedor por servicio en una Instance; el orquestador nativo corre
 /// <c>{instanceSlug}-{Name}</c> con la <see cref="Image"/> prebuilt y publica rutas según
 /// <see cref="PathPrefixes"/> (vacío = servicio interno, sin ruta pública).

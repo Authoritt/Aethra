@@ -15,7 +15,7 @@ public sealed class Route : AggregateRoot<RouteId>
     /// <summary>
     /// Prefijo de path para el split por ruta. <c>"/"</c> = catch-all (todo el host).
     /// <c>"/api"</c> = solo paths bajo <c>/api</c>. Permite back+front en el mismo host
-    /// (ej. Acme: <c>/api</c> → backend, <c>/</c> → frontend). El más específico gana.
+    /// (ej. una app con dos servicios: <c>/api</c> → backend, <c>/</c> → frontend). El más específico gana.
     /// </summary>
     public string PathPrefix { get; private set; } = "/";
     public string BackendUrl { get; private set; }
