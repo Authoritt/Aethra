@@ -80,3 +80,7 @@ deploy/.env
 
 # Bitacoras internas de despliegue: nombran VMs, dominios y clientes reales.
 docs/F13-compose-native-deploy.md
+
+# Salida de compilacion: se regenera con scripts/publish-satellite.sh
+# (el endpoint /api/satellite/binary sirve desde apps/api/satellite-binaries/, no de aqui)
+build/
