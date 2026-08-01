@@ -98,6 +98,12 @@ Good places to start, roughly in order of how useful they would be:
   machine it was written on. It is statically consistent with the Dockerfiles and with the config keys
   the code reads, which is not the same thing as working. An issue saying "it came up" is as valuable
   as one saying "it broke here", and right now it is the single most useful contribution available.
+- **Get `npm run lint` to zero in `apps/web`, and then add it to CI.** There are 32 errors
+  sitting there today. 18 are cosmetic (unescaped quotes in JSX) and can go in one mechanical
+  pass. The other 14 are `react-hooks` findings — `setState` called synchronously inside an
+  effect, missing dependencies — and those are real signals about render behaviour that need
+  per-component judgement rather than a bulk edit. The CI workflow does not run lint precisely
+  so that it does not become a check that is allowed to fail.
 - **Tests for the MCP tools** — `src/Aethra.Modules.Mcp` has no covering tests today.
 - **More managed-service templates** — see `src/Aethra.Modules.Services/Templates/` for the shape.
 - **Documentation for a first deploy end to end**, written by someone who just did it for the first time

@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Nightly, and this is not decoration. `dotnet restore` fails on NU1903 because
+  # Directory.Build.props sets TreatWarningsAsErrors, and NuGet's audit reads a LIVE
+  # advisory database. That means a build can go from green to red with zero commits:
+  # it happened on 2026-07-31, when an advisory landed on a transitive dependency and
+  # broke restore for everyone, including the deploy pipeline. Nobody noticed for
+  # weeks because nothing ran unless somebody pushed.
+  #
+  # A scheduled run is the only thing that catches a failure whose cause is a change
+  # somewhere else. Push-triggered CI is structurally incapable of seeing it.
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: .NET — build + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Deliberately separate from build: restore is where the vulnerability audit
+      # runs, and we want the log to say "restore failed" rather than burying it.
+      - name: Restore (also the dependency audit)
+        run: dotnet restore Aethra.slnx
+
+      - name: Build
+        run: dotnet build Aethra.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test Aethra.slnx -c Release --no-build --verbosity normal
+
+  frontend:
+    name: Next.js — lint + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # `npm install`, not `npm ci`: the lockfile was generated on a different
+      # architecture and lacks some optional native deps. Same reason as web.Dockerfile.
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      # `npm run lint` is deliberately NOT here yet, and the reason is written down
+      # rather than hidden behind continue-on-error: there are 32 pre-existing errors.
+      # 18 are cosmetic (unescaped quotes in JSX). The other 14 are react-hooks
+      # findings — setState inside effects, exhaustive-deps — which are real signals
+      # about render behaviour and need per-component judgement, not a bulk edit.
+      # A lint step that is allowed to fail is a green check that means nothing, and
+      # this project has already been bitten once by exactly that. See CONTRIBUTING.
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5080
+          NEXT_TELEMETRY_DISABLED: "1"
