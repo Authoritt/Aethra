@@ -57,12 +57,44 @@ public sealed class RouteTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("not-a-url")]
+    // En Linux, Uri.TryCreate(UriKind.Absolute) ACEPTA esto como file:///relative/path,
+    // y en Windows lo rechaza. El CI lo destapó: verde en local, rojo en ubuntu-latest.
     [InlineData("/relative/path")]
+    // Los esquemas que el mensaje de error siempre prometió rechazar y el código no
+    // comprobaba. Un backend de proxy apuntando a file:// no es un caso teórico:
+    // esta plataforma corre en Linux y enruta tráfico de producción.
+    [InlineData("file:///etc/passwd")]
+    [InlineData("ftp://interno/algo")]
+    [InlineData("gopher://qué/hace/esto/aquí")]
     public void Create_throws_on_invalid_backend_url(string backendUrl)
     {
         var act = () => Route.Create(Host, backendUrl, tlsEnabled: false, Now);
 
         act.Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("http://backend:8080")]
+    [InlineData("https://backend.example.com")]
+    [InlineData("  https://con-espacios:5080  ")]
+    public void Create_accepts_http_and_https(string backendUrl)
+    {
+        var route = Route.Create(Host, backendUrl, tlsEnabled: false, Now);
+
+        route.BackendUrl.Should().Be(backendUrl.Trim());
+    }
+
+    [Theory]
+    [InlineData("/relative/path")]
+    [InlineData("file:///etc/passwd")]
+    public void UpdateBackend_throws_on_non_http_schemes(string backendUrl)
+    {
+        var route = Route.Create(Host, "https://b:1", tlsEnabled: false, Now);
+
+        var act = () => route.UpdateBackend(backendUrl, Now);
+
+        act.Should().Throw<ArgumentException>();
+        route.BackendUrl.Should().Be("https://b:1");
     }
 
     [Fact]

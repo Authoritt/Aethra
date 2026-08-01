@@ -46,7 +46,7 @@ public sealed class Route : AggregateRoot<RouteId>
         {
             throw new ArgumentException("El backend_url no puede estar vacío.", nameof(backendUrl));
         }
-        if (!Uri.TryCreate(backendUrl.Trim(), UriKind.Absolute, out _))
+        if (!EsBackendHttpValido(backendUrl))
         {
             throw new ArgumentException("backend_url debe ser una URL absoluta http(s)://...", nameof(backendUrl));
         }
@@ -87,9 +87,9 @@ public sealed class Route : AggregateRoot<RouteId>
 
     public void UpdateBackend(string backendUrl, DateTimeOffset now)
     {
-        if (!Uri.TryCreate(backendUrl, UriKind.Absolute, out _))
+        if (!EsBackendHttpValido(backendUrl))
         {
-            throw new ArgumentException("backend_url debe ser una URL absoluta.", nameof(backendUrl));
+            throw new ArgumentException("backend_url debe ser una URL absoluta http(s)://...", nameof(backendUrl));
         }
         BackendUrl = backendUrl.Trim();
         UpdatedAt = now;
@@ -117,4 +117,26 @@ public sealed class Route : AggregateRoot<RouteId>
         var normalized = value?.Trim();
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
+
+    /// <summary>
+    /// El backend de una ruta tiene que ser http o https, no solo "absoluta".
+    ///
+    /// El chequeo anterior era <c>Uri.TryCreate(..., UriKind.Absolute)</c> a secas, que en
+    /// Windows rechaza "/relative/path" y en Linux lo ACEPTA: Unix lo interpreta como ruta
+    /// absoluta de fichero y lo convierte en file:///relative/path. Aethra corre en Linux,
+    /// asi que en produccion se podia apuntar el backend de una ruta a file://, ftp:// o
+    /// cualquier esquema — y el mensaje de error ya prometia http(s) que el codigo nunca
+    /// verificaba. Lo encontro el CI en su primera ejecucion (2026-08-01): dos tests verdes
+    /// en Windows, rojos en ubuntu-latest.
+    /// </summary>
+    private static bool EsBackendHttpValido(string? backendUrl)
+    {
+        if (string.IsNullOrWhiteSpace(backendUrl))
+        {
+            return false;
+        }
+        return Uri.TryCreate(backendUrl.Trim(), UriKind.Absolute, out var parsed)
+            && (parsed.Scheme == Uri.UriSchemeHttp || parsed.Scheme == Uri.UriSchemeHttps);
+    }
+
 }
