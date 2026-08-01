@@ -170,6 +170,23 @@ Two things worth knowing before you point this at anything real:
 > end to end on a clean machine.** If you are the first to try it, [an issue either way](../../issues)
 > — it worked, or here is where it broke — is the single most useful thing you can send right now.
 
+### Your first login
+
+There is no sign-up page, and there should not be one on a box that can deploy to your
+production. You do not create an account — the first one is created for you.
+
+On first boot, if the users table is empty, Aethra seeds an admin from `AETHRA_ADMIN_EMAIL`
+and `AETHRA_ADMIN_PASSWORD` in your `.env` and gives it the admin role. Log in with those.
+That is also why compose refuses to start when either is missing: no default account, nothing
+guessable.
+
+After that, everyone else gets created from **Settings → Users**, with roles (admin,
+developer, viewer), per-endpoint scopes and optional TOTP two-factor. No `curl` required.
+
+If the users table is ever empty again, login falls back to validating against those same
+environment variables and issues admin-equivalent claims, purely so the first session can
+create real users. The moment one exists in the database, that fallback stops being used.
+
 ### From source
 
 You will need **.NET 10 SDK**, **Node 24+**, and a **PostgreSQL 16** you can reach.

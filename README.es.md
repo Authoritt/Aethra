@@ -170,6 +170,24 @@ Dos cosas que conviene saber antes de apuntar esto a algo real:
 > [un issue en cualquier sentido](../../issues) —funcionó, o aquí se rompió— es lo más útil que puedes
 > mandarnos ahora mismo.
 
+### Tu primer inicio de sesión
+
+No hay página de registro, y no debería haberla en algo que puede desplegar a tu producción.
+No creas una cuenta: la primera se crea sola.
+
+En el primer arranque, si la tabla de usuarios está vacía, Aethra siembra un admin con
+`AETHRA_ADMIN_EMAIL` y `AETHRA_ADMIN_PASSWORD` de tu `.env` y le asigna el rol admin. Entras
+con esos. Por eso mismo el compose se niega a arrancar si falta alguna: sin cuenta por
+defecto, sin nada adivinable.
+
+De ahí en adelante, los demás usuarios se crean desde **Ajustes → Usuarios**, con roles
+(admin, desarrollador, visualizador), scopes por endpoint y segundo factor TOTP opcional.
+Sin tocar `curl`.
+
+Si la tabla de usuarios volviera a quedar vacía, el login valida contra esas mismas variables
+de entorno y emite claims equivalentes a admin, solo para que esa primera sesión pueda crear
+usuarios reales. En cuanto existe uno en la base de datos, ese respaldo deja de usarse.
+
 ### Desde el código
 
 Necesitas **.NET 10 SDK**, **Node 24+** y un **PostgreSQL 16** alcanzable.
