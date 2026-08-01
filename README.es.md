@@ -2,6 +2,7 @@
 
 **Una sola plataforma para desplegar, enrutar, certificar, monitorear y operar tu infraestructura.**
 
+[![CI](https://github.com/Authoritt/Aethra/actions/workflows/ci.yml/badge.svg)](https://github.com/Authoritt/Aethra/actions/workflows/ci.yml)
 [![Licencia](https://img.shields.io/badge/licencia-Apache--2.0-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4.svg)](https://dotnet.microsoft.com/)
 
