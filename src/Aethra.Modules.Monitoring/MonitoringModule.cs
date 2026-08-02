@@ -55,6 +55,7 @@ public static class MonitoringModule
 
         // Retención de checks crudos (evita el crecimiento ilimitado del disco) — sección "Monitoring".
         services.Configure<MonitoringRetentionOptions>(configuration.GetSection("Monitoring"));
+        services.Configure<MonitorWorkerOptions>(configuration.GetSection("Monitoring"));
         services.AddHostedService<MonitorCheckRetentionWorker>();
 
         return services;
