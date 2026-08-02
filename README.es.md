@@ -28,11 +28,11 @@ deducir tu modelo de datos.
 
 ## Tu IA puede operar casi todo esto
 
-No es un punto del roadmap. Apunta a Claude —o a cualquier agente con MCP— a `wss://aethra/mcp`, dale una
+No es un punto del roadmap. Apunta a Claude —o a cualquier agente con MCP— a `https://aethra/mcp`, dale una
 API key con scopes, y operas tu infraestructura preguntando:
 
 > **"Despliega el último main al ambiente de staging de la plantilla de facturación."**
-> → `aethra_list_context` para ubicarlo, `aethra_trigger_build`, luego `aethra_trigger_deployment`, y te
+> → `aethra_list_context` para ubicarlo, luego `aethra_deploy_instance_native`, y te
 > reporta el resultado REAL del healthcheck en vez de dar por hecho que funcionó.
 
 > **"¿Cuál de mis proyectos está caído ahora mismo?"**
@@ -71,7 +71,7 @@ Dos decisiones de diseño hacen que esto sea seguro de dejar encendido:
 | **Servicios gestionados** | Postgres/Redis/RabbitMQ one-click vía plantillas. `ServiceBinding` provisiona BD/user/password reales y los inyecta como env vars + secrets en las apps que los usan. |
 | **DNS Cloudflare** | Cliente HTTP contra API v4. Registros A/CNAME automáticos al adjuntar custom domain. Token cifrado en Settings, referenciado por nombre. |
 | **Notas y PinnedFacts** | Markdown + imágenes por proyecto/template/instance. Los PinnedFacts (IPs, credenciales, comandos) se muestran en la tarjeta principal y se cifran en reposo. |
-| **API + MCP** | REST con OpenAPI 3.1, auth dual (cookie para humanos, API keys con scopes granulares para clientes). Servidor MCP embebido en `wss://aethra/mcp` con tools tipadas. |
+| **API + MCP** | REST con OpenAPI 3.1, auth dual (cookie para humanos, API keys con scopes granulares para clientes). Servidor MCP embebido en `https://aethra/mcp` con tools tipadas. |
 
 ---
 
@@ -215,12 +215,12 @@ asistidos en `scripts/migrate-from-coolify.{sh,ps1}`.
 ## API y MCP
 
 REST completo con OpenAPI 3.1 en `/openapi/v1.json`. Las operaciones críticas se exponen también como
-tools MCP en `wss://aethra/mcp`:
+tools MCP en `https://aethra/mcp`:
 
 - `aethra_list_context` — snapshot agregado (proyectos, VMs, servicios, dominios).
 - `aethra_create_template` / `aethra_create_client` / `aethra_create_instance`.
-- `aethra_trigger_build`, `aethra_trigger_deployment`.
-- `aethra_attach_domain`, `aethra_set_env_vars`, `aethra_set_secrets`.
+- `aethra_deploy_instance_native`, `aethra_list_deploys`, `aethra_get_deploy_logs`, `aethra_explain_failed_deploy`.
+- `aethra_attach_domain`, `aethra_set_env_vars`, `aethra_list_secrets`.
 - `aethra_bind_service` (provisiona Postgres/Redis/RabbitMQ + inyecta credenciales).
 - `aethra_query_metrics`, `aethra_get_monitor_status`, `aethra_add_note`.
 

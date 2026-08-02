@@ -28,11 +28,11 @@ reverse-engineering your data model. That is the part most deploy platforms leav
 
 ## Your AI can run most of this
 
-This is not a roadmap item. Point Claude — or any MCP-capable agent — at `wss://aethra/mcp`, give it a
+This is not a roadmap item. Point Claude — or any MCP-capable agent — at `https://aethra/mcp`, give it a
 scoped API key, and you operate your infrastructure by asking:
 
 > **"Deploy the latest main to the staging instance of the billing template."**
-> → `aethra_list_context` to find it, `aethra_trigger_build`, then `aethra_trigger_deployment`, and it
+> → `aethra_list_context` to find it, then `aethra_deploy_instance_native`, and it
 > reports the real healthcheck result instead of assuming it worked.
 
 > **"Which of my projects is unhealthy right now?"**
@@ -72,7 +72,7 @@ Two design decisions make this safe enough to actually leave on:
 | **Managed services** | One-click Postgres/Redis/RabbitMQ from templates. A `ServiceBinding` provisions the real database/user/password and injects them as env vars and secrets into the apps that consume them. |
 | **Cloudflare DNS** | HTTP client against API v4. Automatic A/CNAME records when a custom domain is attached. Token encrypted in Settings and referenced by name. |
 | **Notes and PinnedFacts** | Markdown and images per project/template/instance. PinnedFacts (IPs, credentials, commands) surface on the main card and are encrypted at rest. |
-| **REST + MCP** | REST with OpenAPI 3.1 and dual auth: cookies for humans, scoped API keys for programs. MCP server at `wss://aethra/mcp` with typed tools. |
+| **REST + MCP** | REST with OpenAPI 3.1 and dual auth: cookies for humans, scoped API keys for programs. MCP server at `https://aethra/mcp` with typed tools. |
 
 ---
 
@@ -245,12 +245,12 @@ docs/
 ## REST API and MCP
 
 Full REST surface with OpenAPI 3.1 at `/openapi/v1.json`. The critical operations are also exposed as
-MCP tools at `wss://aethra/mcp`:
+MCP tools at `https://aethra/mcp`:
 
 - `aethra_list_context` — aggregated snapshot (projects, VMs, services, domains).
 - `aethra_create_template` / `aethra_create_client` / `aethra_create_instance`.
-- `aethra_trigger_build`, `aethra_trigger_deployment`.
-- `aethra_attach_domain`, `aethra_set_env_vars`, `aethra_set_secrets`.
+- `aethra_deploy_instance_native`, `aethra_list_deploys`, `aethra_get_deploy_logs`, `aethra_explain_failed_deploy`.
+- `aethra_attach_domain`, `aethra_set_env_vars`, `aethra_list_secrets`.
 - `aethra_bind_service` — provisions Postgres/Redis/RabbitMQ and injects the credentials.
 - `aethra_query_metrics`, `aethra_get_monitor_status`, `aethra_add_note`.
 
