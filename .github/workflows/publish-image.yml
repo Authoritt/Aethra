@@ -1,0 +1,136 @@
+name: Publish image
+
+# PUBLICA solo en tags de version, nunca en cada push: una imagen publicada es la promesa
+# de que alguien puede fijarla, y "lo que hubiera en main esa tarde" no es una version.
+# CONSTRUYE ademas en cada PR que toque el Dockerfile, sin publicar, para que el build
+# multi-arch se pruebe antes de fusionar en vez de despues.
+on:
+  push:
+    tags: ["v*"]
+  # En PR se CONSTRUYE pero no se publica. Sin esto, la unica forma de probar el build
+  # multi-arch seria fusionar primero: confiar en el verde antes de tenerlo.
+  pull_request:
+    paths:
+      - "deploy/api.Dockerfile"
+      - ".github/workflows/publish-image.yml"
+      - "server.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
+env:
+  IMAGEN: ghcr.io/${{ github.repository_owner }}/aethra
+
+jobs:
+  publicar:
+    name: Build multi-arch y push a GHCR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Anti-falso-verde, y ANTES de gastar veinte minutos de build: el registry verifica la
+      # PROPIEDAD de la imagen comparando su anotacion con el "name" de server.json. Si
+      # divergen, la publicacion falla despues y en otro sitio. Que falle aqui, gratis.
+      - name: La anotacion del Dockerfile coincide con server.json
+        run: |
+          python3 - <<'PY'
+          import json, re, sys
+          esperado = json.load(open("server.json"))["name"]
+          dockerfile = open("deploy/api.Dockerfile", encoding="utf-8").read()
+          m = re.search(r'io\.modelcontextprotocol\.server\.name="([^"]+)"', dockerfile)
+          if not m:
+              sys.exit("::error::el Dockerfile no declara io.modelcontextprotocol.server.name")
+          real = m.group(1)
+          print(f"server.json : {esperado}")
+          print(f"Dockerfile  : {real}")
+          if real != esperado:
+              sys.exit("::error::no coinciden - el registry rechazaria la publicacion")
+          print("coinciden")
+          PY
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login en GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # La version sale del tag, no de un fichero que alguien deba acordarse de subir.
+      - name: Derivar etiquetas
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGEN }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # NO se usa QEMU a proposito: el Dockerfile compila cruzado con -a $TARGETARCH desde la
+      # arquitectura del runner. Emular arm64 para un build de .NET multiplica el tiempo por
+      # ~8 y es la razon habitual de que estos workflows acaben desactivados.
+      - name: Build y push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/api.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Procedencia firmada: de que commit y que workflow salio la imagen, dicho por algo que
+      # el autor de la imagen no controla.
+      - name: Atestacion de procedencia
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGEN }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      # AFIRMA, no imprime. La version anterior de este paso hacia `inspect | cat` y salia 0
+      # pasara lo que pasara: un manifiesto sin arm64, o sin la anotacion, habria pasado igual.
+      # Un paso llamado "verificar" que no puede fallar es peor que no tenerlo, porque ademas
+      # convence al siguiente lector de que algo se comprobo.
+      - name: El manifiesto publicado tiene las dos plataformas y la anotacion
+        if: github.event_name != 'pull_request'
+        env:
+          REF: ${{ env.IMAGEN }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "$REF" --raw > /tmp/index.json
+          docker buildx imagetools inspect "$REF" --format "{{json .Image}}" > /tmp/config.json
+          python3 - <<'PY'
+          import json, sys
+
+          idx = json.load(open("/tmp/index.json"))
+          manifiestos = idx.get("manifests", [])
+          plataformas = {
+              f'{m["platform"]["os"]}/{m["platform"]["architecture"]}'
+              for m in manifiestos if "platform" in m
+          }
+          print("plataformas en el manifiesto:", sorted(plataformas))
+          faltan = {"linux/amd64", "linux/arm64"} - plataformas
+          if faltan:
+              sys.exit(f"::error::el manifiesto publicado no trae {sorted(faltan)}")
+
+          esperado = json.load(open("server.json"))["name"]
+          crudo = open("/tmp/config.json").read()
+          if esperado not in crudo:
+              sys.exit(
+                  "::error::la anotacion io.modelcontextprotocol.server.name no sobrevivio "
+                  f"a la imagen publicada; el registry rechazaria '{esperado}'"
+              )
+          print(f"anotacion presente en la imagen: {esperado}")
+          print("verificado contra el artefacto, no contra el fichero")
+          PY
