@@ -232,7 +232,8 @@ public sealed class VmInstallTools(IMediator mediator, IMcpCallerContext caller)
     [McpServerTool(Name = "aethra_get_install_script", ReadOnly = false, OpenWorld = false)]
     [Description("Devuelve el bash one-liner para instalar el satélite manualmente. " +
         "OJO: este endpoint ROTA el token de la VM (porque va embebido en el script) — si no usás el script, " +
-        "el token anterior queda inválido. Recomendado cuando preferís NO mandar credenciales SSH por MCP.")]
+        "el token anterior queda inválido. Recomendado cuando preferís NO mandar credenciales SSH por MCP."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> GetInstallScriptAsync(
         [Description("ID de la VM (formato 'vm_...').")] string vmId,
         [Description("Container runtime: 'docker' (default) o 'podman'.")] string? containerRuntime,

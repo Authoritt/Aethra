@@ -58,7 +58,8 @@ public sealed class BackupsTools(IMediator mediator, IMcpCallerContext caller)
         + "'satellite://auto' / 'satellite://<vmId>' (guarda el backup en el disco de un SATÉLITE con espacio libre "
         + "para no llenar el central; 'auto' elige el satélite conectado con más disco; cap ~60 MiB/backup, para más "
         + "grande usar s3://). Pasar cron vacío/null limpia la política (desactiva los backups programados; los "
-        + "on-demand vía aethra_backup_service siguen disponibles).")]
+        + "on-demand vía aethra_backup_service siguen disponibles)."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> SetBackupPolicyAsync(
         [Description("ID del Managed Service (formato 'svc_...').")] string serviceId,
         [Description("Cron (ej. '0 2 * * *' = 02:00 diario). Vacío/null = desactivar backups automáticos.")] string? cronExpression,

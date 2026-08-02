@@ -30,7 +30,8 @@ public sealed class ScheduledJobsTools(IMediator mediator, IMcpCallerContext cal
 
     [McpServerTool(Name = "aethra_create_scheduled_job", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Crea un scheduled job que se ejecuta dentro del contenedor del Managed Service según cron expression. " +
-        "Cron formato 5 campos: 'minute hour day month dayOfWeek' (ej. '0 2 * * *' = todos los días a las 02:00).")]
+        "Cron formato 5 campos: 'minute hour day month dayOfWeek' (ej. '0 2 * * *' = todos los días a las 02:00)."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> CreateAsync(
         [Description("ID del Managed Service (formato 'svc_...').")] string serviceId,
         [Description("Nombre human-readable del job.")] string name,
@@ -117,7 +118,8 @@ public sealed class ScheduledJobsTools(IMediator mediator, IMcpCallerContext cal
     [McpServerTool(Name = "aethra_update_scheduled_job", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Actualiza (patch) un scheduled job: sólo cambia los campos provistos; los omitidos quedan igual. "
         + "Permite pausar/reanudar (enabled), cambiar el cron, el comando, timezone, concurrencia y timeout. "
-        + "Devuelve el job actualizado.")]
+        + "Devuelve el job actualizado."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UpdateJobAsync(
         [Description("ID del scheduled job (formato 'sch_...').")] string jobId,
         [Description("Nuevo nombre display. Omitir/null = no cambiar.")] string? name,

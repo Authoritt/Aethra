@@ -64,7 +64,8 @@ public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller
     [McpServerTool(Name = "aethra_create_monitor", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Crea un monitor HTTP que chequea periódicamente un endpoint y marca Up/Down/Degraded. "
         + "Devuelve el detalle (redactado). Para headers de autenticación personalizados, configurá el monitor "
-        + "luego vía la UI/REST (esta tool no los recibe).")]
+        + "luego vía la UI/REST (esta tool no los recibe)."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> CreateAsync(
         [Description("Slug único (lowercase, a-z 0-9 -).")] string slug,
         [Description("Nombre display human-readable.")] string name,
@@ -100,7 +101,8 @@ public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller
 
     [McpServerTool(Name = "aethra_enable_monitor", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Activa un monitor HTTP: vuelve a programarse y a chequear el endpoint en su intervalo. "
-        + "Idempotente (activar uno ya activo es no-op). Confirma el estado; NO devuelve headers ni body del check.")]
+        + "Idempotente (activar uno ya activo es no-op). Confirma el estado; NO devuelve headers ni body del check."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> EnableAsync(
         [Description("ID del monitor (formato 'mon_...').")] string monitorId,
         CancellationToken ct)
@@ -115,7 +117,8 @@ public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller
 
     [McpServerTool(Name = "aethra_disable_monitor", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Desactiva un monitor HTTP: deja de chequear el endpoint y de emitir alertas (queda en disabled). "
-        + "Idempotente. Útil para silenciar durante mantenimientos. Confirma el estado; NO devuelve headers ni body.")]
+        + "Idempotente. Útil para silenciar durante mantenimientos. Confirma el estado; NO devuelve headers ni body."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> DisableAsync(
         [Description("ID del monitor (formato 'mon_...').")] string monitorId,
         CancellationToken ct)
@@ -131,7 +134,8 @@ public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller
     [McpServerTool(Name = "aethra_trigger_monitor_check", Destructive = false, Idempotent = false, OpenWorld = true)]
     [Description("Fuerza un chequeo on-demand de un monitor HTTP AHORA (sin esperar al intervalo): hace la request al "
         + "endpoint, registra el resultado y puede actualizar el status del monitor. Devuelve el check: status, "
-        + "http_status_code, latency_ms, error y un snippet de la respuesta. Útil para revalidar tras un fix.")]
+        + "http_status_code, latency_ms, error y un snippet de la respuesta. Útil para revalidar tras un fix."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> TriggerCheckAsync(
         [Description("ID del monitor a chequear (formato 'mon_...').")] string monitorId,
         CancellationToken ct)
@@ -147,7 +151,8 @@ public sealed class MonitoringTools(IMediator mediator, IMcpCallerContext caller
     [McpServerTool(Name = "aethra_delete_monitor", Destructive = true, Idempotent = false, OpenWorld = false)]
     [Description("Elimina permanentemente un monitor HTTP y su historial de checks. Útil para quitar monitores "
         + "obsoletos o falsos-positivos (ej. hostnames que ya no existen). Para silenciar temporalmente sin perder "
-        + "el histórico, preferí aethra_disable_monitor.")]
+        + "el histórico, preferí aethra_disable_monitor."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> DeleteAsync(
         [Description("ID del monitor a eliminar (formato 'mon_...').")] string monitorId,
         CancellationToken ct)

@@ -86,7 +86,8 @@ public sealed class VmsTools(IMediator mediator, IMcpCallerContext caller)
 
     [McpServerTool(Name = "aethra_set_vm_accepts_previews", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Marca si una VM acepta despliegues de PREVIEW (entornos efímeros por PR/branch). "
-        + "true = la VM es candidata para correr previews; false = sólo workloads permanentes.")]
+        + "true = la VM es candidata para correr previews; false = sólo workloads permanentes."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> SetAcceptsPreviewsAsync(
         [Description("ID de la VM (formato 'vm_...').")] string vmId,
         [Description("true = acepta previews; false = no.")] bool acceptsPreviews,

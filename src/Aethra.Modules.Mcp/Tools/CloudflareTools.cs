@@ -20,7 +20,8 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
     [McpServerTool(Name = "aethra_create_dns_record", Destructive = false, Idempotent = false, OpenWorld = true)]
     [Description("Crea un DNS record en Cloudflare (y persiste la copia local con su id externo). Tipos: A, AAAA, "
         + "CNAME, TXT, MX. Para apuntar un hostname a una Instance preferí aethra_attach_domain (hace DNS+ruta+monitor); "
-        + "usá esta tool para records sueltos. Devuelve el record creado.")]
+        + "usá esta tool para records sueltos. Devuelve el record creado."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> CreateDnsRecordAsync(
         [Description("ID de la zona Cloudflare gestionada en Aethra.")] string zoneId,
         [Description("Tipo: A | AAAA | CNAME | TXT | MX.")] string type,
@@ -66,7 +67,8 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
 
     [McpServerTool(Name = "aethra_update_dns_record", Destructive = false, Idempotent = true, OpenWorld = true)]
     [Description("Actualiza (patch) un DNS record en Cloudflare: content, ttl, proxied y/o comment. El tipo y el "
-        + "nombre NO se cambian (borrá y recreá para eso). Sólo aplica los campos provistos. Devuelve el record actualizado.")]
+        + "nombre NO se cambian (borrá y recreá para eso). Sólo aplica los campos provistos. Devuelve el record actualizado."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UpdateDnsRecordAsync(
         [Description("ID del DNS record en Aethra.")] string recordId,
         [Description("Nuevo contenido (IP/target/valor). Omitir/null = no cambiar.")] string? content,
@@ -102,7 +104,8 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
     }
 
     [McpServerTool(Name = "aethra_attach_domain", Destructive = false, Idempotent = false, OpenWorld = false)]
-    [Description("Adjunta un hostname a una Instance: crea DNS record en Cloudflare (CNAME proxied), crea Route YARP y opcionalmente un Monitor HTTP. Cada paso devuelve su propio status.")]
+    [Description("Adjunta un hostname a una Instance: crea DNS record en Cloudflare (CNAME proxied), crea Route YARP y opcionalmente un Monitor HTTP. Cada paso devuelve su propio status."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> AttachDomainAsync(
         [Description("ID de la Instance (formato 'ins_...').")] string instanceId,
         [Description("Hostname público (FQDN).")] string hostname,
@@ -136,7 +139,8 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
     }
 
     [McpServerTool(Name = "aethra_register_tunnel", Destructive = true, Idempotent = true, OpenWorld = false)]
-    [Description("Registra (o actualiza) el Cloudflare Tunnel gestionado: guarda el API token cifrado y la VM del connector. Verifica el token contra el API real.")]
+    [Description("Registra (o actualiza) el Cloudflare Tunnel gestionado: guarda el API token cifrado y la VM del connector. Verifica el token contra el API real."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> RegisterTunnelAsync(
         [Description("Account ID de Cloudflare (hex 32).")] string accountId,
         [Description("UUID del túnel.")] string tunnelId,
@@ -157,7 +161,8 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
     }
 
     [McpServerTool(Name = "aethra_promote_tunnel_remote", Destructive = true, Idempotent = true, OpenWorld = false)]
-    [Description("Promueve la config del túnel a gestión remota (source=cloudflare) re-publicando el ingress actual. Paso previo al connector con token.")]
+    [Description("Promueve la config del túnel a gestión remota (source=cloudflare) re-publicando el ingress actual. Paso previo al connector con token."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> PromoteTunnelRemoteAsync(CancellationToken ct)
     {
         if (!caller.HasScope(McpScopes.CloudflareWrite))
@@ -169,7 +174,8 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
     }
 
     [McpServerTool(Name = "aethra_ensure_tunnel_hostname", Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Asegura una regla de ingress para el hostname → servicio de Aethra, sin reiniciar el túnel (cero blip). Idempotente.")]
+    [Description("Asegura una regla de ingress para el hostname → servicio de Aethra, sin reiniciar el túnel (cero blip). Idempotente."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> EnsureTunnelHostnameAsync(
         [Description("Hostname (FQDN) a enrutar al proxy de Aethra.")] string hostname,
         CancellationToken ct)
@@ -264,7 +270,8 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
     }
 
     [McpServerTool(Name = "aethra_remove_tunnel_hostname", Destructive = true, Idempotent = true, OpenWorld = false)]
-    [Description("Quita la(s) regla(s) de ingress de un hostname del túnel (sin reiniciar).")]
+    [Description("Quita la(s) regla(s) de ingress de un hostname del túnel (sin reiniciar)."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> RemoveTunnelHostnameAsync(
         [Description("Hostname (FQDN) a quitar.")] string hostname,
         CancellationToken ct)
@@ -278,7 +285,8 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
     }
 
     [McpServerTool(Name = "aethra_deploy_tunnel_connector", Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Despliega el connector cloudflared como contenedor gestionado en la VM del túnel (flip a remoto, cero SSH). Corre en background.")]
+    [Description("Despliega el connector cloudflared como contenedor gestionado en la VM del túnel (flip a remoto, cero SSH). Corre en background."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> DeployTunnelConnectorAsync(
         [Description("VM (vm_...) destino. Si null, usa la TargetVmId del túnel.")] string? vmId,
         CancellationToken ct)

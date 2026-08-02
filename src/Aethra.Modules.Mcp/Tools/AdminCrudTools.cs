@@ -25,7 +25,8 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
     // ---------------------------------------------------------------- Templates
     [McpServerTool(Name = "aethra_update_template", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Edita un Template (reemplaza name/description/source/build con los valores provistos — el slug NO cambia). " +
-        "buildType debe ser Dockerfile|DockerCompose|Nixpacks. Pasa los valores actuales para los campos que no quieras cambiar.")]
+        "buildType debe ser Dockerfile|DockerCompose|Nixpacks. Pasa los valores actuales para los campos que no quieras cambiar."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UpdateTemplateAsync(
         [Description("ID del Template (formato 'tpl_...').")] string templateId,
         [Description("Nombre display.")] string name,
@@ -72,7 +73,8 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
     }
 
     [McpServerTool(Name = "aethra_rotate_webhook_secret", Destructive = true, Idempotent = false, OpenWorld = false)]
-    [Description("Rota el webhook secret de un Template. Devuelve el nuevo secreto en claro UNA vez — guárdalo, no se vuelve a mostrar.")]
+    [Description("Rota el webhook secret de un Template. Devuelve el nuevo secreto en claro UNA vez — guárdalo, no se vuelve a mostrar."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> RotateWebhookSecretAsync(
         [Description("ID del Template.")] string templateId,
         CancellationToken ct)
@@ -88,7 +90,8 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
     // ---------------------------------------------------------------- Instances
     [McpServerTool(Name = "aethra_set_instance_tracked_ref", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Fija (o limpia) la rama que despliega una Instance. trackedRef null/vacío = heredar del template " +
-        "(mapping del environment o branch por defecto). Ej. 'refs/heads/feature-x' o 'develop'.")]
+        "(mapping del environment o branch por defecto). Ej. 'refs/heads/feature-x' o 'develop'."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> SetInstanceTrackedRefAsync(
         [Description("ID de la Instance (formato 'ins_...').")] string instanceId,
         [Description("Rama explícita, o null/vacío para heredar del template.")] string? trackedRef,
@@ -104,7 +107,8 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
     }
 
     [McpServerTool(Name = "aethra_set_instance_autodeploy", Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Habilita o deshabilita el auto-deploy de una Instance cuando hay un nuevo build verde del template.")]
+    [Description("Habilita o deshabilita el auto-deploy de una Instance cuando hay un nuevo build verde del template."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> SetInstanceAutoDeployAsync(
         [Description("ID de la Instance.")] string instanceId,
         [Description("true = habilitar; false = deshabilitar.")] bool enabled,
@@ -119,7 +123,8 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
     }
 
     [McpServerTool(Name = "aethra_set_custom_domain", Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Fija (o limpia) el dominio custom de una Instance. customDomain null/vacío vuelve al auto-hostname.")]
+    [Description("Fija (o limpia) el dominio custom de una Instance. customDomain null/vacío vuelve al auto-hostname."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> SetCustomDomainAsync(
         [Description("ID de la Instance.")] string instanceId,
         [Description("Dominio custom (ej. 'app.cliente.com'), o null/vacío para limpiar.")] string? customDomain,
@@ -157,7 +162,8 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
 
     // ---------------------------------------------------------------- Clients
     [McpServerTool(Name = "aethra_update_client", Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Actualiza info administrativa de un Client (display name/descripción/email/billing tag). El slug NO cambia.")]
+    [Description("Actualiza info administrativa de un Client (display name/descripción/email/billing tag). El slug NO cambia."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UpdateClientAsync(
         [Description("ID del Client (formato 'cli_...').")] string clientId,
         [Description("Nombre display.")] string displayName,
@@ -196,7 +202,8 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
 
     // ---------------------------------------------------------------- Projects
     [McpServerTool(Name = "aethra_update_project", Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Actualiza nombre y apariencia (descripción/color/icono) de un Project. El slug NO cambia.")]
+    [Description("Actualiza nombre y apariencia (descripción/color/icono) de un Project. El slug NO cambia."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UpdateProjectAsync(
         [Description("ID del Project (formato 'prj_...').")] string projectId,
         [Description("Nombre display.")] string name,
@@ -216,7 +223,8 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
     // ---------------------------------------------------------------- Services
     [McpServerTool(Name = "aethra_update_service", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Actualiza metadata editable de un ManagedService: nombre display y exposición externa. " +
-        "Slug/imagen/puerto/VM son inmutables. Devuelve el detalle actualizado.")]
+        "Slug/imagen/puerto/VM son inmutables. Devuelve el detalle actualizado."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UpdateServiceAsync(
         [Description("ID del ManagedService (formato 'svc_...').")] string serviceId,
         [Description("Nombre display.")] string name,
@@ -253,7 +261,8 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
 
     // ---------------------------------------------------------------- Vms
     [McpServerTool(Name = "aethra_update_vm", Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Actualiza metadata editable de una VM (nombre, IPs pública/privada, descripción). El slug es inmutable.")]
+    [Description("Actualiza metadata editable de una VM (nombre, IPs pública/privada, descripción). El slug es inmutable."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UpdateVmAsync(
         [Description("ID de la VM (formato 'vm_...').")] string vmId,
         [Description("Nombre display.")] string name,
@@ -294,7 +303,8 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
     // ---------------------------------------------------------------- Identity Roles
     [McpServerTool(Name = "aethra_update_role", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Edita un rol custom (displayName + scopes). Los roles del sistema no se pueden modificar. " +
-        "Reemplaza la lista de scopes completa — pasa los scopes actuales que quieras conservar.")]
+        "Reemplaza la lista de scopes completa — pasa los scopes actuales que quieras conservar."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UpdateRoleAsync(
         [Description("ID del Role (formato 'rol_...').")] string roleId,
         [Description("Nombre display.")] string displayName,

@@ -22,7 +22,8 @@ public sealed class OperationalWorkflowTools(
     IMcpCallerContext caller)
 {
     [McpServerTool(Name = "aethra_deploy_app_environment", Destructive = false, Idempotent = false, OpenWorld = false)]
-    [Description("Dispara un deploy nativo de un App Environment en background. Usa la unidad mental operacional, aunque internamente el id sea una Instance.")]
+    [Description("Dispara un deploy nativo de un App Environment en background. Usa la unidad mental operacional, aunque internamente el id sea una Instance."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> DeployAppEnvironmentAsync(
         [Description("ID del App Environment / Instance (formato 'ins_...').")] string appEnvironmentId,
         CancellationToken ct)
