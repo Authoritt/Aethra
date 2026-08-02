@@ -24,7 +24,7 @@ WORKDIR /app
 # git: el BuildContextBuilder clona los repos de las apps con el CLI de git (transporte HTTPS
 # fiable en Linux/ARM). ca-certificates para validar los certs de GitHub/GitLab.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
+    && apt-get install -y --no-install-recommends git ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/publish .
