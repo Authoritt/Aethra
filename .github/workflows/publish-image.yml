@@ -98,13 +98,39 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
-      # El LABEL viaja en la imagen publicada, no solo en el fichero. Se comprueba contra el
-      # artefacto real: si el build lo perdiera por el camino, aqui se ve.
-      - name: La imagen publicada lleva la anotacion
+      # AFIRMA, no imprime. La version anterior de este paso hacia `inspect | cat` y salia 0
+      # pasara lo que pasara: un manifiesto sin arm64, o sin la anotacion, habria pasado igual.
+      # Un paso llamado "verificar" que no puede fallar es peor que no tenerlo, porque ademas
+      # convence al siguiente lector de que algo se comprobo.
+      - name: El manifiesto publicado tiene las dos plataformas y la anotacion
         if: github.event_name != 'pull_request'
+        env:
+          REF: ${{ env.IMAGEN }}@${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
-          docker buildx imagetools inspect \
-            "${{ env.IMAGEN }}@${{ steps.build.outputs.digest }}" --raw > /tmp/idx.json
-          cat /tmp/idx.json
-          echo "digest publicado: ${{ steps.build.outputs.digest }}"
+          docker buildx imagetools inspect "$REF" --raw > /tmp/index.json
+          docker buildx imagetools inspect "$REF" --format "{{json .Image}}" > /tmp/config.json
+          python3 - <<'PY'
+          import json, sys
+
+          idx = json.load(open("/tmp/index.json"))
+          manifiestos = idx.get("manifests", [])
+          plataformas = {
+              f'{m["platform"]["os"]}/{m["platform"]["architecture"]}'
+              for m in manifiestos if "platform" in m
+          }
+          print("plataformas en el manifiesto:", sorted(plataformas))
+          faltan = {"linux/amd64", "linux/arm64"} - plataformas
+          if faltan:
+              sys.exit(f"::error::el manifiesto publicado no trae {sorted(faltan)}")
+
+          esperado = json.load(open("server.json"))["name"]
+          crudo = open("/tmp/config.json").read()
+          if esperado not in crudo:
+              sys.exit(
+                  "::error::la anotacion io.modelcontextprotocol.server.name no sobrevivio "
+                  f"a la imagen publicada; el registry rechazaria '{esperado}'"
+              )
+          print(f"anotacion presente en la imagen: {esperado}")
+          print("verificado contra el artefacto, no contra el fichero")
+          PY
