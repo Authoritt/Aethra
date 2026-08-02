@@ -237,41 +237,27 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
         //  2. El NOMBRE del campo invita a una inferencia mas fuerte que el hecho: esta baja NO
         //     para el contenedor (lo dice la descripcion de la tool), pero un agente que lee
         //     status="Stopped" concluira que el servicio dejo de correr. Ahora se dice explicito.
-        string? estadoGuardado = null;
-        string? motivoSinConfirmar = null;
-        try
-        {
-            var releido = await mediator.Send(new GetServiceByIdQuery(serviceId), ct).ConfigureAwait(false);
-            if (releido.IsSuccess)
+        return await McpWriteBack.ConfirmarAsync(
+            c => mediator.Send(new GetServiceByIdQuery(serviceId), c),
+            s => new
             {
-                estadoGuardado = releido.Value.Status;
-            }
-            else
+                service_id = serviceId,
+                deregistered = true,
+                record_status = s.Status,
+                state_confirmed = true,
+                container_untouched = true,
+                note = "record_status es el estado del REGISTRO en Aethra, no del contenedor: esta "
+                    + "baja no detiene el contenedor ni borra volumenes ni datos.",
+            },
+            motivo => new
             {
-                motivoSinConfirmar = "read_failed";
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-#pragma warning disable CA1031 // Un fallo de la relectura es "no confirmable", no "no ejecutado".
-        catch (Exception ex)
-#pragma warning restore CA1031
-        {
-            motivoSinConfirmar = ex.GetType().Name;
-        }
-
-        return McpResponses.Ok(new
-        {
-            service_id = serviceId,
-            deregistered = true,
-            record_status = estadoGuardado,
-            state_confirmed = estadoGuardado is not null,
-            readback_error = motivoSinConfirmar,
-            container_untouched = true,
-            note = "record_status es el estado del REGISTRO en Aethra, no del contenedor: esta baja "
-                + "no detiene el contenedor ni borra volumenes ni datos.",
-        });
+                service_id = serviceId,
+                deregistered = true,
+                state_confirmed = false,
+                readback_error = motivo,
+                container_untouched = true,
+                note = McpWriteBack.NotaSinConfirmar,
+            },
+            ct).ConfigureAwait(false);
     }
 }

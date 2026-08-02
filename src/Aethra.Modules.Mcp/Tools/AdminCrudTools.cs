@@ -44,50 +44,18 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
         Func<Aethra.Modules.Projects.UseCases.Instances.Dtos.InstanceDetail, object> proyectar,
         CancellationToken ct)
     {
-        // La relectura puede LANZAR, no solo devolver un Result fallido: ningun behavior del
-        // pipeline convierte excepciones en Result (LoggingBehavior las registra y relanza). Sin
-        // este catch, un fallo transitorio de BD saldria como error opaco de invocacion DESPUES de
-        // que la escritura ya commiteo, y el llamante podria reintentar una mutacion hecha. La
-        // cancelacion si tiene que propagar: es una peticion del llamante, no un fallo.
-        Aethra.Modules.Projects.UseCases.Instances.Dtos.InstanceDetail? guardada = null;
-        string? motivoSinConfirmar = null;
-        try
-        {
-            var leida = await mediator.Send(new GetInstanceByIdQuery(instanceId), ct).ConfigureAwait(false);
-            if (leida.IsSuccess)
-            {
-                guardada = leida.Value;
-            }
-            else
-            {
-                motivoSinConfirmar = "read_failed";
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-#pragma warning disable CA1031 // Cualquier fallo de la relectura es "no confirmable", no "no escrito".
-        catch (Exception ex)
-#pragma warning restore CA1031
-        {
-            motivoSinConfirmar = ex.GetType().Name;
-        }
-
-        if (guardada is null)
-        {
-            return McpResponses.Ok(new
+        return await McpWriteBack.ConfirmarAsync(
+            c => mediator.Send(new GetInstanceByIdQuery(instanceId), c),
+            proyectar,
+            motivo => new
             {
                 instance_id = instanceId,
                 written = true,
                 state_confirmed = false,
-                note = "La escritura fue aceptada, pero no se pudo releer la Instance para confirmar "
-                    + "el estado resultante. No se devuelve el valor pedido como si fuera el guardado. "
-                    + "NO reintentes la escritura por esto: ya commiteo.",
-                readback_error = motivoSinConfirmar,
-            });
-        }
-        return McpResponses.Ok(proyectar(guardada));
+                note = McpWriteBack.NotaSinConfirmar,
+                readback_error = motivo,
+            },
+            ct).ConfigureAwait(false);
     }
 
     // ---------------------------------------------------------------- Templates

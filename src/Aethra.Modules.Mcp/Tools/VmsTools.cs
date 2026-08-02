@@ -100,8 +100,16 @@ public sealed class VmsTools(IMediator mediator, IMcpCallerContext caller)
         var result = await mediator
             .Send(new SetAcceptsPreviewsCommand(vmId, acceptsPreviews), ct)
             .ConfigureAwait(false);
-        return result.IsSuccess
-            ? McpResponses.Ok(new { vm_id = vmId, accepts_previews = acceptsPreviews })
-            : McpResponses.FromError(result.Error);
+        if (!result.IsSuccess)
+        {
+            return McpResponses.FromError(result.Error);
+        }
+        // Lo guardado, no lo pedido: ver McpWriteBack e issue #27.
+        return await McpWriteBack.ConfirmarAsync(
+            c => mediator.Send(new Aethra.Modules.Vms.UseCases.Vms.Queries.GetVmByIdQuery(vmId), c),
+            v => new { vm_id = v.Id, accepts_previews = v.AcceptsPreviews, state_confirmed = true },
+            motivo => new { vm_id = vmId, written = true, state_confirmed = false,
+                note = McpWriteBack.NotaSinConfirmar, readback_error = motivo },
+            ct).ConfigureAwait(false);
     }
 }
