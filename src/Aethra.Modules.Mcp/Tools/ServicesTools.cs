@@ -226,8 +226,52 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
                 });
         }
         var result = await mediator.Send(new DeleteServiceCommand(serviceId), ct).ConfigureAwait(false);
-        return result.IsSuccess
-            ? McpResponses.Ok(new { service_id = serviceId, status = "Stopped", deregistered = true })
-            : McpResponses.FromError(result.Error);
+        if (!result.IsSuccess)
+        {
+            return McpResponses.FromError(result.Error);
+        }
+
+        // Antes esto devolvia status = "Stopped" como literal. Dos problemas, no uno:
+        //  1. Afirmaba el estado del registro sin leerlo. Si el comando hubiera dejado otro, o una
+        //     escritura concurrente lo hubiera cambiado, la respuesta habria dicho "Stopped" igual.
+        //  2. El NOMBRE del campo invita a una inferencia mas fuerte que el hecho: esta baja NO
+        //     para el contenedor (lo dice la descripcion de la tool), pero un agente que lee
+        //     status="Stopped" concluira que el servicio dejo de correr. Ahora se dice explicito.
+        string? estadoGuardado = null;
+        string? motivoSinConfirmar = null;
+        try
+        {
+            var releido = await mediator.Send(new GetServiceByIdQuery(serviceId), ct).ConfigureAwait(false);
+            if (releido.IsSuccess)
+            {
+                estadoGuardado = releido.Value.Status;
+            }
+            else
+            {
+                motivoSinConfirmar = "read_failed";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+#pragma warning disable CA1031 // Un fallo de la relectura es "no confirmable", no "no ejecutado".
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            motivoSinConfirmar = ex.GetType().Name;
+        }
+
+        return McpResponses.Ok(new
+        {
+            service_id = serviceId,
+            deregistered = true,
+            record_status = estadoGuardado,
+            state_confirmed = estadoGuardado is not null,
+            readback_error = motivoSinConfirmar,
+            container_untouched = true,
+            note = "record_status es el estado del REGISTRO en Aethra, no del contenedor: esta baja "
+                + "no detiene el contenedor ni borra volumenes ni datos.",
+        });
     }
 }
