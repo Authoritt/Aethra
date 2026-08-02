@@ -1,0 +1,47 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Authoritt/aethra",
+  "title": "Aethra",
+  "description": "Self-hosted control plane whose MCP surface IS the control plane, not a wrapper over a REST API: 117 tools for git deploys with blue-green swaps, reverse proxy routes, automatic TLS over ACME, Cloudflare DNS and tunnels, uptime monitors, metrics and backups. NOT a standalone tool server: it requires its own Postgres to start, and the MCP endpoint requires a scoped API key.",
+  "repository": {
+    "url": "https://github.com/Authoritt/Aethra",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/authoritt/aethra:0.1.0",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://localhost:5080/mcp"
+      },
+      "environmentVariables": [
+        {
+          "name": "ConnectionStrings__Aethra",
+          "description": "Postgres connection string. REQUIRED — the reverse-proxy config provider loads its routes in its constructor, so without a reachable database the process does not reach a running state. This is deliberate: a proxy that boots with zero routes would serve nothing to every hostname it fronts.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "Identity__AdminPasswordSeed",
+          "description": "Password for the admin account seeded on first boot, when the users table is empty. Change it after logging in.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "DataProtection__KeyDir",
+          "description": "Directory for Data Protection keys, mount a volume at it. Without persistence, every encrypted secret becomes unreadable after a container restart.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "Aethra__ApplyMigrationsOnStart",
+          "description": "Run EF migrations at startup. Off by default outside Development on purpose: a managed deployment runs them from its pipeline, and two instances migrating at once is worse than neither.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

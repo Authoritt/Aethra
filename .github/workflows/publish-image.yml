@@ -1,0 +1,98 @@
+name: Publish image
+
+# Solo en tags de version. NO en cada push: una imagen publicada es una promesa de que
+# alguien puede fijarla, y "lo que hubiera en main esa tarde" no es una version.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
+env:
+  IMAGEN: ghcr.io/${{ github.repository_owner }}/aethra
+
+jobs:
+  publicar:
+    name: Build multi-arch y push a GHCR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Anti-falso-verde, y ANTES de gastar veinte minutos de build: el registry verifica la
+      # PROPIEDAD de la imagen comparando su anotacion con el "name" de server.json. Si
+      # divergen, la publicacion falla despues y en otro sitio. Que falle aqui, gratis.
+      - name: La anotacion del Dockerfile coincide con server.json
+        run: |
+          python3 - <<'PY'
+          import json, re, sys
+          esperado = json.load(open("server.json"))["name"]
+          dockerfile = open("deploy/api.Dockerfile", encoding="utf-8").read()
+          m = re.search(r'io\.modelcontextprotocol\.server\.name="([^"]+)"', dockerfile)
+          if not m:
+              sys.exit("::error::el Dockerfile no declara io.modelcontextprotocol.server.name")
+          real = m.group(1)
+          print(f"server.json : {esperado}")
+          print(f"Dockerfile  : {real}")
+          if real != esperado:
+              sys.exit("::error::no coinciden - el registry rechazaria la publicacion")
+          print("coinciden")
+          PY
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login en GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # La version sale del tag, no de un fichero que alguien deba acordarse de subir.
+      - name: Derivar etiquetas
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGEN }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # NO se usa QEMU a proposito: el Dockerfile compila cruzado con -a $TARGETARCH desde la
+      # arquitectura del runner. Emular arm64 para un build de .NET multiplica el tiempo por
+      # ~8 y es la razon habitual de que estos workflows acaben desactivados.
+      - name: Build y push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/api.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Procedencia firmada: de que commit y que workflow salio la imagen, dicho por algo que
+      # el autor de la imagen no controla.
+      - name: Atestacion de procedencia
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGEN }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      # El LABEL viaja en la imagen publicada, no solo en el fichero. Se comprueba contra el
+      # artefacto real: si el build lo perdiera por el camino, aqui se ve.
+      - name: La imagen publicada lleva la anotacion
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect \
+            "${{ env.IMAGEN }}@${{ steps.build.outputs.digest }}" --raw > /tmp/idx.json
+          cat /tmp/idx.json
+          echo "digest publicado: ${{ steps.build.outputs.digest }}"
