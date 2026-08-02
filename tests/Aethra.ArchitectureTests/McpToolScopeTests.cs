@@ -140,15 +140,14 @@ public sealed class McpToolScopeTests
                 }
 
                 var cuerpo = trozo.Length > 4000 ? trozo[..4000] : trozo;
-                var guarda = Regex.Match(cuerpo, @"!caller\.HasScope");
-                var efecto = Regex.Match(cuerpo, @"(?<![A-Za-z])await(?![A-Za-z])|mediator\.(Send|Publish)");
-                if (!guarda.Success || !efecto.Success)
+                var orden = Clasificar(cuerpo);
+                if (orden == OrdenDeGuarda.SinOrdenComprobable)
                 {
-                    continue;   // sin efecto detectable, nada que ordenar
+                    continue;   // falta la guarda o falta el efecto: no hay nada que ordenar
                 }
 
                 revisadas++;
-                if (efecto.Index < guarda.Index)
+                if (orden == OrdenDeGuarda.EfectoAntes)
                 {
                     tardias.Add($"{Path.GetFileName(archivo)} :: {NombreDeTool(trozo)}");
                 }
@@ -162,14 +161,38 @@ public sealed class McpToolScopeTests
     }
 
     /// <summary>
-    /// El comparador de orden, aislado para poder probarlo con entradas sinteticas.
-    /// Devuelve true si hay un efecto ANTES de la guarda.
+    /// Las TRES cosas que le pueden pasar al orden de una tool. Son tres y no dos: "la guarda va
+    /// antes" y "aqui no hay nada que ordenar" son hechos distintos, y un <c>bool</c> los aplasta
+    /// en el mismo <c>false</c>. El fence necesita separarlos para contar cuantas tools revisa de
+    /// verdad -- si las cuenta mal, su unica defensa contra pasar en vacio (<c>revisadas &gt; 0</c>)
+    /// deja de valer.
     /// </summary>
-    internal static bool EfectoAntesDeLaGuarda(string cuerpo)
+    public enum OrdenDeGuarda
+    {
+        /// <summary>Falta la guarda o falta el efecto: no hay par que ordenar.</summary>
+        SinOrdenComprobable,
+
+        /// <summary>La guarda precede al primer efecto. Es lo correcto.</summary>
+        GuardaAntes,
+
+        /// <summary>Hay un efecto ANTES de la guarda: la comprobacion llega tarde.</summary>
+        EfectoAntes,
+    }
+
+    /// <summary>
+    /// El comparador de orden. <b>Lo llama el fence</b>, y es lo que prueban los casos sinteticos:
+    /// una copia del fence en el test, o del test en el fence, seria un fence sin probar con
+    /// pruebas que pasan (lo senalo una revision automatica en el PR, y tenia razon).
+    /// </summary>
+    internal static OrdenDeGuarda Clasificar(string cuerpo)
     {
         var guarda = Regex.Match(cuerpo, @"!caller\.HasScope");
         var efecto = Regex.Match(cuerpo, @"(?<![A-Za-z])await(?![A-Za-z])|mediator\.(Send|Publish)");
-        return guarda.Success && efecto.Success && efecto.Index < guarda.Index;
+        if (!guarda.Success || !efecto.Success)
+        {
+            return OrdenDeGuarda.SinOrdenComprobable;
+        }
+        return efecto.Index < guarda.Index ? OrdenDeGuarda.EfectoAntes : OrdenDeGuarda.GuardaAntes;
     }
 
     /// <summary>
@@ -179,14 +202,17 @@ public sealed class McpToolScopeTests
     /// del fence; con entradas sinteticas no hay arnes que falle.
     /// </summary>
     [Theory]
-    [InlineData("if (!caller.HasScope(x)) { return y; } var r = await z;", false)]   // correcto
-    [InlineData("var r = await z; if (!caller.HasScope(x)) { return y; }", true)]    // invertido
-    [InlineData("var r = mediator.Send(q); if (!caller.HasScope(x)) { }", true)]     // sin await
-    [InlineData("if (!caller.HasScope(x)) { } var r = mediator.Send(q);", false)]
-    [InlineData("var awaited = 1; if (!caller.HasScope(x)) { } await z;", false)]    // frontera de palabra: "awaited" no cuenta como await
-    public void El_comparador_de_orden_distingue_los_dos_casos(string cuerpo, bool esperado)
+    [InlineData("if (!caller.HasScope(x)) { return y; } var r = await z;", OrdenDeGuarda.GuardaAntes)]
+    [InlineData("var r = await z; if (!caller.HasScope(x)) { return y; }", OrdenDeGuarda.EfectoAntes)]
+    [InlineData("var r = mediator.Send(q); if (!caller.HasScope(x)) { }", OrdenDeGuarda.EfectoAntes)]   // sin await
+    [InlineData("if (!caller.HasScope(x)) { } var r = mediator.Send(q);", OrdenDeGuarda.GuardaAntes)]
+    [InlineData("var awaited = 1; if (!caller.HasScope(x)) { } await z;", OrdenDeGuarda.GuardaAntes)]   // "awaited" no es await
+    // Los dos casos que un bool no sabia decir, y que el fence necesita para no contarlos como revisados:
+    [InlineData("var r = await z; var s = await w;", OrdenDeGuarda.SinOrdenComprobable)]                // sin guarda
+    [InlineData("if (!caller.HasScope(x)) { return y; } return Ok();", OrdenDeGuarda.SinOrdenComprobable)] // sin efecto
+    public void El_comparador_de_orden_distingue_los_tres_casos(string cuerpo, OrdenDeGuarda esperado)
     {
-        EfectoAntesDeLaGuarda(cuerpo).Should().Be(esperado);
+        Clasificar(cuerpo).Should().Be(esperado);
     }
 
     private static IEnumerable<string> ScopesEn(string trozo, string patron)
