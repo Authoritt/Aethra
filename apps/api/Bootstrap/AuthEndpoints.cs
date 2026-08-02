@@ -34,6 +34,7 @@ public static class AuthEndpoints
             ITotpChallengeTokens totpTokens,
             HttpContext http,
             IdentityDbContext db,
+            ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
             // F11.1: si hay users en BD, validar contra EfUserStore. Si está vacía,
@@ -76,6 +77,19 @@ public static class AuthEndpoints
                 {
                     return Results.Json(new { error = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
                 }
+                // Esta rama concede ADMIN con una credencial de configuracion. Es correcta
+                // ANTES del primer usuario y deberia dejar de alcanzarse en cuanto exista uno.
+                // Se registra en Warning porque, si se toma en un sistema ya en uso, significa
+                // que la tabla de users esta vacia cuando no deberia -- y hasta ahora eso
+                // ocurria en silencio. Un fallback que nadie observa ejecutarse no se distingue
+                // de uno que se ejecuta siempre. Ver issue #21.
+                loggerFactory.CreateLogger("Aethra.Auth.Bootstrap").LogWarning(
+                    "Login por CREDENCIAL DE BOOTSTRAP para {Email}: la tabla de users esta vacia, "
+                    + "asi que se conceden claims de admin desde configuracion. Si esto no es una "
+                    + "instalacion nueva, el sembrador no corrio (Aethra__ApplyMigrationsOnStart) y "
+                    + "la credencial semilla sigue viva.",
+                    singleUserStore.AdminEmail);
+
                 // Bootstrap: el usuario admin del config aún no existe en BD. Emitimos claims
                 // con role admin para permitir que llame /api/identity/users y cree users reales.
                 identity = new ClaimsIdentity(
