@@ -1,5 +1,17 @@
 # Migración Coolify → Aethra
 
+> [!WARNING]
+> **Esta guia documenta rutas que no existen. No la sigas todavia.**
+>
+> Verificado contra el codigo el 2026-08-02: `POST /api/projects/{id}/environments`,
+> `POST /api/projects/{id}/environments/{env_id}/applications` y `/api/applications/...`
+> NO estan registradas. El modelo real es Project -> Client -> Template -> Instance;
+> "Environment" existe, pero en `/api/settings/environments`, no anidado bajo el proyecto.
+>
+> Seguir estos pasos da 404 desde el 1.2. Detalle y plan en el issue #15.
+> Las rutas que si existen se pueden listar desde `/openapi/v1.json` de una instancia viva.
+
+
 Guía operativa para migrar manualmente cada uno de tus proyectos desde Coolify (más Traefik, Uptime Kuma y Beszel) hacia Aethra. **No hay importer automático en MVP** — se migra proyecto a proyecto con esta secuencia, validando que cada uno queda en verde antes de pasar al siguiente.
 
 Aplica a topología típica: 3 VMs Oracle Cloud (1 controladora con Coolify + 2 satélites con Beszel agent), con dominios en Cloudflare proxied.
