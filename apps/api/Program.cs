@@ -279,19 +279,18 @@ try
         .GetRequiredService<Aethra.Modules.Identity.Infrastructure.EfUserStore>()
         .CountAsync(CancellationToken.None);
     var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Aethra.Auth.Postura");
-    if (usuarios == 0)
+    if (Aethra.Modules.Identity.Domain.BootstrapLogin.Evaluar(usuarios)
+        == Aethra.Modules.Identity.Domain.BootstrapLoginPosture.Abierto)
     {
         log.LogWarning(
-            "ARRANQUE: 0 usuarios en BD, asi que /auth/login concedera ADMIN con la credencial "
-            + "de configuracion (Identity__AdminPasswordSeed). Correcto en una instalacion nueva. "
-            + "Si no lo es, el sembrador no corrio -- vive dentro de ApplyMigrationsOnStart, que "
-            + "ahora vale {Aplicar} -- y esa credencial sigue viva. Ver issue #21.",
+            Aethra.Modules.Identity.Domain.BootstrapLogin.PlantillaAbierto,
+            usuarios,
             applyMigrations);
     }
     else
     {
         log.LogInformation(
-            "ARRANQUE: {N} usuario(s) en BD; la rama de login por bootstrap NO es alcanzable.",
+            Aethra.Modules.Identity.Domain.BootstrapLogin.PlantillaCerrado,
             usuarios);
     }
 }
