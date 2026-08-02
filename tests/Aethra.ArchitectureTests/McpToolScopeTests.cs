@@ -107,6 +107,88 @@ public sealed class McpToolScopeTests
         descuadres.Should().BeEmpty(string.Join(" | ", descuadres));
     }
 
+    /// <summary>
+    /// La guarda ocurre ANTES del efecto. Es la propiedad que el test anterior NO puede dar:
+    /// una tool que mutara y despues comprobara su scope pasaria aquel, porque alli solo se
+    /// exige que la guarda EXISTA en el cuerpo.
+    ///
+    /// <para>
+    /// Aproximacion, y conviene decirlo: compara la POSICION TEXTUAL de la guarda con la del
+    /// primer <c>await</c> o <c>mediator.Send/Publish</c>. No es analisis de flujo. Una tool que
+    /// mutara por una via que no pase por esos marcadores -- una escritura sincrona directa, por
+    /// ejemplo -- se le escaparia. La garantia real exige mover la comprobacion al pipeline (#1);
+    /// esto es lo que se puede afirmar sin un servidor corriendo.
+    /// </para>
+    ///
+    /// <para>Hoy pasa en las 74 tools mutantes reales. Verificado por mutacion: invertir el orden
+    /// en una tool lo detecta.</para>
+    /// </summary>
+    [Fact]
+    public void La_guarda_ocurre_antes_del_primer_efecto()
+    {
+        var tardias = new List<string>();
+        var revisadas = 0;
+
+        foreach (var archivo in ArchivosDeTools())
+        {
+            foreach (var trozo in File.ReadAllText(archivo).Split(ToolAttribute, StringSplitOptions.None).Skip(1))
+            {
+                var cabecera = trozo.Length > 400 ? trozo[..400] : trozo;
+                if (Regex.IsMatch(cabecera, @"ReadOnly\s*=\s*true") || trozo.Contains("NotImplemented(", StringComparison.Ordinal))
+                {
+                    continue;   // solo-lectura y stubs no mutan
+                }
+
+                var cuerpo = trozo.Length > 4000 ? trozo[..4000] : trozo;
+                var guarda = Regex.Match(cuerpo, @"!caller\.HasScope");
+                var efecto = Regex.Match(cuerpo, @"(?<![A-Za-z])await(?![A-Za-z])|mediator\.(Send|Publish)");
+                if (!guarda.Success || !efecto.Success)
+                {
+                    continue;   // sin efecto detectable, nada que ordenar
+                }
+
+                revisadas++;
+                if (efecto.Index < guarda.Index)
+                {
+                    tardias.Add($"{Path.GetFileName(archivo)} :: {NombreDeTool(trozo)}");
+                }
+            }
+        }
+
+        revisadas.Should().BeGreaterThan(0, "sin tools revisadas el test pasaria vacio");
+        tardias.Should().BeEmpty(
+            $"la guarda debe preceder al efecto, y {tardias.Count} de {revisadas} no lo hace: "
+            + string.Join(", ", tardias));
+    }
+
+    /// <summary>
+    /// El comparador de orden, aislado para poder probarlo con entradas sinteticas.
+    /// Devuelve true si hay un efecto ANTES de la guarda.
+    /// </summary>
+    internal static bool EfectoAntesDeLaGuarda(string cuerpo)
+    {
+        var guarda = Regex.Match(cuerpo, @"!caller\.HasScope");
+        var efecto = Regex.Match(cuerpo, @"(?<![A-Za-z])await(?![A-Za-z])|mediator\.(Send|Publish)");
+        return guarda.Success && efecto.Success && efecto.Index < guarda.Index;
+    }
+
+    /// <summary>
+    /// El comparador muerde. Sin esto, el test de orden podria estar pasando por no encontrar
+    /// nunca sus marcadores en vez de por estar todo en orden -- y yo no sabria cual de las dos.
+    /// Tres intentos de comprobarlo mutando ficheros reales fallaron por errores del arnes, no
+    /// del fence; con entradas sinteticas no hay arnes que falle.
+    /// </summary>
+    [Theory]
+    [InlineData("if (!caller.HasScope(x)) { return y; } var r = await z;", false)]   // correcto
+    [InlineData("var r = await z; if (!caller.HasScope(x)) { return y; }", true)]    // invertido
+    [InlineData("var r = mediator.Send(q); if (!caller.HasScope(x)) { }", true)]     // sin await
+    [InlineData("if (!caller.HasScope(x)) { } var r = mediator.Send(q);", false)]
+    [InlineData("var awaited = 1; if (!caller.HasScope(x)) { } await z;", false)]    // frontera de palabra: "awaited" no cuenta como await
+    public void El_comparador_de_orden_distingue_los_dos_casos(string cuerpo, bool esperado)
+    {
+        EfectoAntesDeLaGuarda(cuerpo).Should().Be(esperado);
+    }
+
     private static IEnumerable<string> ScopesEn(string trozo, string patron)
         => Regex.Matches(trozo, patron).Select(m => m.Groups[1].Value);
 
