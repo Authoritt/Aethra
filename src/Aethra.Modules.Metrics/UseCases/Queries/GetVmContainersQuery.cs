@@ -51,9 +51,16 @@ internal sealed class GetVmContainersHandler(
             // sin contenedores: el panel dibuja una maquina ociosa cuando puede estar
             // corriendolo todo. No se puede arreglar la forma del DTO sin cambiar a sus
             // consumidores, pero el fallo deja de ser mudo.
+            // Bytes UTF-8 de verdad, no string.Length: eso cuenta unidades UTF-16, y un nombre de
+            // contenedor con acentos o un emoji bastaria para que un diagnostico puesto AQUI, para
+            // ser honesto, informara un numero que no es el que se recibio ni el que se almaceno.
+            // Se compara contra limites de transporte, asi que la unidad de la etiqueta importa.
+            var bytesJson = latest.ContainersJson is null
+                ? 0
+                : System.Text.Encoding.UTF8.GetByteCount(latest.ContainersJson);
             logger.LogWarning(ex,
                 "Snapshot de contenedores ILEGIBLE para la VM {VmId} (timestamp {Ts}): se devuelve lista vacia, que el panel mostrara como 'sin contenedores'. Longitud del JSON: {Bytes} bytes.",
-                request.VmId, latest.Timestamp, latest.ContainersJson?.Length ?? 0);
+                request.VmId, latest.Timestamp, bytesJson);
             containers = [];
         }
 
