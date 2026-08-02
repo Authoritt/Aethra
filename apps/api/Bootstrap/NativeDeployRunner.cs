@@ -329,10 +329,12 @@ public sealed class NativeDeployRunner(
     /// son target de NINGÚN servicio del template. El deploy nombra sus targets de forma estable
     /// (<c>{slug}-{service}</c>) y recrea cada uno (remove + run); pero los blue-green/renames manuales
     /// (<c>{slug}-api-bgbak</c>, <c>-bak</c>, <c>-new</c>, sufijos <c>-qqi…</c>) o un servicio retirado
-    /// del template dejan contenedores viejos corriendo. Como el productor (<c>DianProcessorJob</c>,
-    /// <c>ExpirationJob</c>…) NO es leader-only y SignalR no tiene backplane, ese duplicado corre TODOS
-    /// los hosted services contra el Postgres compartido pero sin las conexiones SignalR del PoS →
-    /// reclama documentos, manda sus fetches al vacío (docs colgados en "Construyendo") y los expira.
+    /// del template dejan contenedores viejos corriendo. Si los hosted services de la app desplegada
+    /// no son leader-only y su SignalR no tiene backplane, ese duplicado corre TODOS sus jobs contra
+    /// el Postgres compartido pero SIN las conexiones SignalR de los clientes → reclama trabajo que
+    /// no puede completar, lo deja colgado en su estado intermedio y acaba expirándolo.
+    /// Es un modo de fallo observado en producción, no teórico: el contenedor huérfano parece inocuo
+    /// (no recibe tráfico del proxy) y sin embargo compite por la cola de trabajo de la app viva.
     /// Por eso la limpieza usa el set COMPLETO de servicios del template (no el subconjunto de un
     /// deploy incremental). Best-effort e idempotente: cualquier fallo se loguea y no rompe el deploy.
     /// </summary>
