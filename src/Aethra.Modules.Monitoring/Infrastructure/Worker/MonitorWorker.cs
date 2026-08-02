@@ -74,7 +74,7 @@ public sealed class MonitorWorker(
         {
             try
             {
-                await RunTickAsync(stoppingToken).ConfigureAwait(false);
+                await RunTickAsync(tick.Efectivo, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -89,7 +89,7 @@ public sealed class MonitorWorker(
         }
     }
 
-    private async Task RunTickAsync(CancellationToken ct)
+    private async Task RunTickAsync(TimeSpan tick, CancellationToken ct)
     {
         var now = clock.UtcNow;
         List<MonitorId> dueIds;
@@ -110,9 +110,14 @@ public sealed class MonitorWorker(
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
 
+            // Media rejilla de holgura. Sin ella un monitor solo puede sondearse en el primer
+            // multiplo del tick que SUPERE su intervalo, y como LastCheckedAt se graba al terminar
+            // el probe (unos ms despues del tick), el multiplo exacto se queda corto y se salta:
+            // un monitor de 30s con tick de 10s saldria cada 40s. Ver MonitorWorkerOptions.
+            var holgura = MonitorWorkerOptions.ToleranciaDeRejilla(tick).TotalSeconds;
             dueIds = candidates
                 .Where(c => c.LastCheckedAt is null
-                    || (now - c.LastCheckedAt.Value).TotalSeconds >= c.IntervalSec)
+                    || (now - c.LastCheckedAt.Value).TotalSeconds >= c.IntervalSec - holgura)
                 .Select(c => c.Id)
                 .ToList();
         }

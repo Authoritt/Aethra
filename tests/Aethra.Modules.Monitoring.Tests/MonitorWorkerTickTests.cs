@@ -29,7 +29,7 @@ public class MonitorWorkerTickTests
     public void Sin_configurar_nada_el_tick_es_el_de_siempre()
     {
         // La opcion se anade para poder tocarla, no para cambiar lo que ya corria en produccion.
-        new MonitorWorkerOptions().TickSeconds.Should().Be(10);
+        new MonitorWorkerOptions().TickSeconds.Should().BeNull("sin configurar es AUSENTE, no 10");
         TickResuelto.Desde(new MonitorWorkerOptions().TickSeconds)
             .Efectivo.Should().Be(TimeSpan.FromSeconds(10));
     }
