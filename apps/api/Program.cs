@@ -263,6 +263,45 @@ if (applyMigrations)
     await app.Services.ApplyPendingMigrationsAsync();
 }
 
+// Postura de autenticacion, declarada AL ARRANCAR y no cuando alguien entra.
+//
+// El log de /auth/login avisa cuando la rama de bootstrap SE TOMA. Eso deja un hueco:
+// un contador a cero no distingue "nunca hizo falta" de "nunca alcanzable", asi que el
+// silencio no informa. Esto lo cierra por el otro lado -- dice si la rama esta ABIERTA,
+// sin esperar a que alguien la use.
+//
+// Best-effort: si la BD no responde todavia (pipeline que migra aparte), no se tumba el
+// arranque por un mensaje de diagnostico.
+try
+{
+    using var arranque = app.Services.CreateScope();
+    var usuarios = await arranque.ServiceProvider
+        .GetRequiredService<Aethra.Modules.Identity.Infrastructure.EfUserStore>()
+        .CountAsync(CancellationToken.None);
+    var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Aethra.Auth.Postura");
+    if (usuarios == 0)
+    {
+        log.LogWarning(
+            "ARRANQUE: 0 usuarios en BD, asi que /auth/login concedera ADMIN con la credencial "
+            + "de configuracion (Identity__AdminPasswordSeed). Correcto en una instalacion nueva. "
+            + "Si no lo es, el sembrador no corrio -- vive dentro de ApplyMigrationsOnStart, que "
+            + "ahora vale {Aplicar} -- y esa credencial sigue viva. Ver issue #21.",
+            applyMigrations);
+    }
+    else
+    {
+        log.LogInformation(
+            "ARRANQUE: {N} usuario(s) en BD; la rama de login por bootstrap NO es alcanzable.",
+            usuarios);
+    }
+}
+catch (Exception ex)
+{
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Aethra.Auth.Postura")
+        .LogWarning(ex, "ARRANQUE: no se pudo determinar la postura de autenticacion ({Tipo}).",
+            ex.GetType().Name);
+}
+
 // -----------------------------------------------------------------------------
 // Pipeline HTTP
 // -----------------------------------------------------------------------------
