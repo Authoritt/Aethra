@@ -50,7 +50,8 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
 
     [McpServerTool(Name = "aethra_create_project", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Crea un proyecto: el contenedor de nivel superior que agrupa templates, clients e instances. "
-        + "Devuelve el detalle del proyecto creado.")]
+        + "Devuelve el detalle del proyecto creado."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> CreateAsync(
         [Description("Slug único (lowercase, a-z 0-9 -).")] string slug,
         [Description("Nombre display human-readable.")] string name,
@@ -103,7 +104,8 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
 
     [McpServerTool(Name = "aethra_create_client", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Crea un client (tenant) dentro de un proyecto. El slug es único por proyecto. "
-        + "Devuelve el detalle del client.")]
+        + "Devuelve el detalle del client."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> CreateClientAsync(
         [Description("ID del proyecto contenedor (formato 'prj_...').")] string projectId,
         [Description("Slug único dentro del proyecto (lowercase, a-z 0-9 -).")] string slug,
@@ -188,7 +190,8 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
     [McpServerTool(Name = "aethra_create_instance", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Crea una Instance = Template × Client × Environment en una VM target. Usa los puertos/volúmenes/"
         + "healthcheck por defecto del template (ajustables luego vía reconfigure/REST). Devuelve el detalle. "
-        + "OJO: crear la instance NO la despliega — usá aethra_deploy_instance_native o aethra_deploy_app_environment después.")]
+        + "OJO: crear la instance NO la despliega — usá aethra_deploy_instance_native o aethra_deploy_app_environment después."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> CreateInstanceAsync(
         [Description("ID del template (formato 'tpl_...').")] string templateId,
         [Description("ID del client/tenant (formato 'cli_...').")] string clientId,
@@ -221,7 +224,8 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
     [McpServerTool(Name = "aethra_create_template", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Crea un Template (definición de app desde un repo Git) dentro de un proyecto. El webhook secret se "
         + "genera en el server y por seguridad NO se devuelve por MCP — obtenelo en la UI o rotalo con "
-        + "aethra_rotate_webhook_secret. BuildArgs y credencial de token se configuran vía UI/REST si se necesitan.")]
+        + "aethra_rotate_webhook_secret. BuildArgs y credencial de token se configuran vía UI/REST si se necesitan."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> CreateTemplateAsync(
         [Description("ID del proyecto contenedor (formato 'prj_...').")] string projectId,
         [Description("Slug único dentro del proyecto (lowercase, a-z 0-9 -).")] string slug,

@@ -162,7 +162,8 @@ public sealed class NotificationsTools(IMediator mediator, IMcpCallerContext cal
     [McpServerTool(Name = "aethra_update_notification_channel", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Actualiza (patch) un canal de notificación: activar/pausar (is_active), reemplazar el config "
         + "(mismo shape que en create según el type) y/o los event_filters. Sólo cambia los campos provistos; los "
-        + "omitidos quedan igual. Por seguridad el config NO se devuelve (se cifra) — sólo se confirma qué cambió.")]
+        + "omitidos quedan igual. Por seguridad el config NO se devuelve (se cifra) — sólo se confirma qué cambió."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UpdateChannelAsync(
         [Description("ID del canal (formato 'nch_...').")] string channelId,
         [Description("true = activa el canal, false = lo pausa. Omitir/null = no cambiar.")] bool? isActive,

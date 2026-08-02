@@ -91,7 +91,8 @@ public sealed class PreviewsTools(IMediator mediator, IMcpCallerContext caller)
     }
 
     [McpServerTool(Name = "aethra_set_auto_preview", Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Habilita o deshabilita el auto-create de Instances ephemerals al recibir un pull_request webhook.")]
+    [Description("Habilita o deshabilita el auto-create de Instances ephemerals al recibir un pull_request webhook."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> SetAutoPreviewAsync(
         [Description("ID del Template.")] string templateId,
         [Description("true = habilitar; false = deshabilitar.")] bool enabled,
@@ -109,7 +110,8 @@ public sealed class PreviewsTools(IMediator mediator, IMcpCallerContext caller)
 
     [McpServerTool(Name = "aethra_update_user_profile", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Actualiza el profile del propio usuario: por ahora solo gitHubUsername. " +
-        "El handle se usa para mapear PR.user.login → User al crear previews.")]
+        "El handle se usa para mapear PR.user.login → User al crear previews."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UpdateUserProfileAsync(
         [Description("Handle de GitHub. Pasar null o string vacío + clear=true para limpiar.")] string? gitHubUsername,
         [Description("Si true, fuerza la limpieza del campo gitHubUsername.")] bool clearGitHubUsername,

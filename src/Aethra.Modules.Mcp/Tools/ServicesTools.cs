@@ -52,7 +52,8 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
     }
 
     [McpServerTool(Name = "aethra_create_service", Destructive = false, Idempotent = false, OpenWorld = false)]
-    [Description("Crea un servicio gestionado (Postgres, Redis, etc.) a partir de una plantilla. Genera credenciales admin cifradas internamente.")]
+    [Description("Crea un servicio gestionado (Postgres, Redis, etc.) a partir de una plantilla. Genera credenciales admin cifradas internamente."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> CreateServiceAsync(
         [Description("ID de la plantilla (ej. 'postgres-16', 'redis-7'). Lista vía aethra_list_service_templates.")] string templateId,
         [Description("Slug único (lowercase, a-z 0-9 -), max 64.")] string slug,
@@ -73,7 +74,8 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
     [McpServerTool(Name = "aethra_adopt_service", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Registra ('adopta') un contenedor que YA existe (creado fuera de Aethra) como ManagedService, "
         + "para que aparezca en /services y /data-services SIN provisionarlo ni recrearlo. Ideal para Postgres/"
-        + "Redis levantados a mano. No toca el contenedor: solo guarda metadata + credenciales admin cifradas.")]
+        + "Redis levantados a mano. No toca el contenedor: solo guarda metadata + credenciales admin cifradas."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> AdoptServiceAsync(
         [Description("Slug único del servicio (ej. 'main-postgres', 'cache-redis').")] string slug,
         [Description("Nombre display human-readable.")] string name,
@@ -111,7 +113,8 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
     }
 
     [McpServerTool(Name = "aethra_bind_service", Destructive = false, Idempotent = false, OpenWorld = false)]
-    [Description("Crea un binding (Instance ↔ ManagedService): provisiona credenciales y las inyecta como env vars (DATABASE_URL, etc).")]
+    [Description("Crea un binding (Instance ↔ ManagedService): provisiona credenciales y las inyecta como env vars (DATABASE_URL, etc)."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> BindServiceAsync(
         [Description("ID de la Instance (formato 'ins_...').")] string instanceId,
         [Description("ID del ManagedService.")] string serviceId,
@@ -164,7 +167,8 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
     [McpServerTool(Name = "aethra_unbind_service", Destructive = true, Idempotent = false, OpenWorld = false)]
     [Description("Revoca un binding (Instance ↔ ManagedService): lo marca como revocado y des-aprovisiona las "
         + "credenciales inyectadas. La app afectada PERDERÁ acceso al servicio (requiere redeploy/restart). "
-        + "Usá aethra_list_bindings para obtener el binding_id.")]
+        + "Usá aethra_list_bindings para obtener el binding_id."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UnbindServiceAsync(
         [Description("ID del ServiceBinding a revocar (formato 'bnd_...').")] string bindingId,
         CancellationToken ct)
@@ -180,7 +184,8 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
     }
 
     [McpServerTool(Name = "aethra_rotate_credentials", Destructive = true, Idempotent = false, OpenWorld = false)]
-    [Description("Rota las credenciales de un ServiceBinding y reinyecta las env vars (la app necesitará redeploy/restart para tomarlas).")]
+    [Description("Rota las credenciales de un ServiceBinding y reinyecta las env vars (la app necesitará redeploy/restart para tomarlas)."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> RotateCredentialsAsync(
         [Description("ID del ServiceBinding (formato 'bnd_...').")] string bindingId,
         CancellationToken ct)

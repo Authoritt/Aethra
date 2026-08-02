@@ -45,7 +45,8 @@ public sealed class NativeDeployTools(IMediator mediator, IMcpCallerContext call
         bool ReadOnly);
 
     [McpServerTool(Name = "aethra_set_template_services", Destructive = true, Idempotent = true, OpenWorld = false)]
-    [Description("Define la topología de servicios multi-contenedor de un Template (reemplaza el set). Cada servicio puede construirse desde git o usar una imagen prebuilt de registry.")]
+    [Description("Define la topología de servicios multi-contenedor de un Template (reemplaza el set). Cada servicio puede construirse desde git o usar una imagen prebuilt de registry."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> SetServicesAsync(
         [Description("ID del template (formato 'tpl_...').")] string templateId,
         [Description("Lista de servicios del template.")] IReadOnlyList<McpTemplateService> services,
@@ -68,7 +69,8 @@ public sealed class NativeDeployTools(IMediator mediator, IMcpCallerContext call
     }
 
     [McpServerTool(Name = "aethra_deploy_instance_native", Destructive = false, Idempotent = false, OpenWorld = false)]
-    [Description("Dispara el deploy NATIVO multi-contenedor de una Instance en background (un contenedor por servicio del template, build-from-git/registry, healthcheck + rutas). Devuelve al instante; el deploy corre async.")]
+    [Description("Dispara el deploy NATIVO multi-contenedor de una Instance en background (un contenedor por servicio del template, build-from-git/registry, healthcheck + rutas). Devuelve al instante; el deploy corre async."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> DeployAsync(
         [Description("ID de la instance (formato 'ins_...').")] string instanceId,
         [Description("Servicio puntual a desplegar. Null/vacío = todos los servicios del template.")]

@@ -20,7 +20,8 @@ public sealed class EnvVarsTools(IEnvVarWriter envVarWriter, IMediator mediator,
         bool IsRuntime);
 
     [McpServerTool(Name = "aethra_set_env_vars", Destructive = true, Idempotent = true, OpenWorld = false)]
-    [Description("Upsert idempotente de env vars en un scope (project|template|client|instance). Cada var se etiqueta con el source 'mcp:apikey:{id}' para revoke selectivo.")]
+    [Description("Upsert idempotente de env vars en un scope (project|template|client|instance). Cada var se etiqueta con el source 'mcp:apikey:{id}' para revoke selectivo."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> SetEnvVarsAsync(
         [Description("Tipo de scope: 'project', 'template', 'client' o 'instance'.")] string scopeType,
         [Description("ID del scope (prj_*, tpl_*, cli_*, ins_*).")] string scopeId,

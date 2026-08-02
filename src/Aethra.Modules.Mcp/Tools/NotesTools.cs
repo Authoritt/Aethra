@@ -17,7 +17,8 @@ public sealed class NotesTools(IMediator mediator, IMcpCallerContext caller)
         string? Description);
 
     [McpServerTool(Name = "aethra_add_note", Destructive = false, Idempotent = false, OpenWorld = false)]
-    [Description("Crea una Note markdown asociada a un scope (Project/Template/Client/Instance). Opcionalmente upserts pinned-facts en el mismo scope.")]
+    [Description("Crea una Note markdown asociada a un scope (Project/Template/Client/Instance). Opcionalmente upserts pinned-facts en el mismo scope."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> AddNoteAsync(
         [Description("Scope: 'Project', 'Template', 'Client' o 'Instance'.")] string scopeType,
         [Description("ID del scope.")] string scopeId,
@@ -72,7 +73,8 @@ public sealed class NotesTools(IMediator mediator, IMcpCallerContext caller)
 
     [McpServerTool(Name = "aethra_update_note", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Actualiza (patch) el título y/o el cuerpo markdown de una nota. Sólo cambia los campos provistos; "
-        + "los omitidos quedan igual. Devuelve el detalle de la nota. No toca los pinned facts del scope.")]
+        + "los omitidos quedan igual. Devuelve el detalle de la nota. No toca los pinned facts del scope."
+        + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> UpdateNoteAsync(
         [Description("ID de la nota (lo devuelve aethra_add_note).")] string noteId,
         [Description("Nuevo título. Omitir/null = no cambiar.")] string? title,
