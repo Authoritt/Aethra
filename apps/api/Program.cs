@@ -270,10 +270,6 @@ app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
 
 app.UseCors();
 app.UseAuthentication();
@@ -282,6 +278,19 @@ app.UseAuthorization();
 // -----------------------------------------------------------------------------
 // Endpoints
 // -----------------------------------------------------------------------------
+// El documento OpenAPI es el unico artefacto DERIVADO del registro de rutas: no se mantiene
+// a mano, asi que no puede desviarse del codigo como si puede un mapa de arquitectura o un
+// README. Estaba mapeado solo en Development, es decir, ausente exactamente del despliegue
+// donde alguien necesita preguntar que rutas existen de verdad.
+//
+// Fuera de Development exige autenticacion. El codigo es abierto, asi que la superficie no
+// es un secreto; pero servirsela a un escaner anonimo no aporta nada a nadie.
+var openApi = app.MapOpenApi();
+if (!app.Environment.IsDevelopment())
+{
+    openApi.RequireAuthorization();
+}
+
 app.MapHealthEndpoints();
 app.MapAuthEndpoints();
 app.MapContextEndpoints();
