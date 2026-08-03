@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, ExternalLink, Loader2, Plug, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -25,6 +26,7 @@ export function TunnelManager({
   initial: CloudflareTunnelDto | null;
   loadError: boolean;
 }) {
+  const g = useTranslations("components.tunnel");
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
@@ -51,7 +53,7 @@ export function TunnelManager({
       toast.error(
         e instanceof ApiError
           ? ((e.body as { message?: string } | undefined)?.message ?? `Error ${e.status}`)
-          : "Error promoviendo el túnel",
+          : g("error_promote"),
       );
     } finally {
       setBusy(false);
@@ -73,7 +75,7 @@ export function TunnelManager({
           ? ((e.body as { detail?: string; message?: string } | undefined)?.detail ??
             (e.body as { message?: string } | undefined)?.message ??
             `Error ${e.status}`)
-          : "Error desplegando el connector",
+          : g("error_deploy"),
       );
     } finally {
       setBusy(false);
@@ -96,14 +98,14 @@ export function TunnelManager({
           targetVmId: form.targetVmId.trim() || null,
         }),
       });
-      toast.success("Túnel conectado · ingress ahora gestionado por Aethra");
+      toast.success(g("connected_toast"));
       setForm((f) => ({ ...f, apiToken: "" }));
       router.refresh();
     } catch (e) {
       toast.error(
         e instanceof ApiError
           ? ((e.body as { message?: string } | undefined)?.message ?? `Error ${e.status}`)
-          : "Error conectando el túnel",
+          : g("error_connect"),
       );
     } finally {
       setBusy(false);
@@ -117,13 +119,12 @@ export function TunnelManager({
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            Paso 1 · Crear el token de Cloudflare
+            {g("step1_title")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>
-            Aethra necesita un token con permiso de túnel para editar el ingress por API (sin
-            reiniciar cloudflared = sin cortes). Créalo una sola vez:
+            {g("step1_body")}
           </p>
           <ol className="ml-4 list-decimal space-y-1.5">
             <li>
@@ -156,23 +157,23 @@ export function TunnelManager({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <CheckCircle2 className="h-4 w-4 text-primary" />
-              Túnel conectado · ingress automático activo
+              {g("connected_title")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
-              <Kv label="Nombre" value={initial.name} />
+              <Kv label={g("kv_name")} value={initial.name} />
               <Kv label="Tunnel ID" value={initial.tunnelId} mono />
-              <Kv label="Servicio Aethra" value={initial.aethraService} mono />
+              <Kv label={g("kv_service")} value={initial.aethraService} mono />
               <Kv label="Catch-all" value={initial.fallbackService} mono />
             </div>
             <div>
               <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Reglas de ingress (en Cloudflare ahora)
+                {g("ingress_rules")}
               </div>
               {initial.ingress.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  Sin reglas o token sin acceso (revisa el scope del token).
+                  {g("no_rules")}
                 </p>
               ) : (
                 <Card>
@@ -198,27 +199,24 @@ export function TunnelManager({
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              A partir de ahora, cada deploy o cambio de URL agrega/quita su regla aquí
-              automáticamente — sin reiniciar el túnel.
+              {g("from_now")}
             </p>
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 p-3">
               <Button type="button" variant="outline" size="sm" onClick={promote} disabled={busy}>
                 {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                Promover config a remota (source=cloudflare)
+                {g("promote_config")}
               </Button>
               <span className="text-[11px] text-muted-foreground">
-                Re-publica la config de ingress por API (idempotente). Necesario una vez para que el
-                connector la aplique al correr con token.
+                {g("republish")} {g("republish_2")}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 p-3">
               <Button type="button" variant="outline" size="sm" onClick={deployConnector} disabled={busy}>
                 {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plug className="mr-2 h-4 w-4" />}
-                Desplegar connector gestionado (contenedor)
+                {g("deploy_connector")}
               </Button>
               <span className="text-[11px] text-muted-foreground">
-                Corre cloudflared con el connector token como contenedor en la VM (network host). Es
-                réplica HA del túnel — el flip a remoto queda 100% desde aquí, sin SSH ni tocar el systemd.
+                {g("deploy_connector_body")} {g("deploy_connector_2")}
               </span>
             </div>
           </CardContent>
@@ -226,7 +224,7 @@ export function TunnelManager({
       ) : loadError ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo leer el estado del túnel.
+            {g("read_error")}
           </CardContent>
         </Card>
       ) : null}
@@ -236,7 +234,7 @@ export function TunnelManager({
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Plug className="h-4 w-4 text-primary" />
-            Paso 2 · {initial ? "Actualizar token / servicios" : "Conectar el túnel"}
+            {g("step2", { action: initial ? g("update_token") : g("connect_tunnel") })}
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -246,7 +244,7 @@ export function TunnelManager({
           <Field label="Tunnel ID (UUID)">
             <Input value={form.tunnelId} onChange={(e) => set("tunnelId", e.target.value)} placeholder="ca75b591-…" className="font-mono text-xs" />
           </Field>
-          <Field label="Nombre del túnel">
+          <Field label={g("tunnel_name")}>
             <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="my-apps" />
           </Field>
           <Field label="API Token (Tunnel:Edit)">
@@ -258,13 +256,13 @@ export function TunnelManager({
           <Field label="Catch-all (apps legacy, ej. Traefik)">
             <Input value={form.fallbackService} onChange={(e) => set("fallbackService", e.target.value)} className="font-mono text-xs" />
           </Field>
-          <Field label="VM del connector (vm_… donde corren los servicios)">
+          <Field label={g("connector_vm")}>
             <Input value={form.targetVmId} onChange={(e) => set("targetVmId", e.target.value)} placeholder="vm_… (la VM con localhost:5080)" className="font-mono text-xs" />
           </Field>
           <div className="md:col-span-2 flex justify-end">
             <Button type="button" onClick={register} disabled={busy || !form.apiToken.trim()}>
               {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plug className="mr-2 h-4 w-4" />}
-              {initial ? "Actualizar túnel" : "Conectar túnel"}
+              {initial ? g("update_tunnel") : g("connect_tunnel_btn")}
             </Button>
           </div>
         </CardContent>
