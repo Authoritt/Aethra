@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, formatBytes } from "@/lib/utils";
 
@@ -14,20 +15,21 @@ export interface NodeDisk {
  * Render presentacional — recibe los nodos ya proyectados desde /api/ops/machines.
  */
 export function NodeDiskCard({ nodes }: { nodes: NodeDisk[] }) {
+  const tr = useTranslations("components.node_disk");
   const withDisk = nodes.filter((n) => (n.totalBytes ?? 0) > 0);
   const totalFree = withDisk.reduce((s, n) => s + (n.availableBytes ?? 0), 0);
 
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
-        <CardTitle className="text-base">Disco por nodo</CardTitle>
+        <CardTitle className="text-base">{tr("title")}</CardTitle>
         <span className="text-xs text-muted-foreground">
-          {formatBytes(totalFree)} libres en total
+          {tr("free_total", { size: formatBytes(totalFree) })}
         </span>
       </CardHeader>
       <CardContent className="space-y-3">
         {withDisk.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin datos de disco por nodo.</p>
+          <p className="text-sm text-muted-foreground">{tr("empty")}</p>
         ) : (
           withDisk.map((n) => {
             const total = n.totalBytes ?? 0;

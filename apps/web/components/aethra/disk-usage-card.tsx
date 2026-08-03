@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBytes } from "@/lib/utils";
 import type { DatabaseDiskUsageDto } from "@/lib/types";
@@ -9,20 +10,21 @@ import type { DatabaseDiskUsageDto } from "@/lib/types";
  * tablas de alto volumen (vm_metrics, monitor_checks, etc.).
  */
 export function DiskUsageCard({ data }: { data: DatabaseDiskUsageDto }) {
+  const tr = useTranslations("components.disk_usage");
   const tables = data.tables ?? [];
   const max = tables.length > 0 ? Math.max(...tables.map((t) => t.totalBytes)) : 0;
 
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
-        <CardTitle className="text-base">Uso de disco · Base de datos</CardTitle>
+        <CardTitle className="text-base">{tr("title")}</CardTitle>
         <span className="text-xs text-muted-foreground">
-          {formatBytes(data.databaseSizeBytes)} total · {data.tableCount} tablas
+          {tr("summary", { size: formatBytes(data.databaseSizeBytes), count: data.tableCount })}
         </span>
       </CardHeader>
       <CardContent className="space-y-2.5">
         {tables.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin datos de uso de disco.</p>
+          <p className="text-sm text-muted-foreground">{tr("empty")}</p>
         ) : (
           tables.map((t) => {
             const pct = max > 0 ? Math.max(2, (t.totalBytes / max) * 100) : 0;
@@ -36,7 +38,7 @@ export function DiskUsageCard({ data }: { data: DatabaseDiskUsageDto }) {
                   </span>
                   <span className="shrink-0 text-muted-foreground tabular-nums">
                     {formatBytes(t.totalBytes)}
-                    <span className="ml-2">{formatRows(t.estimatedRows)} filas</span>
+                    <span className="ml-2">{tr("rows", { display: formatRows(t.estimatedRows), count: t.estimatedRows })}</span>
                   </span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">

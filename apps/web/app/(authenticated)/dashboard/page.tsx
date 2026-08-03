@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { KpiCard } from "@/components/aethra/kpi-card";
 import { DiskUsageCard } from "@/components/aethra/disk-usage-card";
 import { NodeDiskCard } from "@/components/aethra/node-disk-card";
+import { getLocale, getTranslations } from "next-intl/server";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   AppEnvironmentOverviewDto,
@@ -31,6 +32,8 @@ import type {
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
+  const t = await getTranslations("pages.dashboard");
+  const locale = await getLocale();
   const [appsData, envsData, releasesData, endpointsData, issuesData, machinesData, diskData] =
     await Promise.all([
       serverFetch<AppOverviewDto[]>("/api/ops/apps"),
@@ -83,20 +86,20 @@ export default async function Dashboard() {
   return (
     <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Command Center"
-        description="Estado operativo para subir un cambio a Git y desplegarlo por app, tenant, ambiente y maquina."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
               <Link href="/releases">
                 <Rocket className="mr-2 h-4 w-4" />
-                Releases
+                {t("action_releases")}
               </Link>
             </Button>
             <Button asChild>
               <Link href="/app-environments">
                 <SquareStack className="mr-2 h-4 w-4" />
-                App Environments
+                {t("action_app_environments")}
               </Link>
             </Button>
           </div>
@@ -106,44 +109,44 @@ export default async function Dashboard() {
       {loadError ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            Parte de la informacion operacional no se pudo cargar.
+            {t("load_error")}
           </CardContent>
         </Card>
       ) : null}
 
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         <KpiCard
-          label="Apps"
+          label={t("kpi_apps")}
           value={apps.length}
-          delta={`${envs.length} app envs`}
+          delta={t("kpi_apps_delta", { count: envs.length })}
           icon={<SquareStack className="h-4 w-4" />}
         />
         <KpiCard
-          label="Ambientes con alerta"
+          label={t("kpi_envs_alert")}
           value={unhealthyEnvs}
           tone={unhealthyEnvs > 0 ? "warning" : "success"}
           icon={<MonitorCheck className="h-4 w-4" />}
         />
         <KpiCard
-          label="Releases activos"
+          label={t("kpi_releases_active")}
           value={activeReleases}
           tone={activeReleases > 0 ? "info" : "default"}
           icon={<Rocket className="h-4 w-4" />}
         />
         <KpiCard
-          label="Endpoints rotos"
+          label={t("kpi_endpoints_broken")}
           value={brokenEndpoints}
           tone={brokenEndpoints > 0 ? "destructive" : "success"}
           icon={<Network className="h-4 w-4" />}
         />
         <KpiCard
-          label="Issues criticos"
+          label={t("kpi_issues_critical")}
           value={criticalIssues}
           tone={criticalIssues > 0 ? "destructive" : "success"}
           icon={<AlertTriangle className="h-4 w-4" />}
         />
         <KpiCard
-          label="Machines no listas"
+          label={t("kpi_machines_not_ready")}
           value={machinesNotReady}
           tone={machinesNotReady > 0 ? "warning" : "success"}
           icon={<Server className="h-4 w-4" />}
@@ -153,14 +156,14 @@ export default async function Dashboard() {
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <Card>
           <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
-            <CardTitle className="text-base">Prioridad operacional</CardTitle>
+            <CardTitle className="text-base">{t("issues_title")}</CardTitle>
             <Link href="/operational-issues" className="text-xs font-medium text-primary hover:underline">
-              Ver issues
+              {t("issues_link")}
             </Link>
           </CardHeader>
           <CardContent className="space-y-3">
             {topIssues.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No hay bloqueos visibles para desplegar.</p>
+              <p className="text-sm text-muted-foreground">{t("issues_empty")}</p>
             ) : (
               topIssues.map((issue) => (
                 <Link
@@ -195,14 +198,14 @@ export default async function Dashboard() {
 
         <Card>
           <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
-            <CardTitle className="text-base">Releases recientes</CardTitle>
+            <CardTitle className="text-base">{t("releases_title")}</CardTitle>
             <Link href="/releases" className="text-xs font-medium text-primary hover:underline">
-              Ver releases
+              {t("releases_link")}
             </Link>
           </CardHeader>
           <CardContent className="space-y-3">
             {recentReleases.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aun no hay releases registrados.</p>
+              <p className="text-sm text-muted-foreground">{t("releases_empty")}</p>
             ) : (
               recentReleases.map((release) => (
                 <Link
@@ -221,7 +224,7 @@ export default async function Dashboard() {
                   <div className="shrink-0 text-right">
                     <StatusBadge status={release.status} />
                     <p className="mt-1 text-[10px] text-muted-foreground">
-                      {formatDate(release.createdAt)}
+                      {formatDate(release.createdAt, locale)}
                     </p>
                   </div>
                 </Link>
@@ -234,14 +237,14 @@ export default async function Dashboard() {
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
-            <CardTitle className="text-base">Public access que requiere atencion</CardTitle>
+            <CardTitle className="text-base">{t("endpoints_title")}</CardTitle>
             <Link href="/public-access" className="text-xs font-medium text-primary hover:underline">
-              Ver endpoints
+              {t("endpoints_link")}
             </Link>
           </CardHeader>
           <CardContent className="space-y-3">
             {brokenEndpointRows.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Los endpoints publicos estan resueltos.</p>
+              <p className="text-sm text-muted-foreground">{t("endpoints_empty")}</p>
             ) : (
               brokenEndpointRows.map((endpoint) => (
                 <div key={endpoint.hostname} className="rounded-md border p-3">
@@ -256,7 +259,7 @@ export default async function Dashboard() {
                         <span className="truncate">{endpoint.hostname}</span>
                       </Link>
                       <p className="mt-1 truncate text-xs text-muted-foreground">
-                        {[endpoint.appName, endpoint.tenantName, endpoint.environment].filter(Boolean).join(" / ") || "Sin owner"}
+                        {[endpoint.appName, endpoint.tenantName, endpoint.environment].filter(Boolean).join(" / ") || t("endpoints_no_owner")}
                       </p>
                     </div>
                     <StatusBadge status={endpoint.healthStatus} />
@@ -276,14 +279,14 @@ export default async function Dashboard() {
 
         <Card>
           <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
-            <CardTitle className="text-base">Machines y capacidad</CardTitle>
+            <CardTitle className="text-base">{t("machines_title")}</CardTitle>
             <Link href="/vms" className="text-xs font-medium text-primary hover:underline">
-              Ver machines
+              {t("machines_link")}
             </Link>
           </CardHeader>
           <CardContent className="space-y-3">
             {machineRows.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No hay machines registradas.</p>
+              <p className="text-sm text-muted-foreground">{t("machines_empty")}</p>
             ) : (
               machineRows.map((machine) => (
                 <Link
@@ -294,8 +297,8 @@ export default async function Dashboard() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{machine.name}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {machine.appEnvironmentCount} app envs
-                      {machine.previewAppEnvironmentCount > 0 ? ` / ${machine.previewAppEnvironmentCount} previews` : ""}
+                      {t("machines_app_envs", { count: machine.appEnvironmentCount })}
+                      {machine.previewAppEnvironmentCount > 0 ? ` / ${t("machines_previews", { count: machine.previewAppEnvironmentCount })}` : ""}
                     </p>
                     <p className="mt-1 truncate text-xs text-muted-foreground">
                       {machine.readinessReason}
@@ -353,9 +356,9 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={variant} className="font-mono text-[10px] uppercase">{status}</Badge>;
 }
 
-function formatDate(value: string | null) {
+function formatDate(value: string | null, locale: string) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("es-CO", {
+  return new Intl.DateTimeFormat(locale === "es" ? "es-CO" : "en-GB", {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
