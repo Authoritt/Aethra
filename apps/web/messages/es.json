@@ -279,7 +279,16 @@
       "error_project": "Error eliminando el proyecto",
       "error_vm": "Error borrando la VM",
       "tunnel_disconnected": "Túnel desconectado",
-      "tunnel_error": "Error desconectando el túnel"
+      "tunnel_error": "Error desconectando el túnel",
+      "title_record": "Eliminar DNS record \"{name}\"",
+      "title_monitor": "Eliminar monitor \"{name}\"",
+      "title_zone": "Eliminar zona \"{name}\"",
+      "title_service": "Eliminar servicio \"{slug}\"",
+      "title_integration": "Eliminar credencial \"{name}\"",
+      "title_channel": "Eliminar canal \"{name}\"",
+      "title_role": "Borrar rol \"{slug}\"",
+      "title_route": "Eliminar la ruta de \"{hostname}\"",
+      "title_apikey": "Revocar API key \"{name}\""
     }
   },
   "pages": {

@@ -70,6 +70,17 @@ function scan(file) {
       // Texto JSX suelto: <p>Sin datos</p> partido en varias líneas.
       const looseText = line.match(/^\s*([A-ZÁÉÍÓÚ][^<>{}]*?)\s*$/)?.[1];
       if (looseText) candidates.push(looseText);
+      // Texto JSX que rodea una interpolación: <DialogTitle>Borrar rol "{slug}"</DialogTitle>.
+      // Se añadió después de que ocho títulos de diálogo de borrado siguieran en
+      // español con el detector dando limpio: el `{slug}` hacía que la regla de
+      // texto suelto los descartara, y no eran atributos ni literales entre
+      // comillas. Aparecieron al abrir un diálogo en el navegador.
+      if (/<[A-Za-z]/.test(line) && /\{[a-zA-Z]/.test(line)) {
+        for (const m of line.matchAll(/>([^<>{}]{4,})(?=\{)|\}([^<>{}]{4,})</g)) {
+          const text = (m[1] ?? m[2] ?? "").trim();
+          if (text) candidates.push(text);
+        }
+      }
       // Atributo de texto visible en una sola línea.
       const attrText = line.match(TEXT_ATTRS)?.[2];
       if (attrText) candidates.push(attrText);

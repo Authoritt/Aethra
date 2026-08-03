@@ -74,10 +74,9 @@ export function RevokeKeyButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Revocar API key "{name}"</DialogTitle>
+            <DialogTitle>{d("title_apikey", { name })}</DialogTitle>
             <DialogDescription>
-              {d("apikey_warning")}
-              {c("irreversible")}
+              {d("apikey_warning")} {c("irreversible")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

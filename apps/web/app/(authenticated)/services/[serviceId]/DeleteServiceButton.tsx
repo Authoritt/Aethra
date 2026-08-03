@@ -60,7 +60,7 @@ export function DeleteServiceButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar servicio "{slug}"</DialogTitle>
+            <DialogTitle>{d("title_service", { slug })}</DialogTitle>
             <DialogDescription>
               {d("service_warning")}
               stopped.

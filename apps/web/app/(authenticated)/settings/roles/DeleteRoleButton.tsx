@@ -58,10 +58,9 @@ export function DeleteRoleButton({ id, slug }: { id: string; slug: string }) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Borrar rol &quot;{slug}&quot;</DialogTitle>
+            <DialogTitle>{d("title_role", { slug })}</DialogTitle>
             <DialogDescription>
-              {d("role_warning")}
-              {d("role_warning_2")}
+              {d("role_warning")} {d("role_warning_2")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

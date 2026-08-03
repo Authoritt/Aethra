@@ -72,7 +72,7 @@ export function DeleteZoneButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{d("zone_title")} "{name}"</DialogTitle>
+            <DialogTitle>{d("title_zone", { name })}</DialogTitle>
             <DialogDescription>
               {d("zone_warning")}
               cifrado y el seguimiento local.

@@ -61,7 +61,7 @@ export function DeleteChannelButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar canal "{name}"</DialogTitle>
+            <DialogTitle>{d("title_channel", { name })}</DialogTitle>
             <DialogDescription>
               {d("channel_warning")}
             </DialogDescription>

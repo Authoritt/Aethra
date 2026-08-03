@@ -279,7 +279,16 @@
       "error_project": "Error deleting the project",
       "error_vm": "Error deleting the VM",
       "tunnel_disconnected": "Tunnel disconnected",
-      "tunnel_error": "Error disconnecting the tunnel"
+      "tunnel_error": "Error disconnecting the tunnel",
+      "title_record": "Delete DNS record \"{name}\"",
+      "title_monitor": "Delete monitor \"{name}\"",
+      "title_zone": "Delete zone \"{name}\"",
+      "title_service": "Delete service \"{slug}\"",
+      "title_integration": "Delete credential \"{name}\"",
+      "title_channel": "Delete channel \"{name}\"",
+      "title_role": "Delete role \"{slug}\"",
+      "title_route": "Delete the route for \"{hostname}\"",
+      "title_apikey": "Revoke API key \"{name}\""
     }
   },
   "pages": {

@@ -66,7 +66,7 @@ export function DeleteRecordButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar DNS record "{name}"</DialogTitle>
+            <DialogTitle>{d("title_record", { name })}</DialogTitle>
             <DialogDescription>
               {d("record_warning")}
             </DialogDescription>

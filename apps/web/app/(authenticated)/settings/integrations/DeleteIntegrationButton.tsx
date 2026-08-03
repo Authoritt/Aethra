@@ -63,10 +63,9 @@ export function DeleteIntegrationButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar credencial "{name}"</DialogTitle>
+            <DialogTitle>{d("title_integration", { name })}</DialogTitle>
             <DialogDescription>
-              {d("integration_warning")}
-              {c("irreversible")}
+              {d("integration_warning")} {c("irreversible")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

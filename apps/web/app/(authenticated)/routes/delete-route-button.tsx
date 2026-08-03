@@ -64,7 +64,7 @@ export function DeleteRouteButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar la ruta de "{hostname}"</DialogTitle>
+            <DialogTitle>{d("title_route", { hostname })}</DialogTitle>
             <DialogDescription>
               {d("route_warning")}
               entrada en el reverse proxy.

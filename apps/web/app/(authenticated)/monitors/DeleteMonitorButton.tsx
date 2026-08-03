@@ -60,7 +60,7 @@ export function DeleteMonitorButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar monitor "{name}"</DialogTitle>
+            <DialogTitle>{d("title_monitor", { name })}</DialogTitle>
             <DialogDescription>
               {d("monitor_warning")}
             </DialogDescription>
