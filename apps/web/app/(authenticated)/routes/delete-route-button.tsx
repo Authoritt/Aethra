@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
@@ -22,6 +23,8 @@ export function DeleteRouteButton({
   id: string;
   hostname: string;
 }) {
+  const c = useTranslations("common");
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -56,20 +59,20 @@ export function DeleteRouteButton({
         onClick={() => setOpen(true)}
       >
         <Trash2 className="mr-2 h-4 w-4" />
-        Eliminar
+        {c("delete")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Eliminar la ruta de "{hostname}"</DialogTitle>
             <DialogDescription>
-              Esta acción dejará de servir el host inmediatamente y revocará su
+              {d("route_warning")}
               entrada en el reverse proxy.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancelar
+              {c("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -79,7 +82,7 @@ export function DeleteRouteButton({
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Eliminar
+              {c("delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

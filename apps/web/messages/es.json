@@ -44,7 +44,8 @@
     "never": "nunca",
     "load_error": "No se pudo cargar el listado. Verificá que la API esté corriendo.",
     "load_error_short": "No se pudo cargar el listado.",
-    "all_f": "Todas"
+    "all_f": "Todas",
+    "irreversible": "Esta acción no se puede deshacer."
   },
   "nav": {
     "group_operation": "Operación",
@@ -262,6 +263,23 @@
       "title": "Disco por nodo",
       "empty": "Sin datos de disco por nodo.",
       "free_total": "{size} libres en total"
+    },
+    "destructive": {
+      "record_warning": "Se borrará en Cloudflare y localmente.",
+      "zone_title": "Eliminar zona",
+      "zone_warning": "No se elimina la zona en Cloudflare, solo se quita el token",
+      "monitor_warning": "Esta acción borrará el monitor y todo su historial de checks.",
+      "route_warning": "Esta acción dejará de servir el host inmediatamente y revocará su",
+      "service_warning": "El contenedor se detendrá y el servicio quedará marcado como",
+      "role_warning": "Si el rol está asignado a uno o más usuarios, el borrado fallará.",
+      "role_warning_2": "Reasigná esos usuarios antes.",
+      "apikey_warning": "Cualquier integración que la use perderá acceso inmediatamente.",
+      "integration_warning": "Cualquier módulo que la resuelva por nombre quedará sin acceso.",
+      "channel_warning": "Las entregas en cola asociadas se marcarán Failed. Acción irreversible.",
+      "error_project": "Error eliminando el proyecto",
+      "error_vm": "Error borrando la VM",
+      "tunnel_disconnected": "Túnel desconectado",
+      "tunnel_error": "Error desconectando el túnel"
     }
   },
   "pages": {

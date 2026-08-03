@@ -44,7 +44,8 @@
     "never": "never",
     "load_error": "Could not load the list. Make sure the API is running.",
     "load_error_short": "Could not load the list.",
-    "all_f": "All"
+    "all_f": "All",
+    "irreversible": "This action cannot be undone."
   },
   "nav": {
     "group_operation": "Operations",
@@ -262,6 +263,23 @@
       "title": "Disk per node",
       "empty": "No per-node disk data.",
       "free_total": "{size} free in total"
+    },
+    "destructive": {
+      "record_warning": "It will be removed from Cloudflare and locally.",
+      "zone_title": "Delete zone",
+      "zone_warning": "The zone is not deleted in Cloudflare, only the token is removed",
+      "monitor_warning": "This action will delete the monitor and all its check history.",
+      "route_warning": "This will stop serving the host immediately and revoke its",
+      "service_warning": "The container will stop and the service will be marked as",
+      "role_warning": "If the role is assigned to one or more users, the deletion will fail.",
+      "role_warning_2": "Reassign those users first.",
+      "apikey_warning": "Any integration using it will lose access immediately.",
+      "integration_warning": "Any module resolving it by name will be left without access.",
+      "channel_warning": "Queued deliveries will be marked Failed. Irreversible action.",
+      "error_project": "Error deleting the project",
+      "error_vm": "Error deleting the VM",
+      "tunnel_disconnected": "Tunnel disconnected",
+      "tunnel_error": "Error disconnecting the tunnel"
     }
   },
   "pages": {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -18,6 +19,8 @@ export function DeleteProjectButton({
   projectId: string;
   projectName: string;
 }) {
+  const c = useTranslations("common");
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -39,7 +42,7 @@ export function DeleteProjectButton({
             `Error ${e.status}`)
           : e instanceof Error
             ? e.message
-            : "Error eliminando el proyecto";
+            : d("error_project");
       toast.error(msg);
       setBusy(false);
       setConfirming(false);
@@ -54,7 +57,7 @@ export function DeleteProjectButton({
         onClick={() => setConfirming(true)}
       >
         <Trash2 className="mr-2 h-4 w-4" />
-        Eliminar
+        {c("delete")}
       </Button>
     );
   }
@@ -62,7 +65,7 @@ export function DeleteProjectButton({
   return (
     <div className="flex items-center gap-2">
       <Button variant="ghost" onClick={() => setConfirming(false)} disabled={busy}>
-        Cancelar
+        {c("cancel")}
       </Button>
       <Button variant="destructive" onClick={onDelete} disabled={busy}>
         {busy ? (

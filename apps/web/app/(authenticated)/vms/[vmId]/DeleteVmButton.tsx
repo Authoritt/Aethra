@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -9,6 +10,8 @@ import { ApiError, api } from "@/lib/api";
 
 /** Botón de borrado de VM (DELETE /api/vms/{id}?force=true). */
 export function DeleteVmButton({ vmId, name }: { vmId: string; name: string }) {
+  const c = useTranslations("common");
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
@@ -26,7 +29,7 @@ export function DeleteVmButton({ vmId, name }: { vmId: string; name: string }) {
       toast.error(
         e instanceof ApiError
           ? ((e.body as { message?: string } | undefined)?.message ?? `Error ${e.status}`)
-          : "Error borrando la VM",
+          : d("error_vm"),
       );
     } finally {
       setBusy(false);
