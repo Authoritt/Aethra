@@ -9,6 +9,8 @@
 
 > 🇪🇸 [Léeme en español](README.es.md)
 
+![Aethra console — Command Center, with the operational sidebar and the pending-configuration checklist on a fresh install](docs/assets/dashboard.png)
+
 Aethra unifies — in a single system, with one shared database and one UI — what today forces you to
 jump between four separate tools: **Git→Docker deploys** (instead of Coolify), **reverse proxy + automatic
 TLS** (instead of Traefik), **uptime monitoring** (instead of Uptime Kuma) and **VM/container metrics**

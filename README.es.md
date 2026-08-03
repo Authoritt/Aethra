@@ -8,6 +8,8 @@
 
 > 🇬🇧 [Read this in English](README.md)
 
+![Consola de Aethra — Centro de mando, con la barra lateral operativa y la lista de configuración pendiente en una instalación recién hecha](docs/assets/dashboard.png)
+
 Aethra unifica en un único sistema —con una base de datos compartida y una sola UI— lo que hoy te obliga
 a saltar entre cuatro herramientas distintas: **despliegue Git→Docker** (en lugar de Coolify),
 **reverse proxy + TLS automático** (en lugar de Traefik), **monitoreo de uptime** (en lugar de Uptime Kuma)
