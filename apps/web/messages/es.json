@@ -43,7 +43,8 @@
     "no_hostname": "sin hostname",
     "never": "nunca",
     "load_error": "No se pudo cargar el listado. Verificá que la API esté corriendo.",
-    "load_error_short": "No se pudo cargar el listado."
+    "load_error_short": "No se pudo cargar el listado.",
+    "all_f": "Todas"
   },
   "nav": {
     "group_operation": "Operación",
@@ -1966,29 +1967,22 @@
       "title": "Machines",
       "description": "Capacidad real de despliegue: cada máquina muestra sus app environments, previews, salud y disponibilidad.",
       "action_register": "Registrar machine",
-      "filter_search": "Buscar",
       "filter_search_placeholder": "machine, app, tenant, environment",
       "filter_readiness": "Readiness",
-      "filter_all": "Todas",
       "filter_preview_pool": "Preview pool",
       "option_accepts_previews": "Acepta previews",
       "option_no_previews": "No previews",
-      "filter_submit": "Filtrar",
-      "filter_clear": "Limpiar",
       "empty_title": "No hay machines",
-      "empty_description": "Registra la primera máquina para poder desplegar app environments."
+      "empty_description": "Registra la primera máquina para poder desplegar app environments.",
+      "load_error": "No se pudo cargar la vista operacional de machines.",
+      "no_app_envs": "Sin app environments asignados."
     },
     "releases": {
       "title": "Releases",
       "description": "Cada push o trigger manual como build + deploy fan-out + resultado.",
-      "filter_search": "Buscar",
       "filter_status": "Status",
-      "filter_all_m": "Todos",
-      "filter_all_f": "Todas",
       "filter_app": "App",
       "filter_ref": "Ref",
-      "filter_submit": "Filtrar",
-      "filter_clear": "Limpiar",
       "load_error": "No se pudo cargar releases."
     }
   }

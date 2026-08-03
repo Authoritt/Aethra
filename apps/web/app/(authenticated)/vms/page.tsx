@@ -29,6 +29,7 @@ export default async function VmsPage({
   searchParams: Promise<MachineFilters>;
 }) {
   const t = await getTranslations("pages.vms");
+  const c = await getTranslations("common");
   const filters = await searchParams;
   const query = buildQuery(filters);
   const data = await serverFetch<MachineOverviewDto[]>(`/api/ops/machines${query}`);
@@ -66,7 +67,7 @@ export default async function VmsPage({
         <CardContent className="p-4">
           <form method="get" className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <Label htmlFor="q">{t("filter_search")}</Label>
+              <Label htmlFor="q">{c("search")}</Label>
               <Input
                 id="q"
                 name="q"
@@ -81,7 +82,7 @@ export default async function VmsPage({
                 id="readiness"
                 name="readiness"
                 value={filters.readiness}
-                allLabel={t("filter_all")}
+                allLabel={c("all_f")}
                 options={[
                   { value: "ready", label: "Ready" },
                   { value: "busy", label: "Busy" },
@@ -99,17 +100,17 @@ export default async function VmsPage({
                 defaultValue={filters.acceptsPreviews ?? ""}
                 className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <option value="">{t("filter_all")}</option>
+                <option value="">{c("all_f")}</option>
                 <option value="true">{t("option_accepts_previews")}</option>
                 <option value="false">{t("option_no_previews")}</option>
               </select>
             </div>
-            <Button type="submit">{t("filter_submit")}</Button>
+            <Button type="submit">{c("filter")}</Button>
             {hasFilters ? (
               <Button asChild variant="ghost" size="sm">
                 <Link href="/vms">
                   <X className="mr-2 h-4 w-4" />
-                  {t("filter_clear")}
+                  {c("clear")}
                 </Link>
               </Button>
             ) : null}
@@ -120,7 +121,7 @@ export default async function VmsPage({
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar la vista operacional de machines.
+            {t("load_error")}
           </CardContent>
         </Card>
       ) : machines.length === 0 ? (
@@ -268,7 +269,7 @@ export default async function VmsPage({
                       </div>
                     ) : (
                       <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                        Sin app environments asignados.
+                        {t("no_app_envs")}
                       </p>
                     )}
                   </CardContent>

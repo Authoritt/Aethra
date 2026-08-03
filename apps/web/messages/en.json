@@ -43,7 +43,8 @@
     "no_hostname": "no hostname",
     "never": "never",
     "load_error": "Could not load the list. Make sure the API is running.",
-    "load_error_short": "Could not load the list."
+    "load_error_short": "Could not load the list.",
+    "all_f": "All"
   },
   "nav": {
     "group_operation": "Operations",
@@ -1966,29 +1967,22 @@
       "title": "Machines",
       "description": "Real deployment capacity: each machine shows its app environments, previews, health and availability.",
       "action_register": "Register machine",
-      "filter_search": "Search",
       "filter_search_placeholder": "machine, app, tenant, environment",
       "filter_readiness": "Readiness",
-      "filter_all": "All",
       "filter_preview_pool": "Preview pool",
       "option_accepts_previews": "Accepts previews",
       "option_no_previews": "No previews",
-      "filter_submit": "Filter",
-      "filter_clear": "Clear",
       "empty_title": "No machines yet",
-      "empty_description": "Register the first machine so you can deploy app environments."
+      "empty_description": "Register the first machine so you can deploy app environments.",
+      "load_error": "Could not load the machines operational view.",
+      "no_app_envs": "No app environments assigned."
     },
     "releases": {
       "title": "Releases",
       "description": "Every push or manual trigger as build + deploy fan-out + outcome.",
-      "filter_search": "Search",
       "filter_status": "Status",
-      "filter_all_m": "All",
-      "filter_all_f": "All",
       "filter_app": "App",
       "filter_ref": "Ref",
-      "filter_submit": "Filter",
-      "filter_clear": "Clear",
       "load_error": "Could not load releases."
     }
   }

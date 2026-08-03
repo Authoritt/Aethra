@@ -36,6 +36,7 @@ export default async function ReleasesPage({
   searchParams: Promise<ReleaseFilters>;
 }) {
   const t = await getTranslations("pages.releases");
+  const c = await getTranslations("common");
   const filters = await searchParams;
   const query = buildQuery(filters);
   const [data, appsData] = await Promise.all([
@@ -61,7 +62,7 @@ export default async function ReleasesPage({
         <CardContent className="p-4">
           <form method="get" className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <Label htmlFor="q">{t("filter_search")}</Label>
+              <Label htmlFor="q">{c("search")}</Label>
               <Input
                 id="q"
                 name="q"
@@ -76,7 +77,7 @@ export default async function ReleasesPage({
                 id="status"
                 name="status"
                 value={filters.status}
-                allLabel={t("filter_all_m")}
+                allLabel={c("all")}
                 options={[
                   { value: "healthy", label: "Healthy" },
                   { value: "active", label: "Active" },
@@ -91,7 +92,7 @@ export default async function ReleasesPage({
                 id="appId"
                 name="appId"
                 value={filters.appId}
-                allLabel={t("filter_all_f")}
+                allLabel={c("all_f")}
                 className="max-w-64"
                 options={apps.map((app) => ({ value: app.id, label: app.name }))}
               />
@@ -106,12 +107,12 @@ export default async function ReleasesPage({
                 className="w-56 font-mono text-xs"
               />
             </div>
-            <Button type="submit">{t("filter_submit")}</Button>
+            <Button type="submit">{c("filter")}</Button>
             {hasFilters ? (
               <Button asChild variant="ghost" size="sm">
                 <Link href="/releases">
                   <X className="mr-2 h-4 w-4" />
-                  {t("filter_clear")}
+                  {c("clear")}
                 </Link>
               </Button>
             ) : null}
