@@ -322,6 +322,31 @@
       "step2": "Step 2 · {action}",
       "connect_tunnel": "Connect the tunnel",
       "connect_tunnel_btn": "Connect tunnel"
+    },
+    "env_vars": {
+      "save_error": "Could not save the variables",
+      "confirm_delete_var": "Delete variable \"{key}\"?",
+      "delete_var_error": "Could not delete the variable",
+      "need_secret": "Add at least one secret with a key",
+      "save_secrets_error": "Could not save the secrets",
+      "confirm_delete_secret": "Delete secret \"{key}\"?",
+      "delete_secret_error": "Could not delete the secret",
+      "empty_vars": "No environment variables.",
+      "empty_secrets": "No secrets",
+      "empty_secrets_desc": "Secrets are write-only: their value is never shown.",
+      "secrets_note": "Secrets are write-only. Saving sends the new values; existing ones can only be deleted."
+    },
+    "effective_config": {
+      "unavailable_title": "Effective config unavailable",
+      "unavailable_desc": "Could not load the operational summary of variables and secrets.",
+      "title": "Effective config & secrets",
+      "description": "Real precedence for this App Environment before deploying or diagnosing runtime.",
+      "last_deploy": "Last successful deploy:",
+      "no_deploy": "no successful deploy",
+      "empty_title": "No effective config",
+      "empty_desc": "This App Environment has no variables or secrets in Portfolio, App, Tenant or Instance.",
+      "no_overrides": "No overrides",
+      "no_value": "no value"
     }
   },
   "pages": {

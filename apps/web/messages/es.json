@@ -322,6 +322,31 @@
       "step2": "Paso 2 · {action}",
       "connect_tunnel": "Conectar el túnel",
       "connect_tunnel_btn": "Conectar túnel"
+    },
+    "env_vars": {
+      "save_error": "No se pudieron guardar las variables",
+      "confirm_delete_var": "¿Eliminar la variable \"{key}\"?",
+      "delete_var_error": "No se pudo eliminar la variable",
+      "need_secret": "Agrega al menos un secreto con clave",
+      "save_secrets_error": "No se pudieron guardar los secretos",
+      "confirm_delete_secret": "¿Eliminar el secreto \"{key}\"?",
+      "delete_secret_error": "No se pudo eliminar el secreto",
+      "empty_vars": "Sin variables de entorno.",
+      "empty_secrets": "Sin secretos",
+      "empty_secrets_desc": "Los secretos son de solo escritura: su valor nunca se muestra.",
+      "secrets_note": "Los secretos son de solo escritura. Al guardar se envían los nuevos valores; los existentes solo pueden eliminarse."
+    },
+    "effective_config": {
+      "unavailable_title": "Config efectiva no disponible",
+      "unavailable_desc": "No se pudo cargar el resumen operacional de variables y secretos.",
+      "title": "Config & Secrets efectivos",
+      "description": "Precedencia real para este App Environment antes de desplegar o diagnosticar runtime.",
+      "last_deploy": "Último deploy exitoso:",
+      "no_deploy": "sin deploy exitoso",
+      "empty_title": "Sin config efectiva",
+      "empty_desc": "Este App Environment no tiene variables ni secretos en Portfolio, App, Tenant o Instance.",
+      "no_overrides": "Sin overrides",
+      "no_value": "sin valor"
     }
   },
   "pages": {
