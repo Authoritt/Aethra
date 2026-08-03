@@ -19,6 +19,7 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { MultiSelectFilter } from "@/components/aethra/MultiSelectFilter";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
+import { getTranslations } from "next-intl/server";
 import { serverFetch } from "@/lib/server-fetch";
 import type { AppOverviewDto, OperationalIssueDto } from "@/lib/types";
 
@@ -36,6 +37,8 @@ export default async function OperationalIssuesPage({
 }: {
   searchParams: Promise<IssueFilters>;
 }) {
+  const t = await getTranslations("pages.operational_issues");
+  const c = await getTranslations("common");
   const filters = await searchParams;
   const query = buildQuery(filters);
   const [data, appsData] = await Promise.all([
@@ -53,8 +56,8 @@ export default async function OperationalIssuesPage({
   return (
     <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Operational Issues"
-        description="Inbox accionable de problemas derivados de app environments, releases, machines y public access."
+        title={t("title")}
+        description={t("description")}
         actions={<SavedViewsMenu storageKey="aethra.savedViews.operationalIssues" />}
       />
 
@@ -76,22 +79,22 @@ export default async function OperationalIssuesPage({
           </div>
           <form method="get" className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <Label htmlFor="q">Buscar</Label>
+              <Label htmlFor="q">{c("search")}</Label>
               <Input
                 id="q"
                 name="q"
                 defaultValue={filters.q ?? ""}
-                placeholder="codigo, app, tenant, recurso"
+                placeholder={t("filter_search_placeholder")}
                 className="w-64"
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="severity">Severity</Label>
+              <Label htmlFor="severity">{t("filter_severity")}</Label>
               <MultiSelectFilter
                 id="severity"
                 name="severity"
                 value={filters.severity}
-                allLabel="Todas"
+                allLabel={c("all_f")}
                 options={[
                   { value: "critical", label: "Critical" },
                   { value: "warning", label: "Warning" },
@@ -99,32 +102,32 @@ export default async function OperationalIssuesPage({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="resourceType">Resource</Label>
+              <Label htmlFor="resourceType">{t("filter_resource")}</Label>
               <MultiSelectFilter
                 id="resourceType"
                 name="resourceType"
                 value={filters.resourceType}
-                allLabel="Todos"
+                allLabel={c("all")}
                 options={resourceTypes.map((type) => ({ value: type, label: type }))}
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="appId">App</Label>
+              <Label htmlFor="appId">{t("filter_app")}</Label>
               <MultiSelectFilter
                 id="appId"
                 name="appId"
                 value={filters.appId}
-                allLabel="Todas"
+                allLabel={c("all_f")}
                 className="max-w-64"
                 options={apps.map((app) => ({ value: app.id, label: app.name }))}
               />
             </div>
-            <Button type="submit">Filtrar</Button>
+            <Button type="submit">{c("filter")}</Button>
             {hasFilters ? (
               <Button asChild variant="ghost" size="sm">
                 <Link href="/operational-issues">
                   <X className="mr-2 h-4 w-4" />
-                  Limpiar
+                  {c("clear")}
                 </Link>
               </Button>
             ) : null}
@@ -141,11 +144,11 @@ export default async function OperationalIssuesPage({
       ) : issues.length === 0 ? (
         <EmptyState
           icon={<AlertTriangle className="h-6 w-6" />}
-          title="No hay issues operativos"
+          title={t("empty")}
           description={
             hasFilters
-              ? "No hay issues que coincidan con los filtros actuales."
-              : "Los fallos derivados apareceran aqui con owner y recurso."
+              ? t("empty_filtered")
+              : t("empty_hint")
           }
         />
       ) : (

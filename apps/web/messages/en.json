@@ -1984,6 +1984,55 @@
       "filter_app": "App",
       "filter_ref": "Ref",
       "load_error": "Could not load releases."
+    },
+    "public_access": {
+      "title": "Public Access",
+      "description": "Public hosts grouped by operational owner, technical routes, monitor and health.",
+      "action_routes": "Technical routes",
+      "filter_search_placeholder": "host, app, backend, issue",
+      "filter_health": "Health",
+      "filter_dns": "DNS",
+      "filter_tunnel": "Tunnel",
+      "filter_monitor": "Monitor",
+      "filter_app": "App",
+      "empty": "No public endpoints",
+      "view_route": "View route",
+      "empty_filtered": "No endpoints match the current filters.",
+      "empty_hint": "Routes and app domains will appear here grouped by hostname.",
+      "no_owner": "No operational owner"
+    },
+    "operational_issues": {
+      "title": "Operational Issues",
+      "description": "Actionable inbox of problems coming from app environments, releases, machines and public access.",
+      "filter_search_placeholder": "code, app, tenant, resource",
+      "filter_severity": "Severity",
+      "filter_resource": "Resource",
+      "filter_app": "App",
+      "empty": "No operational issues",
+      "empty_filtered": "No issues match the current filters.",
+      "empty_hint": "Derived failures will appear here with their owner and resource."
+    },
+    "data_services": {
+      "title": "Data Services",
+      "description": "Data services and bindings seen from the apps and environments that consume them.",
+      "action_services": "Technical services",
+      "filter_search_placeholder": "service, app, tenant, resource",
+      "filter_status": "Status",
+      "filter_type": "Type",
+      "empty": "No data services",
+      "no_consumers": "No active consumers.",
+      "empty_filtered": "No services match the current filters.",
+      "empty_hint": "Managed services will appear here with their consumers."
+    },
+    "app_environments": {
+      "title": "App Environments",
+      "description": "Operational unit: app, tenant, environment, machine, release and public URL.",
+      "filter_search_placeholder": "app, tenant, URL, machine",
+      "filter_status": "Status",
+      "filter_app": "App",
+      "filter_environment": "Environment",
+      "filter_machine": "Machine",
+      "load_error": "Could not load the operational view."
     }
   }
 }

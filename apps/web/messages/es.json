@@ -1984,6 +1984,55 @@
       "filter_app": "App",
       "filter_ref": "Ref",
       "load_error": "No se pudo cargar releases."
+    },
+    "public_access": {
+      "title": "Public Access",
+      "description": "Hosts públicos agrupados por owner operacional, rutas técnicas, monitor y salud.",
+      "action_routes": "Rutas técnicas",
+      "filter_search_placeholder": "host, app, backend, issue",
+      "filter_health": "Health",
+      "filter_dns": "DNS",
+      "filter_tunnel": "Tunnel",
+      "filter_monitor": "Monitor",
+      "filter_app": "App",
+      "empty": "Sin endpoints públicos",
+      "view_route": "Ver route",
+      "empty_filtered": "No hay endpoints que coincidan con los filtros actuales.",
+      "empty_hint": "Cuando existan routes o dominios de apps aparecerán agrupados por hostname.",
+      "no_owner": "Sin owner operacional"
+    },
+    "operational_issues": {
+      "title": "Operational Issues",
+      "description": "Inbox accionable de problemas derivados de app environments, releases, machines y public access.",
+      "filter_search_placeholder": "código, app, tenant, recurso",
+      "filter_severity": "Severity",
+      "filter_resource": "Resource",
+      "filter_app": "App",
+      "empty": "No hay issues operativos",
+      "empty_filtered": "No hay issues que coincidan con los filtros actuales.",
+      "empty_hint": "Los fallos derivados aparecerán aquí con owner y recurso."
+    },
+    "data_services": {
+      "title": "Data Services",
+      "description": "Servicios de datos y bindings vistos desde las apps y ambientes que los consumen.",
+      "action_services": "Servicios técnicos",
+      "filter_search_placeholder": "servicio, app, tenant, recurso",
+      "filter_status": "Status",
+      "filter_type": "Type",
+      "empty": "Sin Data Services",
+      "no_consumers": "Sin consumers activos.",
+      "empty_filtered": "No hay servicios que coincidan con los filtros actuales.",
+      "empty_hint": "Cuando existan servicios gestionados aparecerán con sus consumidores."
+    },
+    "app_environments": {
+      "title": "App Environments",
+      "description": "Unidad operativa: app, tenant, ambiente, machine, release y URL pública.",
+      "filter_search_placeholder": "app, tenant, URL, machine",
+      "filter_status": "Status",
+      "filter_app": "App",
+      "filter_environment": "Environment",
+      "filter_machine": "Machine",
+      "load_error": "No se pudo cargar la vista operacional."
     }
   }
 }

@@ -17,6 +17,7 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { MultiSelectFilter } from "@/components/aethra/MultiSelectFilter";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
+import { getTranslations } from "next-intl/server";
 import { serverFetch } from "@/lib/server-fetch";
 import type {
   AppEnvironmentOverviewDto,
@@ -39,6 +40,8 @@ export default async function AppEnvironmentsPage({
 }: {
   searchParams: Promise<AppEnvironmentFilters>;
 }) {
+  const t = await getTranslations("pages.app_environments");
+  const c = await getTranslations("common");
   const filters = await searchParams;
   const query = buildQuery(filters);
   const [data, appsData, machinesData] = await Promise.all([
@@ -66,8 +69,8 @@ export default async function AppEnvironmentsPage({
   return (
     <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="App Environments"
-        description="Unidad operativa: app, tenant, ambiente, machine, release y URL publica."
+        title={t("title")}
+        description={t("description")}
         actions={<SavedViewsMenu storageKey="aethra.savedViews.appEnvironments" />}
       />
 
@@ -75,22 +78,22 @@ export default async function AppEnvironmentsPage({
         <CardContent className="p-4">
           <form method="get" className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <Label htmlFor="q">Buscar</Label>
+              <Label htmlFor="q">{c("search")}</Label>
               <Input
                 id="q"
                 name="q"
                 defaultValue={filters.q ?? ""}
-                placeholder="app, tenant, URL, machine"
+                placeholder={t("filter_search_placeholder")}
                 className="w-64"
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="status">Status</Label>
+              <Label htmlFor="status">{t("filter_status")}</Label>
               <MultiSelectFilter
                 id="status"
                 name="status"
                 value={filters.status}
-                allLabel="Todos"
+                allLabel={c("all")}
                 options={[
                   { value: "healthy", label: "Healthy" },
                   { value: "degraded", label: "Degraded" },
@@ -100,43 +103,43 @@ export default async function AppEnvironmentsPage({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="appId">App</Label>
+              <Label htmlFor="appId">{t("filter_app")}</Label>
               <MultiSelectFilter
                 id="appId"
                 name="appId"
                 value={filters.appId}
-                allLabel="Todas"
+                allLabel={c("all_f")}
                 className="max-w-64"
                 options={apps.map((app) => ({ value: app.id, label: app.name }))}
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="environment">Environment</Label>
+              <Label htmlFor="environment">{t("filter_environment")}</Label>
               <MultiSelectFilter
                 id="environment"
                 name="environment"
                 value={filters.environment}
-                allLabel="Todos"
+                allLabel={c("all")}
                 options={environmentOptions.map((env) => ({ value: env, label: env }))}
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="machineId">Machine</Label>
+              <Label htmlFor="machineId">{t("filter_machine")}</Label>
               <MultiSelectFilter
                 id="machineId"
                 name="machineId"
                 value={filters.machineId}
-                allLabel="Todas"
+                allLabel={c("all_f")}
                 className="max-w-64"
                 options={machines.map((machine) => ({ value: machine.id, label: machine.name }))}
               />
             </div>
-            <Button type="submit">Filtrar</Button>
+            <Button type="submit">{c("filter")}</Button>
             {hasFilters ? (
               <Button asChild variant="ghost" size="sm">
                 <Link href="/app-environments">
                   <X className="mr-2 h-4 w-4" />
-                  Limpiar
+                  {c("clear")}
                 </Link>
               </Button>
             ) : null}
@@ -147,7 +150,7 @@ export default async function AppEnvironmentsPage({
       {data === "error" || data === "notfound" ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar la vista operacional.
+            {t("load_error")}
           </CardContent>
         </Card>
       ) : (

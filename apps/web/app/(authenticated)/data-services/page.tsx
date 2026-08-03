@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/layout/page-header";
 import { MultiSelectFilter } from "@/components/aethra/MultiSelectFilter";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
+import { getTranslations } from "next-intl/server";
 import { serverFetch } from "@/lib/server-fetch";
 import type { DataServiceOverviewDto } from "@/lib/types";
 
@@ -26,6 +27,8 @@ export default async function DataServicesPage({
 }: {
   searchParams: Promise<DataServiceFilters>;
 }) {
+  const t = await getTranslations("pages.data_services");
+  const c = await getTranslations("common");
   const filters = await searchParams;
   const query = buildQuery(filters);
   const data = await serverFetch<DataServiceOverviewDto[]>(`/api/ops/data-services${query}`);
@@ -41,13 +44,13 @@ export default async function DataServicesPage({
   return (
     <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Data Services"
-        description="Servicios de datos y bindings vistos desde las apps y ambientes que los consumen."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex flex-wrap gap-2">
             <SavedViewsMenu storageKey="aethra.savedViews.dataServices" />
             <Button asChild variant="outline">
-              <Link href="/services">Servicios tecnicos</Link>
+              <Link href="/services">{t("action_services")}</Link>
             </Button>
           </div>
         }
@@ -57,22 +60,22 @@ export default async function DataServicesPage({
         <CardContent className="p-4">
           <form method="get" className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <Label htmlFor="q">Buscar</Label>
+              <Label htmlFor="q">{c("search")}</Label>
               <Input
                 id="q"
                 name="q"
                 defaultValue={filters.q ?? ""}
-                placeholder="servicio, app, tenant, recurso"
+                placeholder={t("filter_search_placeholder")}
                 className="w-72"
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="status">Status</Label>
+              <Label htmlFor="status">{t("filter_status")}</Label>
               <MultiSelectFilter
                 id="status"
                 name="status"
                 value={filters.status}
-                allLabel="Todos"
+                allLabel={c("all")}
                 options={[
                   { value: "Ready", label: "Ready" },
                   { value: "Provisioning", label: "Provisioning" },
@@ -82,21 +85,21 @@ export default async function DataServicesPage({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="type">Type</Label>
+              <Label htmlFor="type">{t("filter_type")}</Label>
               <MultiSelectFilter
                 id="type"
                 name="type"
                 value={filters.type}
-                allLabel="Todos"
+                allLabel={c("all")}
                 options={typeOptions.map((type) => ({ value: type, label: type }))}
               />
             </div>
-            <Button type="submit">Filtrar</Button>
+            <Button type="submit">{c("filter")}</Button>
             {hasFilters ? (
               <Button asChild variant="ghost" size="sm">
                 <Link href="/data-services">
                   <X className="mr-2 h-4 w-4" />
-                  Limpiar
+                  {c("clear")}
                 </Link>
               </Button>
             ) : null}
@@ -113,11 +116,11 @@ export default async function DataServicesPage({
       ) : services.length === 0 ? (
         <EmptyState
           icon={<Database className="h-6 w-6" />}
-          title="Sin Data Services"
+          title={t("empty")}
           description={
             hasFilters
-              ? "No hay servicios que coincidan con los filtros actuales."
-              : "Cuando existan servicios gestionados apareceran con sus consumidores."
+              ? t("empty_filtered")
+              : t("empty_hint")
           }
         />
       ) : (
@@ -180,7 +183,7 @@ export default async function DataServicesPage({
                   </div>
                 ) : (
                   <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                    Sin consumers activos.
+                    {t("no_consumers")}
                   </p>
                 )}
               </CardContent>
