@@ -288,7 +288,12 @@
       "title_channel": "Delete channel \"{name}\"",
       "title_role": "Delete role \"{slug}\"",
       "title_route": "Delete the route for \"{hostname}\"",
-      "title_apikey": "Revoke API key \"{name}\""
+      "title_apikey": "Revoke API key \"{name}\"",
+      "confirm_client": "Delete client \"{name}\"? This removes it from Aethra along with its instances.",
+      "confirm_tunnel": "Disconnect tunnel \"{name}\"? Aethra will stop managing its ingress through the API.",
+      "confirm_instance": "Delete instance \"{slug}\"? This removes it from Aethra (it does not stop the containers).",
+      "confirm_template": "Delete template \"{name}\" and ALL its instances? This action cannot be undone.",
+      "confirm_vm": "Delete VM \"{name}\"? This removes it from Aethra (it does not stop the machine)."
     }
   },
   "pages": {

@@ -288,7 +288,12 @@
       "title_channel": "Eliminar canal \"{name}\"",
       "title_role": "Borrar rol \"{slug}\"",
       "title_route": "Eliminar la ruta de \"{hostname}\"",
-      "title_apikey": "Revocar API key \"{name}\""
+      "title_apikey": "Revocar API key \"{name}\"",
+      "confirm_client": "¿Borrar el cliente \"{name}\"? Esto lo quita de Aethra junto con sus instancias.",
+      "confirm_tunnel": "¿Desconectar el túnel \"{name}\"? Aethra dejará de gestionar su ingress por API.",
+      "confirm_instance": "¿Borrar la instancia \"{slug}\"? Esto la quita de Aethra (no detiene los contenedores).",
+      "confirm_template": "¿Borrar la plantilla \"{name}\" y TODAS sus instancias? Esta acción no se puede deshacer.",
+      "confirm_vm": "¿Borrar la VM \"{name}\"? Esto la quita de Aethra (no detiene la máquina)."
     }
   },
   "pages": {

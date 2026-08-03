@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { GitBranch, Loader2, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -69,11 +70,12 @@ export function TrackedRefEditor({
 
 /** Botón de borrado de instancia (DELETE /api/instances/{id}?force=true). */
 export function DeleteInstanceButton({ instanceId, slug }: { instanceId: string; slug: string }) {
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   async function del() {
-    if (!confirm(`¿Borrar la instancia "${slug}"? Esto la quita de Aethra (no detiene los contenedores).`)) {
+    if (!confirm(d("confirm_instance", { slug }))) {
       return;
     }
     setBusy(true);

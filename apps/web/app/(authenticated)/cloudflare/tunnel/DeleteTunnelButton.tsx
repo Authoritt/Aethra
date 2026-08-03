@@ -16,7 +16,7 @@ export function DeleteTunnelButton({ name }: { name: string }) {
   const [busy, setBusy] = useState(false);
 
   async function del() {
-    if (!confirm(`¿Desconectar el túnel "${name}"? Aethra dejará de gestionar su ingress por API.`)) {
+    if (!confirm(d("confirm_tunnel", { name }))) {
       return;
     }
     setBusy(true);

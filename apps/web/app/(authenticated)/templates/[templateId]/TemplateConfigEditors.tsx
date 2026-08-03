@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus, Save, Trash2, GitBranch } from "lucide-react";
 import { toast } from "sonner";
@@ -81,11 +82,12 @@ export function EnvironmentMappingEditor({
 
 /** Botón de borrado de plantilla (DELETE /api/templates/{id}?force=true). */
 export function DeleteTemplateButton({ templateId, name }: { templateId: string; name: string }) {
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   async function del() {
-    if (!confirm(`¿Borrar la plantilla "${name}" y TODAS sus instancias? Esta acción no se puede deshacer.`)) {
+    if (!confirm(d("confirm_template", { name }))) {
       return;
     }
     setBusy(true);

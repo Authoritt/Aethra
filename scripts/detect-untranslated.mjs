@@ -84,6 +84,12 @@ function scan(file) {
       // Atributo de texto visible en una sola línea.
       const attrText = line.match(TEXT_ATTRS)?.[2];
       if (attrText) candidates.push(attrText);
+      // Template literals: confirm(`¿Borrar la VM "${name}"?`), toast.error(`...`).
+      // Se añadió tras buscar el siguiente punto ciego a proposito en vez de
+      // esperar a que lo enseñara el navegador: aparecieron ocho confirm()
+      // nativos en español sobre acciones irreversibles, en archivos que ya
+      // habían pasado por el detector limpios.
+      for (const m of line.matchAll(/`([^`]{6,})`/g)) candidates.push(m[1]);
       // Literales dentro de expresiones JSX: description={cond ? "..." : "..."}.
       // Se añadió después de que el detector diera limpia una página cuyo empty
       // state decía "Cuando existan servicios gestionados apareceran con sus

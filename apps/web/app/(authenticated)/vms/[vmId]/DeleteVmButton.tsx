@@ -16,7 +16,7 @@ export function DeleteVmButton({ vmId, name }: { vmId: string; name: string }) {
   const [busy, setBusy] = useState(false);
 
   async function del() {
-    if (!confirm(`¿Borrar la VM "${name}"? Esto la quita de Aethra (no detiene la máquina).`)) {
+    if (!confirm(d("confirm_vm", { name }))) {
       return;
     }
     setBusy(true);
