@@ -34,7 +34,7 @@ export function DeleteZoneButton({
   function onClick() {
     if (recordsCount > 0) {
       toast.error(
-        `La zona tiene ${recordsCount} record(s) gestionados. Eliminalos primero.`,
+        d("zone_has_records", { count: recordsCount }),
       );
       return;
     }

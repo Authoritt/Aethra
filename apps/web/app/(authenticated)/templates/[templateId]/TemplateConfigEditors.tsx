@@ -26,6 +26,7 @@ export function EnvironmentMappingEditor({
   initial: TemplateEnvironmentMapping[];
   defaultBranch: string;
 }) {
+  const p = useTranslations("components.template_mapping");
   const router = useRouter();
   const [rows, setRows] = useState<TemplateEnvironmentMapping[]>(initial.length ? initial : []);
   const [busy, setBusy] = useState(false);
@@ -53,8 +54,7 @@ export function EnvironmentMappingEditor({
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs text-muted-foreground">
-        Cada ambiente puede trackear una rama distinta. Si un ambiente no está mapeado, la instancia usa
-        el branch por defecto (<code className="font-mono">{defaultBranch}</code>).
+        {p("help", { branch: defaultBranch })}
       </p>
       {rows.map((r, i) => (
         <div key={i} className="flex items-center gap-2">

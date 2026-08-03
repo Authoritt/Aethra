@@ -293,7 +293,8 @@
       "confirm_tunnel": "Disconnect tunnel \"{name}\"? Aethra will stop managing its ingress through the API.",
       "confirm_instance": "Delete instance \"{slug}\"? This removes it from Aethra (it does not stop the containers).",
       "confirm_template": "Delete template \"{name}\" and ALL its instances? This action cannot be undone.",
-      "confirm_vm": "Delete VM \"{name}\"? This removes it from Aethra (it does not stop the machine)."
+      "confirm_vm": "Delete VM \"{name}\"? This removes it from Aethra (it does not stop the machine).",
+      "zone_has_records": "The zone has {count} managed record(s). Delete those first."
     },
     "tunnel": {
       "error_promote": "Error promoting the tunnel",
@@ -347,6 +348,9 @@
       "empty_desc": "This App Environment has no variables or secrets in Portfolio, App, Tenant or Instance.",
       "no_overrides": "No overrides",
       "no_value": "no value"
+    },
+    "template_mapping": {
+      "help": "Each environment can track a different branch. If an environment is not mapped, the instance uses the default branch ({branch})."
     }
   },
   "pages": {

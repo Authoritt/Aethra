@@ -293,7 +293,8 @@
       "confirm_tunnel": "¿Desconectar el túnel \"{name}\"? Aethra dejará de gestionar su ingress por API.",
       "confirm_instance": "¿Borrar la instancia \"{slug}\"? Esto la quita de Aethra (no detiene los contenedores).",
       "confirm_template": "¿Borrar la plantilla \"{name}\" y TODAS sus instancias? Esta acción no se puede deshacer.",
-      "confirm_vm": "¿Borrar la VM \"{name}\"? Esto la quita de Aethra (no detiene la máquina)."
+      "confirm_vm": "¿Borrar la VM \"{name}\"? Esto la quita de Aethra (no detiene la máquina).",
+      "zone_has_records": "La zona tiene {count} record(s) gestionados. Elimínalos primero."
     },
     "tunnel": {
       "error_promote": "Error promoviendo el túnel",
@@ -347,6 +348,9 @@
       "empty_desc": "Este App Environment no tiene variables ni secretos en Portfolio, App, Tenant o Instance.",
       "no_overrides": "Sin overrides",
       "no_value": "sin valor"
+    },
+    "template_mapping": {
+      "help": "Cada ambiente puede trackear una rama distinta. Si un ambiente no está mapeado, la instancia usa el branch por defecto ({branch})."
     }
   },
   "pages": {
