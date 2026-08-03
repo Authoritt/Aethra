@@ -9,7 +9,9 @@
 
 > 🇪🇸 [Léeme en español](README.es.md)
 
-![Aethra console — Command Center, with the operational sidebar and the pending-configuration checklist on a fresh install](docs/assets/dashboard.png)
+![Aethra console: signing in to a fresh install, creating the first environment, and watching the pending-configuration checklist go from three items to two](docs/assets/onboarding.gif)
+
+<sub>A fresh install, start to finish: sign in → three pending setup items → create the first environment → the checklist drops to two. Real instance, no seeded data.</sub>
 
 Aethra unifies — in a single system, with one shared database and one UI — what today forces you to
 jump between four separate tools: **Git→Docker deploys** (instead of Coolify), **reverse proxy + automatic
