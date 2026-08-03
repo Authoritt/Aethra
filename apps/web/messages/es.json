@@ -1948,6 +1948,48 @@
       "done": "listo",
       "final_title": "Aethra · consola de operación",
       "final_description": "Entra para revisar deploys, rutas, servicios, monitores, alertas y configuración operativa."
+    },
+    "apps": {
+      "title": "Apps",
+      "description": "Aplicaciones desplegables agrupadas por portfolio, tenant y ambiente.",
+      "action_definitions": "App definitions",
+      "load_error": "No se pudo cargar la vista operacional.",
+      "empty_title": "No hay apps",
+      "empty_description": "Crea una app definition para empezar a desplegar ambientes.",
+      "empty_action": "Ver app definitions",
+      "badge_tenants": "{count, plural, =1 {# tenant} other {# tenants}}",
+      "badge_envs": "{count, plural, =1 {# ambiente} other {# ambientes}}",
+      "issues": "{count, plural, =1 {# issue} other {# issues}}",
+      "open": "Abrir"
+    },
+    "vms": {
+      "title": "Machines",
+      "description": "Capacidad real de despliegue: cada máquina muestra sus app environments, previews, salud y disponibilidad.",
+      "action_register": "Registrar machine",
+      "filter_search": "Buscar",
+      "filter_search_placeholder": "machine, app, tenant, environment",
+      "filter_readiness": "Readiness",
+      "filter_all": "Todas",
+      "filter_preview_pool": "Preview pool",
+      "option_accepts_previews": "Acepta previews",
+      "option_no_previews": "No previews",
+      "filter_submit": "Filtrar",
+      "filter_clear": "Limpiar",
+      "empty_title": "No hay machines",
+      "empty_description": "Registra la primera máquina para poder desplegar app environments."
+    },
+    "releases": {
+      "title": "Releases",
+      "description": "Cada push o trigger manual como build + deploy fan-out + resultado.",
+      "filter_search": "Buscar",
+      "filter_status": "Status",
+      "filter_all_m": "Todos",
+      "filter_all_f": "Todas",
+      "filter_app": "App",
+      "filter_ref": "Ref",
+      "filter_submit": "Filtrar",
+      "filter_clear": "Limpiar",
+      "load_error": "No se pudo cargar releases."
     }
   }
 }

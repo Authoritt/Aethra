@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { getTranslations } from "next-intl/server";
 import { serverFetch } from "@/lib/server-fetch";
 import type { AppOverviewDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function AppsPage() {
+  const t = await getTranslations("pages.apps");
   const data = await serverFetch<AppOverviewDto[]>("/api/ops/apps");
   if (data === "unauthorized") redirect("/login");
   const apps = Array.isArray(data) ? data : [];
@@ -19,11 +21,11 @@ export default async function AppsPage() {
   return (
     <div className="space-y-8 px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Apps"
-        description="Aplicaciones desplegables agrupadas por portfolio, tenant y ambiente."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button asChild variant="outline">
-            <Link href="/templates">App definitions</Link>
+            <Link href="/templates">{t("action_definitions")}</Link>
           </Button>
         }
       />
@@ -31,17 +33,17 @@ export default async function AppsPage() {
       {data === "error" ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar la vista operacional.
+            {t("load_error")}
           </CardContent>
         </Card>
       ) : apps.length === 0 ? (
         <EmptyState
           icon={<AppWindow className="h-6 w-6" />}
-          title="No hay apps"
-          description="Crea una app definition para empezar a desplegar ambientes."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
-              <Link href="/templates">Ver app definitions</Link>
+              <Link href="/templates">{t("empty_action")}</Link>
             </Button>
           }
         />
@@ -61,8 +63,8 @@ export default async function AppsPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline">{app.portfolioName}</Badge>
-                  <Badge variant="outline">{app.tenantCount} tenants</Badge>
-                  <Badge variant="outline">{app.appEnvironmentCount} envs</Badge>
+                  <Badge variant="outline">{t("badge_tenants", { count: app.tenantCount })}</Badge>
+                  <Badge variant="outline">{t("badge_envs", { count: app.appEnvironmentCount })}</Badge>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -79,11 +81,11 @@ export default async function AppsPage() {
                 </div>
                 <div className="flex items-center justify-between gap-2 pt-1">
                   <span className="text-xs text-muted-foreground">
-                    {app.issueCount} issues
+                    {t("issues", { count: app.issueCount })}
                   </span>
                   <Button asChild size="sm" variant="ghost">
                     <Link href={`/apps/${app.id}`}>
-                      Abrir
+                      {t("open")}
                       <ChevronRight className="ml-1 h-4 w-4" />
                     </Link>
                   </Button>

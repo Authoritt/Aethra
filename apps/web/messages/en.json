@@ -1948,6 +1948,48 @@
       "done": "done",
       "final_title": "Aethra · operations console",
       "final_description": "Sign in to review deploys, routes, services, monitors, alerts and operational settings."
+    },
+    "apps": {
+      "title": "Apps",
+      "description": "Deployable applications grouped by portfolio, tenant and environment.",
+      "action_definitions": "App definitions",
+      "load_error": "Could not load the operational view.",
+      "empty_title": "No apps yet",
+      "empty_description": "Create an app definition to start deploying environments.",
+      "empty_action": "View app definitions",
+      "badge_tenants": "{count, plural, =1 {# tenant} other {# tenants}}",
+      "badge_envs": "{count, plural, =1 {# env} other {# envs}}",
+      "issues": "{count, plural, =1 {# issue} other {# issues}}",
+      "open": "Open"
+    },
+    "vms": {
+      "title": "Machines",
+      "description": "Real deployment capacity: each machine shows its app environments, previews, health and availability.",
+      "action_register": "Register machine",
+      "filter_search": "Search",
+      "filter_search_placeholder": "machine, app, tenant, environment",
+      "filter_readiness": "Readiness",
+      "filter_all": "All",
+      "filter_preview_pool": "Preview pool",
+      "option_accepts_previews": "Accepts previews",
+      "option_no_previews": "No previews",
+      "filter_submit": "Filter",
+      "filter_clear": "Clear",
+      "empty_title": "No machines yet",
+      "empty_description": "Register the first machine so you can deploy app environments."
+    },
+    "releases": {
+      "title": "Releases",
+      "description": "Every push or manual trigger as build + deploy fan-out + outcome.",
+      "filter_search": "Search",
+      "filter_status": "Status",
+      "filter_all_m": "All",
+      "filter_all_f": "All",
+      "filter_app": "App",
+      "filter_ref": "Ref",
+      "filter_submit": "Filter",
+      "filter_clear": "Clear",
+      "load_error": "Could not load releases."
     }
   }
 }
