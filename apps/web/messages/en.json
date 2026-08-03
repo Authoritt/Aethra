@@ -45,7 +45,10 @@
     "load_error": "Could not load the list. Make sure the API is running.",
     "load_error_short": "Could not load the list.",
     "all_f": "All",
-    "irreversible": "This action cannot be undone."
+    "irreversible": "This action cannot be undone.",
+    "name": "Name",
+    "description": "Description",
+    "save_changes": "Save changes"
   },
   "nav": {
     "group_operation": "Operations",
@@ -351,6 +354,16 @@
     },
     "template_mapping": {
       "help": "Each environment can track a different branch. If an environment is not mapped, the instance uses the default branch ({branch})."
+    },
+    "edit_forms": {
+      "error_client": "Error saving the client",
+      "error_vm": "Error saving the VM",
+      "error_template": "Error saving the template",
+      "error_project": "Error saving the project",
+      "error_service": "Error saving the service",
+      "public_ip": "Public IP",
+      "default_branch": "Default branch",
+      "exposure": "Exposure"
     }
   },
   "pages": {

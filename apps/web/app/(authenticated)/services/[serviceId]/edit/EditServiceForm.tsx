@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save } from "lucide-react";
@@ -11,6 +12,8 @@ import type { ManagedServiceDetailDto } from "@/lib/types";
 
 /** Edita los campos mutables de un servicio (PATCH /api/services/{id}). Slug/imagen/puerto/VM no cambian. */
 export function EditServiceForm({ service }: { service: ManagedServiceDetailDto }) {
+  const c = useTranslations("common");
+  const ef = useTranslations("components.edit_forms");
   const router = useRouter();
   const [name, setName] = useState(service.name);
   const [exposedExternally, setExposedExternally] = useState(service.exposedExternally);
@@ -34,7 +37,7 @@ export function EditServiceForm({ service }: { service: ManagedServiceDetailDto 
         e instanceof ApiError
           ? ((e.body as { message?: string; detail?: string } | undefined)?.message ??
               (e.body as { detail?: string } | undefined)?.detail ?? `Error ${e.status}`)
-          : "Error guardando el servicio",
+          : ef("error_service"),
       );
     } finally {
       setBusy(false);
@@ -43,10 +46,10 @@ export function EditServiceForm({ service }: { service: ManagedServiceDetailDto 
 
   return (
     <div className="flex max-w-2xl flex-col gap-4">
-      <Field label="Nombre">
+      <Field label={c("name")}>
         <Input value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
-      <Field label="Exposición">
+      <Field label={ef("exposure")}>
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input
             type="checkbox"
@@ -61,7 +64,7 @@ export function EditServiceForm({ service }: { service: ManagedServiceDetailDto 
       <div className="flex justify-end">
         <Button type="button" onClick={save} disabled={busy}>
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Guardar cambios
+          {c("save_changes")}
         </Button>
       </div>
     </div>

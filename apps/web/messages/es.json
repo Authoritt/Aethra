@@ -45,7 +45,10 @@
     "load_error": "No se pudo cargar el listado. Verificá que la API esté corriendo.",
     "load_error_short": "No se pudo cargar el listado.",
     "all_f": "Todas",
-    "irreversible": "Esta acción no se puede deshacer."
+    "irreversible": "Esta acción no se puede deshacer.",
+    "name": "Nombre",
+    "description": "Descripción",
+    "save_changes": "Guardar cambios"
   },
   "nav": {
     "group_operation": "Operación",
@@ -351,6 +354,16 @@
     },
     "template_mapping": {
       "help": "Cada ambiente puede trackear una rama distinta. Si un ambiente no está mapeado, la instancia usa el branch por defecto ({branch})."
+    },
+    "edit_forms": {
+      "error_client": "Error guardando el cliente",
+      "error_vm": "Error guardando la VM",
+      "error_template": "Error guardando la plantilla",
+      "error_project": "Error guardando el proyecto",
+      "error_service": "Error guardando el servicio",
+      "public_ip": "IP pública",
+      "default_branch": "Branch por defecto",
+      "exposure": "Exposición"
     }
   },
   "pages": {

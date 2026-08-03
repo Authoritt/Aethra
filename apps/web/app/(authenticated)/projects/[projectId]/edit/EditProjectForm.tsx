@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save } from "lucide-react";
@@ -11,6 +12,8 @@ import type { ProjectDetailV2 } from "@/lib/types";
 
 /** Edita los campos de un proyecto existente (PATCH /api/projects/{id}). El slug no cambia. */
 export function EditProjectForm({ project }: { project: ProjectDetailV2 }) {
+  const c = useTranslations("common");
+  const ef = useTranslations("components.edit_forms");
   const router = useRouter();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? "");
@@ -37,7 +40,7 @@ export function EditProjectForm({ project }: { project: ProjectDetailV2 }) {
       toast.error(
         e instanceof ApiError
           ? ((e.body as { message?: string } | undefined)?.message ?? `Error ${e.status}`)
-          : "Error guardando el proyecto",
+          : ef("error_project"),
       );
     } finally {
       setBusy(false);
@@ -46,10 +49,10 @@ export function EditProjectForm({ project }: { project: ProjectDetailV2 }) {
 
   return (
     <div className="flex max-w-2xl flex-col gap-4">
-      <Field label="Nombre">
+      <Field label={c("name")}>
         <Input value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
-      <Field label="Descripción">
+      <Field label={c("description")}>
         <Input value={description} onChange={(e) => setDescription(e.target.value)} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
@@ -64,7 +67,7 @@ export function EditProjectForm({ project }: { project: ProjectDetailV2 }) {
       <div className="flex justify-end">
         <Button type="button" onClick={save} disabled={busy}>
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Guardar cambios
+          {c("save_changes")}
         </Button>
       </div>
     </div>
