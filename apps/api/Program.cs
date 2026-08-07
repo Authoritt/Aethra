@@ -263,6 +263,44 @@ if (applyMigrations)
     await app.Services.ApplyPendingMigrationsAsync();
 }
 
+// Postura de autenticacion, declarada AL ARRANCAR y no cuando alguien entra.
+//
+// El log de /auth/login avisa cuando la rama de bootstrap SE TOMA. Eso deja un hueco:
+// un contador a cero no distingue "nunca hizo falta" de "nunca alcanzable", asi que el
+// silencio no informa. Esto lo cierra por el otro lado -- dice si la rama esta ABIERTA,
+// sin esperar a que alguien la use.
+//
+// Best-effort: si la BD no responde todavia (pipeline que migra aparte), no se tumba el
+// arranque por un mensaje de diagnostico.
+try
+{
+    using var arranque = app.Services.CreateScope();
+    var usuarios = await arranque.ServiceProvider
+        .GetRequiredService<Aethra.Modules.Identity.Infrastructure.EfUserStore>()
+        .CountAsync(CancellationToken.None);
+    var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Aethra.Auth.Postura");
+    if (Aethra.Modules.Identity.Domain.BootstrapLogin.Evaluar(usuarios)
+        == Aethra.Modules.Identity.Domain.BootstrapLoginPosture.Abierto)
+    {
+        log.LogWarning(
+            Aethra.Modules.Identity.Domain.BootstrapLogin.PlantillaAbierto,
+            usuarios,
+            applyMigrations);
+    }
+    else
+    {
+        log.LogInformation(
+            Aethra.Modules.Identity.Domain.BootstrapLogin.PlantillaCerrado,
+            usuarios);
+    }
+}
+catch (Exception ex)
+{
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Aethra.Auth.Postura")
+        .LogWarning(ex, "ARRANQUE: no se pudo determinar la postura de autenticacion ({Tipo}).",
+            ex.GetType().Name);
+}
+
 // -----------------------------------------------------------------------------
 // Pipeline HTTP
 // -----------------------------------------------------------------------------
