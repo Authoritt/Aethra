@@ -152,7 +152,7 @@ de .NET y de Next, y no es rápido.
 
 Las migraciones se aplican al arrancar porque el compose pone `Aethra__ApplyMigrationsOnStart=true`.
 Es opt-in a propósito: un despliegue gestionado las corre desde su pipeline, y no quieres dos
-instancias migrando a la vez. `/openapi/v1.json` se sirve solo en `Development`.
+instancias migrando a la vez. `/openapi/v1.json` se sirve siempre; fuera de `Development` exige autenticacion.
 
 El compose levanta cuatro contenedores: el central, el panel Next.js, Postgres y un registry local al
 que empuja el pipeline de build. El **satélite no está ahí a propósito** — va en cada máquina que
