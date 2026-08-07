@@ -107,6 +107,114 @@ public sealed class McpToolScopeTests
         descuadres.Should().BeEmpty(string.Join(" | ", descuadres));
     }
 
+    /// <summary>
+    /// La guarda ocurre ANTES del efecto. Es la propiedad que el test anterior NO puede dar:
+    /// una tool que mutara y despues comprobara su scope pasaria aquel, porque alli solo se
+    /// exige que la guarda EXISTA en el cuerpo.
+    ///
+    /// <para>
+    /// Aproximacion, y conviene decirlo: compara la POSICION TEXTUAL de la guarda con la del
+    /// primer <c>await</c> o <c>mediator.Send/Publish</c>. No es analisis de flujo. Una tool que
+    /// mutara por una via que no pase por esos marcadores -- una escritura sincrona directa, por
+    /// ejemplo -- se le escaparia. La garantia real exige mover la comprobacion al pipeline (#1);
+    /// esto es lo que se puede afirmar sin un servidor corriendo.
+    /// </para>
+    ///
+    /// <para>Hoy pasa en las 74 tools mutantes reales. Verificado por mutacion: invertir el orden
+    /// en una tool lo detecta.</para>
+    /// </summary>
+    [Fact]
+    public void La_guarda_ocurre_antes_del_primer_efecto()
+    {
+        var tardias = new List<string>();
+        var revisadas = 0;
+
+        foreach (var archivo in ArchivosDeTools())
+        {
+            foreach (var trozo in File.ReadAllText(archivo).Split(ToolAttribute, StringSplitOptions.None).Skip(1))
+            {
+                var cabecera = trozo.Length > 400 ? trozo[..400] : trozo;
+                if (Regex.IsMatch(cabecera, @"ReadOnly\s*=\s*true") || trozo.Contains("NotImplemented(", StringComparison.Ordinal))
+                {
+                    continue;   // solo-lectura y stubs no mutan
+                }
+
+                var cuerpo = trozo.Length > 4000 ? trozo[..4000] : trozo;
+                var orden = Clasificar(cuerpo);
+                if (orden == OrdenDeGuarda.SinOrdenComprobable)
+                {
+                    continue;   // falta la guarda o falta el efecto: no hay nada que ordenar
+                }
+
+                revisadas++;
+                if (orden == OrdenDeGuarda.EfectoAntes)
+                {
+                    tardias.Add($"{Path.GetFileName(archivo)} :: {NombreDeTool(trozo)}");
+                }
+            }
+        }
+
+        revisadas.Should().BeGreaterThan(0, "sin tools revisadas el test pasaria vacio");
+        tardias.Should().BeEmpty(
+            $"la guarda debe preceder al efecto, y {tardias.Count} de {revisadas} no lo hace: "
+            + string.Join(", ", tardias));
+    }
+
+    /// <summary>
+    /// Las TRES cosas que le pueden pasar al orden de una tool. Son tres y no dos: "la guarda va
+    /// antes" y "aqui no hay nada que ordenar" son hechos distintos, y un <c>bool</c> los aplasta
+    /// en el mismo <c>false</c>. El fence necesita separarlos para contar cuantas tools revisa de
+    /// verdad -- si las cuenta mal, su unica defensa contra pasar en vacio (<c>revisadas &gt; 0</c>)
+    /// deja de valer.
+    /// </summary>
+    public enum OrdenDeGuarda
+    {
+        /// <summary>Falta la guarda o falta el efecto: no hay par que ordenar.</summary>
+        SinOrdenComprobable,
+
+        /// <summary>La guarda precede al primer efecto. Es lo correcto.</summary>
+        GuardaAntes,
+
+        /// <summary>Hay un efecto ANTES de la guarda: la comprobacion llega tarde.</summary>
+        EfectoAntes,
+    }
+
+    /// <summary>
+    /// El comparador de orden. <b>Lo llama el fence</b>, y es lo que prueban los casos sinteticos:
+    /// una copia del fence en el test, o del test en el fence, seria un fence sin probar con
+    /// pruebas que pasan (lo senalo una revision automatica en el PR, y tenia razon).
+    /// </summary>
+    internal static OrdenDeGuarda Clasificar(string cuerpo)
+    {
+        var guarda = Regex.Match(cuerpo, @"!caller\.HasScope");
+        var efecto = Regex.Match(cuerpo, @"(?<![A-Za-z])await(?![A-Za-z])|mediator\.(Send|Publish)");
+        if (!guarda.Success || !efecto.Success)
+        {
+            return OrdenDeGuarda.SinOrdenComprobable;
+        }
+        return efecto.Index < guarda.Index ? OrdenDeGuarda.EfectoAntes : OrdenDeGuarda.GuardaAntes;
+    }
+
+    /// <summary>
+    /// El comparador muerde. Sin esto, el test de orden podria estar pasando por no encontrar
+    /// nunca sus marcadores en vez de por estar todo en orden -- y yo no sabria cual de las dos.
+    /// Tres intentos de comprobarlo mutando ficheros reales fallaron por errores del arnes, no
+    /// del fence; con entradas sinteticas no hay arnes que falle.
+    /// </summary>
+    [Theory]
+    [InlineData("if (!caller.HasScope(x)) { return y; } var r = await z;", OrdenDeGuarda.GuardaAntes)]
+    [InlineData("var r = await z; if (!caller.HasScope(x)) { return y; }", OrdenDeGuarda.EfectoAntes)]
+    [InlineData("var r = mediator.Send(q); if (!caller.HasScope(x)) { }", OrdenDeGuarda.EfectoAntes)]   // sin await
+    [InlineData("if (!caller.HasScope(x)) { } var r = mediator.Send(q);", OrdenDeGuarda.GuardaAntes)]
+    [InlineData("var awaited = 1; if (!caller.HasScope(x)) { } await z;", OrdenDeGuarda.GuardaAntes)]   // "awaited" no es await
+    // Los dos casos que un bool no sabia decir, y que el fence necesita para no contarlos como revisados:
+    [InlineData("var r = await z; var s = await w;", OrdenDeGuarda.SinOrdenComprobable)]                // sin guarda
+    [InlineData("if (!caller.HasScope(x)) { return y; } return Ok();", OrdenDeGuarda.SinOrdenComprobable)] // sin efecto
+    public void El_comparador_de_orden_distingue_los_tres_casos(string cuerpo, OrdenDeGuarda esperado)
+    {
+        Clasificar(cuerpo).Should().Be(esperado);
+    }
+
     private static IEnumerable<string> ScopesEn(string trozo, string patron)
         => Regex.Matches(trozo, patron).Select(m => m.Groups[1].Value);
 
