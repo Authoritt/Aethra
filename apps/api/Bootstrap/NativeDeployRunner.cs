@@ -6,6 +6,7 @@ using Aethra.Modules.Deployments.Domain.Deployment;
 using Aethra.Modules.Deployments.Infrastructure;
 using Aethra.Modules.Deployments.Infrastructure.Build;
 using Aethra.Modules.Monitoring.UseCases.Commands;
+using Aethra.Modules.Proxy.UseCases.Routes;
 using Aethra.Modules.Proxy.UseCases.Routes.Commands;
 using Aethra.Modules.Proxy.UseCases.Routes.Queries;
 using Aethra.Shared.Contracts.Containers;
@@ -450,7 +451,7 @@ public sealed class NativeDeployRunner(
                 var backend = $"http://{slug}-{svc.Name}:{svc.Port}";
                 var r = await mediator.Send(new CreateRouteCommand(
                     host, backend, false, prefix,
-                    "app_environment", instanceId, "native_deploy"), ct).ConfigureAwait(false);
+                    "app_environment", instanceId, RouteOwnershipRules.NativeDeployOrigin), ct).ConfigureAwait(false);
                 routes.Add(r.IsSuccess ? $"{host}{prefix} → {backend}" : $"{host}{prefix} (ya existía)");
                 desired.Add((host.ToLowerInvariant(), prefix));
             }
@@ -462,16 +463,16 @@ public sealed class NativeDeployRunner(
             await EnsureDnsRecordAsync(host, ct).ConfigureAwait(false);
         }
 
-        // 3) Limpiar SOLO rutas mías ({slug}-{svc}:) que NO estén en el set deseado (host+prefix).
-        // Borra hosts viejos de ESTA Instance sin tocar las rutas multi-host vigentes.
+        // 3) Limpiar SOLO rutas mías ({slug}-{svc}: + Origin propio) que NO estén en el set deseado
+        // (host+prefix). Borra hosts viejos de ESTA Instance sin tocar las rutas multi-host vigentes
+        // ni las que apuntan al mismo backend pero no creamos nosotros (ver OT-001, RouteOwnershipRules).
         var myBackends = services.Select(s => $"http://{slug}-{s.Name}:").ToList();
         var all = await mediator.Send(new ListRoutesQuery(), ct).ConfigureAwait(false);
         if (all.IsSuccess)
         {
             foreach (var rt in all.Value)
             {
-                var isMine = myBackends.Any(b => rt.BackendUrl.StartsWith(b, StringComparison.Ordinal));
-                if (isMine && !desired.Contains((rt.Hostname.ToLowerInvariant(), rt.PathPrefix)))
+                if (RouteOwnershipRules.IsObsoleteOwnRoute(rt, myBackends, desired))
                 {
                     await mediator.Send(new DeleteRouteCommand(rt.Id), ct).ConfigureAwait(false);
                     routes.Add($"− {rt.Hostname}{rt.PathPrefix} (obsoleta, borrada)");
