@@ -17,7 +17,7 @@ namespace Aethra.Modules.Monitoring.Infrastructure.Worker;
 ///
 /// <para>Diseño:</para>
 /// <list type="bullet">
-///   <item>Tick de 10s — granularidad menor que el menor intervalo permitido (30s).</item>
+///   <item>Tick configurable (Monitoring__TickSeconds, default 10s) — granularidad menor que el menor intervalo permitido (30s).</item>
 ///   <item>Por cada tick selecciona monitores <c>IsEnabled = true</c> cuyo <c>LastCheckedAt</c>
 ///         indique que ya toca, ordenados por <c>LastCheckedAt ASC NULLS FIRST</c> para no
 ///         starve a los que llevan más tiempo sin probarse.</item>
@@ -32,16 +32,31 @@ namespace Aethra.Modules.Monitoring.Infrastructure.Worker;
 public sealed class MonitorWorker(
     IServiceScopeFactory scopeFactory,
     IClock clock,
+    Microsoft.Extensions.Options.IOptions<MonitorWorkerOptions> opciones,
     ILogger<MonitorWorker> logger) : BackgroundService
 {
-    private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(10);
     private const int MaxParallelism = 8;
     private const int FailureWarningThreshold = 3;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var tick = TickResuelto.Desde(opciones.Value.TickSeconds);
+        if (tick.Recortado)
+        {
+            // El operador pidió algo que el sistema no puede cumplir. Se ajusta, pero se dice:
+            // un recorte callado le deja creyendo que configuró algo que no está pasando.
+            logger.LogWarning(
+                "MonitorWorker: Monitoring__TickSeconds={Pedido} queda fuera de [{Min}, {Max}] y se usa "
+                + "{Efectivo}s. El techo NO es arbitrario: es el intervalo minimo que un monitor puede "
+                + "pedir, y con un tick mas largo ese monitor no puede sondearse a su ritmo.",
+                tick.Pedido.ToString("0.##", CultureInfo.InvariantCulture),
+                MonitorWorkerOptions.TickMinimo.ToString("0.##", CultureInfo.InvariantCulture),
+                MonitorWorkerOptions.TickMaximo.ToString("0.##", CultureInfo.InvariantCulture),
+                tick.Efectivo.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture));
+        }
+
         logger.LogInformation("MonitorWorker arrancando con tick {Tick}s y paralelismo {Par}",
-            TickInterval.TotalSeconds.ToString("0", CultureInfo.InvariantCulture),
+            tick.Efectivo.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture),
             MaxParallelism.ToString(CultureInfo.InvariantCulture));
 
         // Pequeño delay inicial para que la BD y migraciones estén listas.
@@ -54,12 +69,12 @@ public sealed class MonitorWorker(
             return;
         }
 
-        using var timer = new PeriodicTimer(TickInterval);
+        using var timer = new PeriodicTimer(tick.Efectivo);
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {
             try
             {
-                await RunTickAsync(stoppingToken).ConfigureAwait(false);
+                await RunTickAsync(tick.Efectivo, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -74,7 +89,7 @@ public sealed class MonitorWorker(
         }
     }
 
-    private async Task RunTickAsync(CancellationToken ct)
+    private async Task RunTickAsync(TimeSpan tick, CancellationToken ct)
     {
         var now = clock.UtcNow;
         List<MonitorId> dueIds;
@@ -95,9 +110,14 @@ public sealed class MonitorWorker(
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
 
+            // Media rejilla de holgura. Sin ella un monitor solo puede sondearse en el primer
+            // multiplo del tick que SUPERE su intervalo, y como LastCheckedAt se graba al terminar
+            // el probe (unos ms despues del tick), el multiplo exacto se queda corto y se salta:
+            // un monitor de 30s con tick de 10s saldria cada 40s. Ver MonitorWorkerOptions.
+            var holgura = MonitorWorkerOptions.ToleranciaDeRejilla(tick).TotalSeconds;
             dueIds = candidates
                 .Where(c => c.LastCheckedAt is null
-                    || (now - c.LastCheckedAt.Value).TotalSeconds >= c.IntervalSec)
+                    || (now - c.LastCheckedAt.Value).TotalSeconds >= c.IntervalSec - holgura)
                 .Select(c => c.Id)
                 .ToList();
         }
