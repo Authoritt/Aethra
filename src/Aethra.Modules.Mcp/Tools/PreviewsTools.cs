@@ -103,9 +103,17 @@ public sealed class PreviewsTools(IMediator mediator, IMcpCallerContext caller)
             return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
         }
         var result = await mediator.Send(new SetAutoPreviewCommand(templateId, enabled), ct).ConfigureAwait(false);
-        return result.IsSuccess
-            ? McpResponses.Ok(new { template_id = templateId, auto_preview_pull_requests = enabled })
-            : McpResponses.FromError(result.Error);
+        if (!result.IsSuccess)
+        {
+            return McpResponses.FromError(result.Error);
+        }
+        // Lo guardado, no lo pedido: ver McpWriteBack e issue #27.
+        return await McpWriteBack.ConfirmarAsync(
+            c => mediator.Send(new Aethra.Modules.Projects.UseCases.Templates.Queries.GetTemplateByIdQuery(templateId), c),
+            t => new { template_id = t.id, auto_preview_pull_requests = t.autoPreviewPullRequests, state_confirmed = true },
+            motivo => new { template_id = templateId, written = true, state_confirmed = false,
+                note = McpWriteBack.NotaSinConfirmar, readback_error = motivo },
+            ct).ConfigureAwait(false);
     }
 
     [McpServerTool(Name = "aethra_update_user_profile", Destructive = false, Idempotent = true, OpenWorld = false)]

@@ -4,6 +4,7 @@ using Aethra.Modules.Identity.UseCases.Commands;
 using Aethra.Modules.Mcp.Security;
 using Aethra.Modules.Projects.UseCases.Clients.Commands;
 using Aethra.Modules.Projects.UseCases.Instances.Commands;
+using Aethra.Modules.Projects.UseCases.Instances.Queries;
 using Aethra.Modules.Projects.UseCases.Projects.Commands;
 using Aethra.Modules.Projects.UseCases.Templates.Commands;
 using Aethra.Modules.Projects.UseCases.Templates.Dtos;
@@ -22,6 +23,41 @@ namespace Aethra.Modules.Mcp.Tools;
 [McpServerToolType]
 public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
 {
+    /// <summary>
+    /// Relee la Instance despues de escribirla y proyecta lo que quedo GUARDADO.
+    ///
+    /// <para>
+    /// Estos setters devolvian el argumento del llamante como si fuera el estado resultante: si la
+    /// escritura se hubiera recortado, ignorado o perdido contra una escritura concurrente, la
+    /// respuesta habria sido identica byte a byte. Un agente no confirmaba nada salvo que recuerda
+    /// lo que acaba de pedir. Ver issue #27.
+    /// </para>
+    ///
+    /// <para>
+    /// Tres desenlaces, no dos: escrito-y-confirmado, escrito-pero-no-confirmable (la relectura
+    /// fallo), y error de escritura. El de en medio es el que un booleano aplastaria, y es justo el
+    /// que el llamante necesita distinguir.
+    /// </para>
+    /// </summary>
+    private async Task<object> InstanciaTrasEscribir(
+        string instanceId,
+        Func<Aethra.Modules.Projects.UseCases.Instances.Dtos.InstanceDetail, object> proyectar,
+        CancellationToken ct)
+    {
+        return await McpWriteBack.ConfirmarAsync(
+            c => mediator.Send(new GetInstanceByIdQuery(instanceId), c),
+            proyectar,
+            motivo => new
+            {
+                instance_id = instanceId,
+                written = true,
+                state_confirmed = false,
+                note = McpWriteBack.NotaSinConfirmar,
+                readback_error = motivo,
+            },
+            ct).ConfigureAwait(false);
+    }
+
     // ---------------------------------------------------------------- Templates
     [McpServerTool(Name = "aethra_update_template", Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Edita un Template (reemplaza name/description/source/build con los valores provistos — el slug NO cambia). " +
@@ -103,7 +139,15 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
         }
         var value = string.IsNullOrWhiteSpace(trackedRef) ? null : trackedRef.Trim();
         var r = await mediator.Send(new SetTrackedRefCommand(instanceId, value), ct).ConfigureAwait(false);
-        return r.IsSuccess ? McpResponses.Ok(new { instance_id = instanceId, tracked_ref = value }) : McpResponses.FromError(r.Error);
+        if (!r.IsSuccess)
+        {
+            return McpResponses.FromError(r.Error);
+        }
+        return await InstanciaTrasEscribir(instanceId,
+            // effective_tracked_ref es lo que de verdad se desplegara (se resuelve contra el
+            // Template): un dato que el eco del argumento no podia dar nunca.
+            i => new { instance_id = i.id, tracked_ref = i.trackedRef, effective_tracked_ref = i.effectiveTrackedRef, state_confirmed = true },
+            ct).ConfigureAwait(false);
     }
 
     [McpServerTool(Name = "aethra_set_instance_autodeploy", Destructive = false, Idempotent = true, OpenWorld = false)]
@@ -119,7 +163,13 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
             return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
         }
         var r = await mediator.Send(new SetAutoDeployCommand(instanceId, enabled), ct).ConfigureAwait(false);
-        return r.IsSuccess ? McpResponses.Ok(new { instance_id = instanceId, auto_deploy_on_new_build = enabled }) : McpResponses.FromError(r.Error);
+        if (!r.IsSuccess)
+        {
+            return McpResponses.FromError(r.Error);
+        }
+        return await InstanciaTrasEscribir(instanceId,
+            i => new { instance_id = i.id, auto_deploy_on_new_build = i.autoDeployOnNewBuild, state_confirmed = true },
+            ct).ConfigureAwait(false);
     }
 
     [McpServerTool(Name = "aethra_set_custom_domain", Destructive = false, Idempotent = true, OpenWorld = false)]
@@ -136,7 +186,13 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
         }
         var value = string.IsNullOrWhiteSpace(customDomain) ? null : customDomain.Trim();
         var r = await mediator.Send(new SetCustomDomainCommand(instanceId, value), ct).ConfigureAwait(false);
-        return r.IsSuccess ? McpResponses.Ok(new { instance_id = instanceId, custom_domain = value }) : McpResponses.FromError(r.Error);
+        if (!r.IsSuccess)
+        {
+            return McpResponses.FromError(r.Error);
+        }
+        return await InstanciaTrasEscribir(instanceId,
+            i => new { instance_id = i.id, custom_domain = i.customDomain, auto_hostname = i.autoHostname, state_confirmed = true },
+            ct).ConfigureAwait(false);
     }
 
     [McpServerTool(Name = "aethra_delete_instance", Destructive = true, Idempotent = true, OpenWorld = false)]

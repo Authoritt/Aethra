@@ -226,8 +226,38 @@ public sealed class ServicesTools(IMediator mediator, IMcpCallerContext caller)
                 });
         }
         var result = await mediator.Send(new DeleteServiceCommand(serviceId), ct).ConfigureAwait(false);
-        return result.IsSuccess
-            ? McpResponses.Ok(new { service_id = serviceId, status = "Stopped", deregistered = true })
-            : McpResponses.FromError(result.Error);
+        if (!result.IsSuccess)
+        {
+            return McpResponses.FromError(result.Error);
+        }
+
+        // Antes esto devolvia status = "Stopped" como literal. Dos problemas, no uno:
+        //  1. Afirmaba el estado del registro sin leerlo. Si el comando hubiera dejado otro, o una
+        //     escritura concurrente lo hubiera cambiado, la respuesta habria dicho "Stopped" igual.
+        //  2. El NOMBRE del campo invita a una inferencia mas fuerte que el hecho: esta baja NO
+        //     para el contenedor (lo dice la descripcion de la tool), pero un agente que lee
+        //     status="Stopped" concluira que el servicio dejo de correr. Ahora se dice explicito.
+        return await McpWriteBack.ConfirmarAsync(
+            c => mediator.Send(new GetServiceByIdQuery(serviceId), c),
+            s => new
+            {
+                service_id = serviceId,
+                deregistered = true,
+                record_status = s.Status,
+                state_confirmed = true,
+                container_untouched = true,
+                note = "record_status es el estado del REGISTRO en Aethra, no del contenedor: esta "
+                    + "baja no detiene el contenedor ni borra volumenes ni datos.",
+            },
+            motivo => new
+            {
+                service_id = serviceId,
+                deregistered = true,
+                state_confirmed = false,
+                readback_error = motivo,
+                container_untouched = true,
+                note = McpWriteBack.NotaSinConfirmar,
+            },
+            ct).ConfigureAwait(false);
     }
 }
