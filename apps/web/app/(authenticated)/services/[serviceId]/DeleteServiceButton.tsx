@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
@@ -24,6 +25,8 @@ export function DeleteServiceButton({
   slug: string;
   bindingsCount: number;
 }) {
+  const c = useTranslations("common");
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -52,14 +55,14 @@ export function DeleteServiceButton({
     <>
       <Button variant="destructive" onClick={() => setOpen(true)}>
         <Trash2 className="mr-2 h-4 w-4" />
-        Eliminar
+        {c("delete")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar servicio "{slug}"</DialogTitle>
+            <DialogTitle>{d("title_service", { slug })}</DialogTitle>
             <DialogDescription>
-              El contenedor se detendrá y el servicio quedará marcado como
+              {d("service_warning")}
               stopped.
               {bindingsCount > 0 ? (
                 <>
@@ -75,7 +78,7 @@ export function DeleteServiceButton({
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancelar
+              {c("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -85,7 +88,7 @@ export function DeleteServiceButton({
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Eliminar
+              {c("delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

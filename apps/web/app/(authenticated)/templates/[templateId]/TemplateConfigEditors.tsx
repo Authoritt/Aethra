@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus, Save, Trash2, GitBranch } from "lucide-react";
 import { toast } from "sonner";
@@ -25,6 +26,7 @@ export function EnvironmentMappingEditor({
   initial: TemplateEnvironmentMapping[];
   defaultBranch: string;
 }) {
+  const p = useTranslations("components.template_mapping");
   const router = useRouter();
   const [rows, setRows] = useState<TemplateEnvironmentMapping[]>(initial.length ? initial : []);
   const [busy, setBusy] = useState(false);
@@ -52,8 +54,7 @@ export function EnvironmentMappingEditor({
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs text-muted-foreground">
-        Cada ambiente puede trackear una rama distinta. Si un ambiente no está mapeado, la instancia usa
-        el branch por defecto (<code className="font-mono">{defaultBranch}</code>).
+        {p("help", { branch: defaultBranch })}
       </p>
       {rows.map((r, i) => (
         <div key={i} className="flex items-center gap-2">
@@ -81,11 +82,12 @@ export function EnvironmentMappingEditor({
 
 /** Botón de borrado de plantilla (DELETE /api/templates/{id}?force=true). */
 export function DeleteTemplateButton({ templateId, name }: { templateId: string; name: string }) {
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   async function del() {
-    if (!confirm(`¿Borrar la plantilla "${name}" y TODAS sus instancias? Esta acción no se puede deshacer.`)) {
+    if (!confirm(d("confirm_template", { name }))) {
       return;
     }
     setBusy(true);

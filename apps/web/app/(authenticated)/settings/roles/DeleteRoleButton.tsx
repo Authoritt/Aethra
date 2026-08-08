@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
@@ -16,6 +17,8 @@ import {
 import { ApiError, api } from "@/lib/api";
 
 export function DeleteRoleButton({ id, slug }: { id: string; slug: string }) {
+  const c = useTranslations("common");
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -50,20 +53,19 @@ export function DeleteRoleButton({ id, slug }: { id: string; slug: string }) {
         onClick={() => setOpen(true)}
       >
         <Trash2 className="mr-2 h-4 w-4" />
-        Borrar
+        {c("delete")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Borrar rol &quot;{slug}&quot;</DialogTitle>
+            <DialogTitle>{d("title_role", { slug })}</DialogTitle>
             <DialogDescription>
-              Si el rol está asignado a uno o más usuarios, el borrado fallará.
-              Reasigná esos usuarios antes.
+              {d("role_warning")} {d("role_warning_2")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancelar
+              {c("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -73,7 +75,7 @@ export function DeleteRoleButton({ id, slug }: { id: string; slug: string }) {
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Borrar
+              {c("delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

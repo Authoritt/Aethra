@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
@@ -24,6 +25,8 @@ export function DeleteZoneButton({
   name: string;
   recordsCount: number;
 }) {
+  const c = useTranslations("common");
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,7 +34,7 @@ export function DeleteZoneButton({
   function onClick() {
     if (recordsCount > 0) {
       toast.error(
-        `La zona tiene ${recordsCount} record(s) gestionados. Eliminalos primero.`,
+        d("zone_has_records", { count: recordsCount }),
       );
       return;
     }
@@ -64,20 +67,20 @@ export function DeleteZoneButton({
     <>
       <Button variant="destructive" size="sm" onClick={onClick}>
         <Trash2 className="mr-2 h-4 w-4" />
-        Eliminar zona
+        {d("zone_title")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar zona "{name}"</DialogTitle>
+            <DialogTitle>{d("title_zone", { name })}</DialogTitle>
             <DialogDescription>
-              No se elimina la zona en Cloudflare, solo se quita el token
+              {d("zone_warning")}
               cifrado y el seguimiento local.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancelar
+              {c("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -87,7 +90,7 @@ export function DeleteZoneButton({
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Eliminar
+              {c("delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

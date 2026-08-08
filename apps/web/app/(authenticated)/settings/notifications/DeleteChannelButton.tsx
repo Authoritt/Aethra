@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
@@ -22,6 +23,8 @@ export function DeleteChannelButton({
   id: string;
   name: string;
 }) {
+  const c = useTranslations("common");
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,19 +56,19 @@ export function DeleteChannelButton({
     <>
       <Button variant="destructive" size="sm" onClick={() => setOpen(true)}>
         <Trash2 className="mr-2 h-4 w-4" />
-        Borrar
+        {c("delete")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar canal "{name}"</DialogTitle>
+            <DialogTitle>{d("title_channel", { name })}</DialogTitle>
             <DialogDescription>
-              Las entregas en cola asociadas se marcaran Failed. Accion irreversible.
+              {d("channel_warning")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancelar
+              {c("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -73,7 +76,7 @@ export function DeleteChannelButton({
               disabled={loading}
             >
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Eliminar
+              {c("delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

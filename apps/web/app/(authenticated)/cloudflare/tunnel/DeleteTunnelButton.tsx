@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -9,24 +10,26 @@ import { ApiError, api } from "@/lib/api";
 
 /** Desconecta el túnel gestionado (DELETE /api/cloudflare/tunnel). */
 export function DeleteTunnelButton({ name }: { name: string }) {
+  const c = useTranslations("common");
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   async function del() {
-    if (!confirm(`¿Desconectar el túnel "${name}"? Aethra dejará de gestionar su ingress por API.`)) {
+    if (!confirm(d("confirm_tunnel", { name }))) {
       return;
     }
     setBusy(true);
     try {
       await api("/api/cloudflare/tunnel", { method: "DELETE" });
-      toast.success("Túnel desconectado");
+      toast.success(d("tunnel_disconnected"));
       router.push("/cloudflare");
       router.refresh();
     } catch (e) {
       toast.error(
         e instanceof ApiError
           ? ((e.body as { message?: string } | undefined)?.message ?? `Error ${e.status}`)
-          : "Error desconectando el túnel",
+          : d("tunnel_error"),
       );
     } finally {
       setBusy(false);

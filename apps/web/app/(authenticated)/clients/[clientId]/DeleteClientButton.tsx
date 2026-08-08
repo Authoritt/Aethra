@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,11 +17,12 @@ function errMsg(e: unknown): string {
 
 /** Botón de borrado de cliente (DELETE /api/clients/{id}?force=true). */
 export function DeleteClientButton({ clientId, displayName }: { clientId: string; displayName: string }) {
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   async function del() {
-    if (!confirm(`¿Borrar el cliente "${displayName}"? Esto lo quita de Aethra junto con sus instancias.`)) {
+    if (!confirm(d("confirm_client", { name: displayName }))) {
       return;
     }
     setBusy(true);

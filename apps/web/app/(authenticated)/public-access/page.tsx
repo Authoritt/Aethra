@@ -21,6 +21,7 @@ import { PublicAccessReconcileActions } from "@/components/aethra/PublicAccessRe
 import { PublicAccessVerifyButton } from "@/components/aethra/PublicAccessVerifyButton";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
 import { PageHeader } from "@/components/layout/page-header";
+import { getTranslations } from "next-intl/server";
 import { serverFetch } from "@/lib/server-fetch";
 import type { AppOverviewDto, PublicEndpointOverviewDto } from "@/lib/types";
 
@@ -41,6 +42,8 @@ export default async function PublicAccessPage({
 }: {
   searchParams: Promise<PublicAccessFilters>;
 }) {
+  const t = await getTranslations("pages.public_access");
+  const c = await getTranslations("common");
   const filters = await searchParams;
   const query = buildQuery(filters);
   const [data, appsData] = await Promise.all([
@@ -72,14 +75,14 @@ export default async function PublicAccessPage({
   return (
     <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Public Access"
-        description="Hosts publicos agrupados por owner operacional, rutas tecnicas, monitor y salud."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex flex-wrap gap-2">
             <AssignInferredRouteOwnersButton count={inferredOwnerCandidateCount} />
             <SavedViewsMenu storageKey="aethra.savedViews.publicAccess" />
             <Button asChild variant="outline">
-              <Link href="/routes">Routes tecnicas</Link>
+              <Link href="/routes">{t("action_routes")}</Link>
             </Button>
           </div>
         }
@@ -89,22 +92,22 @@ export default async function PublicAccessPage({
         <CardContent className="p-4">
           <form method="get" className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <Label htmlFor="q">Buscar</Label>
+              <Label htmlFor="q">{c("search")}</Label>
               <Input
                 id="q"
                 name="q"
                 defaultValue={filters.q ?? ""}
-                placeholder="host, app, backend, issue"
+                placeholder={t("filter_search_placeholder")}
                 className="w-64"
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="health">Health</Label>
+              <Label htmlFor="health">{t("filter_health")}</Label>
               <MultiSelectFilter
                 id="health"
                 name="health"
                 value={filters.health}
-                allLabel="Todos"
+                allLabel={c("all")}
                 options={[
                   { value: "healthy", label: "Healthy" },
                   { value: "degraded", label: "Degraded" },
@@ -113,12 +116,12 @@ export default async function PublicAccessPage({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="dns">DNS</Label>
+              <Label htmlFor="dns">{t("filter_dns")}</Label>
               <MultiSelectFilter
                 id="dns"
                 name="dns"
                 value={filters.dns}
-                allLabel="Todos"
+                allLabel={c("all")}
                 options={[
                   { value: "ok", label: "OK" },
                   { value: "missing", label: "Missing" },
@@ -127,12 +130,12 @@ export default async function PublicAccessPage({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="tunnel">Tunnel</Label>
+              <Label htmlFor="tunnel">{t("filter_tunnel")}</Label>
               <MultiSelectFilter
                 id="tunnel"
                 name="tunnel"
                 value={filters.tunnel}
-                allLabel="Todos"
+                allLabel={c("all")}
                 options={[
                   { value: "ok", label: "OK" },
                   { value: "missing", label: "Missing" },
@@ -140,12 +143,12 @@ export default async function PublicAccessPage({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="monitor">Monitor</Label>
+              <Label htmlFor="monitor">{t("filter_monitor")}</Label>
               <MultiSelectFilter
                 id="monitor"
                 name="monitor"
                 value={filters.monitor}
-                allLabel="Todos"
+                allLabel={c("all")}
                 options={[
                   { value: "up", label: "Up" },
                   { value: "down", label: "Down" },
@@ -154,12 +157,12 @@ export default async function PublicAccessPage({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="appId">App</Label>
+              <Label htmlFor="appId">{t("filter_app")}</Label>
               <MultiSelectFilter
                 id="appId"
                 name="appId"
                 value={filters.appId}
-                allLabel="Todas"
+                allLabel={c("all_f")}
                 className="max-w-64"
                 options={apps.map((app) => ({ value: app.id, label: app.name }))}
               />
@@ -170,16 +173,16 @@ export default async function PublicAccessPage({
                 id="environment"
                 name="environment"
                 value={filters.environment}
-                allLabel="Todos"
+                allLabel={c("all")}
                 options={environmentOptions.map((env) => ({ value: env, label: env }))}
               />
             </div>
-            <Button type="submit">Filtrar</Button>
+            <Button type="submit">{c("filter")}</Button>
             {hasFilters ? (
               <Button asChild variant="ghost" size="sm">
                 <Link href="/public-access">
                   <X className="mr-2 h-4 w-4" />
-                  Limpiar
+                  {c("clear")}
                 </Link>
               </Button>
             ) : null}
@@ -196,11 +199,11 @@ export default async function PublicAccessPage({
       ) : endpoints.length === 0 ? (
         <EmptyState
           icon={<Network className="h-6 w-6" />}
-          title="Sin endpoints publicos"
+          title={t("empty")}
           description={
             hasFilters
-              ? "No hay endpoints que coincidan con los filtros actuales."
-              : "Cuando existan routes o dominios de apps apareceran agrupados por hostname."
+              ? t("empty_filtered")
+              : t("empty_hint")
           }
         />
       ) : (
@@ -223,7 +226,7 @@ export default async function PublicAccessPage({
                     <p className="mt-1 truncate text-sm text-muted-foreground">
                       {endpoint.appName
                         ? `${endpoint.appName} / ${endpoint.tenantName ?? "default"} / ${endpoint.environment ?? "-"}`
-                        : "Sin owner operacional"}
+                        : t("no_owner")}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -303,7 +306,7 @@ export default async function PublicAccessPage({
                         </TableCell>
                         <TableCell>
                           <Link href={`/routes/${route.routeId}`} className="text-sm text-primary">
-                            Ver route
+                            {t("view_route")}
                           </Link>
                         </TableCell>
                       </TableRow>

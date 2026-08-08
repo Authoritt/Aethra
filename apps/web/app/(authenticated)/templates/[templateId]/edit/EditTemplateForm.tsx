@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus, Save, Trash2 } from "lucide-react";
@@ -12,6 +13,8 @@ import type { TemplateBuildArg, TemplateDetail } from "@/lib/types";
 
 /** Edita los campos de una plantilla existente (PATCH /api/templates/{id}). El slug no cambia. */
 export function EditTemplateForm({ template }: { template: TemplateDetail }) {
+  const c = useTranslations("common");
+  const ef = useTranslations("components.edit_forms");
   const router = useRouter();
   const [name, setName] = useState(template.name);
   const [description, setDescription] = useState(template.description ?? "");
@@ -51,7 +54,7 @@ export function EditTemplateForm({ template }: { template: TemplateDetail }) {
       toast.error(
         e instanceof ApiError
           ? ((e.body as { message?: string } | undefined)?.message ?? `Error ${e.status}`)
-          : "Error guardando la plantilla",
+          : ef("error_template"),
       );
     } finally {
       setBusy(false);
@@ -60,17 +63,17 @@ export function EditTemplateForm({ template }: { template: TemplateDetail }) {
 
   return (
     <div className="flex max-w-2xl flex-col gap-4">
-      <Field label="Nombre">
+      <Field label={c("name")}>
         <Input value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
-      <Field label="Descripción">
+      <Field label={c("description")}>
         <Input value={description} onChange={(e) => setDescription(e.target.value)} />
       </Field>
       <Field label="Repo Git">
         <Input value={gitRepoUrl} onChange={(e) => setGitRepoUrl(e.target.value)} className="font-mono text-xs" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Branch por defecto">
+        <Field label={ef("default_branch")}>
           <Input value={branch} onChange={(e) => setBranch(e.target.value)} className="font-mono text-xs" />
         </Field>
         <Field label="Base directory">
@@ -125,7 +128,7 @@ export function EditTemplateForm({ template }: { template: TemplateDetail }) {
       <div className="flex justify-end">
         <Button type="button" onClick={save} disabled={busy}>
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Guardar cambios
+          {c("save_changes")}
         </Button>
       </div>
     </div>

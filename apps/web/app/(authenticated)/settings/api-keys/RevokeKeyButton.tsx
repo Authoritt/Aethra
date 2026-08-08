@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
@@ -24,6 +25,8 @@ export function RevokeKeyButton({
   name: string;
   alreadyRevoked: boolean;
 }) {
+  const c = useTranslations("common");
+  const d = useTranslations("components.destructive");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -71,15 +74,14 @@ export function RevokeKeyButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Revocar API key "{name}"</DialogTitle>
+            <DialogTitle>{d("title_apikey", { name })}</DialogTitle>
             <DialogDescription>
-              Cualquier integración que la use perderá acceso inmediatamente.
-              Esta acción no se puede deshacer.
+              {d("apikey_warning")} {c("irreversible")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancelar
+              {c("cancel")}
             </Button>
             <Button
               variant="destructive"

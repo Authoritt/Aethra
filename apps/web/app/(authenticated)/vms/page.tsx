@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { KpiCard } from "@/components/aethra/kpi-card";
 import { MultiSelectFilter } from "@/components/aethra/MultiSelectFilter";
 import { SavedViewsMenu } from "@/components/aethra/SavedViewsMenu";
+import { getTranslations } from "next-intl/server";
 import { serverFetch } from "@/lib/server-fetch";
 import type { MachineOverviewDto } from "@/lib/types";
 
@@ -27,6 +28,8 @@ export default async function VmsPage({
 }: {
   searchParams: Promise<MachineFilters>;
 }) {
+  const t = await getTranslations("pages.vms");
+  const c = await getTranslations("common");
   const filters = await searchParams;
   const query = buildQuery(filters);
   const data = await serverFetch<MachineOverviewDto[]>(`/api/ops/machines${query}`);
@@ -45,15 +48,15 @@ export default async function VmsPage({
   return (
     <div className="space-y-6 px-6 py-8 md:px-10 md:py-10">
       <PageHeader
-        title="Machines"
-        description="Capacidad real de despliegue: cada maquina muestra sus app environments, previews, salud y disponibilidad."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex flex-wrap gap-2">
             <SavedViewsMenu storageKey="aethra.savedViews.machines" />
             <Button asChild>
               <Link href="/vms/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Registrar machine
+                {t("action_register")}
               </Link>
             </Button>
           </div>
@@ -64,22 +67,22 @@ export default async function VmsPage({
         <CardContent className="p-4">
           <form method="get" className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <Label htmlFor="q">Buscar</Label>
+              <Label htmlFor="q">{c("search")}</Label>
               <Input
                 id="q"
                 name="q"
                 defaultValue={filters.q ?? ""}
-                placeholder="machine, app, tenant, environment"
+                placeholder={t("filter_search_placeholder")}
                 className="w-72"
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="readiness">Readiness</Label>
+              <Label htmlFor="readiness">{t("filter_readiness")}</Label>
               <MultiSelectFilter
                 id="readiness"
                 name="readiness"
                 value={filters.readiness}
-                allLabel="Todas"
+                allLabel={c("all_f")}
                 options={[
                   { value: "ready", label: "Ready" },
                   { value: "busy", label: "Busy" },
@@ -90,24 +93,24 @@ export default async function VmsPage({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="acceptsPreviews">Preview pool</Label>
+              <Label htmlFor="acceptsPreviews">{t("filter_preview_pool")}</Label>
               <select
                 id="acceptsPreviews"
                 name="acceptsPreviews"
                 defaultValue={filters.acceptsPreviews ?? ""}
                 className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <option value="">Todas</option>
-                <option value="true">Acepta previews</option>
-                <option value="false">No previews</option>
+                <option value="">{c("all_f")}</option>
+                <option value="true">{t("option_accepts_previews")}</option>
+                <option value="false">{t("option_no_previews")}</option>
               </select>
             </div>
-            <Button type="submit">Filtrar</Button>
+            <Button type="submit">{c("filter")}</Button>
             {hasFilters ? (
               <Button asChild variant="ghost" size="sm">
                 <Link href="/vms">
                   <X className="mr-2 h-4 w-4" />
-                  Limpiar
+                  {c("clear")}
                 </Link>
               </Button>
             ) : null}
@@ -118,19 +121,19 @@ export default async function VmsPage({
       {errored ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">
-            No se pudo cargar la vista operacional de machines.
+            {t("load_error")}
           </CardContent>
         </Card>
       ) : machines.length === 0 ? (
         <EmptyState
           icon={<Server className="h-6 w-6" />}
-          title="No hay machines"
-          description="Registra la primera maquina para poder desplegar app environments."
+          title={t("empty_title")}
+          description={t("empty_description")}
           action={
             <Button asChild>
               <Link href="/vms/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Registrar machine
+                {t("action_register")}
               </Link>
             </Button>
           }
@@ -266,7 +269,7 @@ export default async function VmsPage({
                       </div>
                     ) : (
                       <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                        Sin app environments asignados.
+                        {t("no_app_envs")}
                       </p>
                     )}
                   </CardContent>

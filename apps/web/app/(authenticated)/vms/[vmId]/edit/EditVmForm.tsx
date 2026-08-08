@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save } from "lucide-react";
@@ -11,6 +12,8 @@ import type { VmDto } from "@/lib/types";
 
 /** Edita los datos editables de una VM (PATCH /api/vms/{id}). El slug no cambia. */
 export function EditVmForm({ vm }: { vm: VmDto }) {
+  const c = useTranslations("common");
+  const ef = useTranslations("components.edit_forms");
   const router = useRouter();
   const [name, setName] = useState(vm.name);
   const [publicIp, setPublicIp] = useState(vm.publicIp ?? "");
@@ -37,7 +40,7 @@ export function EditVmForm({ vm }: { vm: VmDto }) {
       toast.error(
         e instanceof ApiError
           ? ((e.body as { message?: string } | undefined)?.message ?? `Error ${e.status}`)
-          : "Error guardando la VM",
+          : ef("error_vm"),
       );
     } finally {
       setBusy(false);
@@ -46,25 +49,25 @@ export function EditVmForm({ vm }: { vm: VmDto }) {
 
   return (
     <div className="flex max-w-2xl flex-col gap-4">
-      <Field label="Nombre">
+      <Field label={c("name")}>
         <Input value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="IP pública">
+        <Field label={ef("public_ip")}>
           <Input value={publicIp} onChange={(e) => setPublicIp(e.target.value)} className="font-mono text-xs" />
         </Field>
         <Field label="IP privada">
           <Input value={privateIp} onChange={(e) => setPrivateIp(e.target.value)} className="font-mono text-xs" />
         </Field>
       </div>
-      <Field label="Descripción">
+      <Field label={c("description")}>
         <Input value={description} onChange={(e) => setDescription(e.target.value)} />
       </Field>
 
       <div className="flex justify-end">
         <Button type="button" onClick={save} disabled={busy}>
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Guardar cambios
+          {c("save_changes")}
         </Button>
       </div>
     </div>

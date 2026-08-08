@@ -8,6 +8,10 @@
 
 > 🇬🇧 [Read this in English](README.md)
 
+![Consola de Aethra: entrar a una instalación recién hecha, crear el primer ambiente y ver la lista de configuración pendiente bajar de tres a dos](docs/assets/onboarding.gif)
+
+<sub>Una instalación nueva, de principio a fin: entrar → tres pendientes de configuración → crear el primer ambiente → la lista baja a dos. Grabado contra una instancia local desechable con la base vacía — el software corriendo de verdad, no un mockup.</sub>
+
 Aethra unifica en un único sistema —con una base de datos compartida y una sola UI— lo que hoy te obliga
 a saltar entre cuatro herramientas distintas: **despliegue Git→Docker** (en lugar de Coolify),
 **reverse proxy + TLS automático** (en lugar de Traefik), **monitoreo de uptime** (en lugar de Uptime Kuma)

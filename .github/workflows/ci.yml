@@ -55,10 +55,35 @@ jobs:
         working-directory: apps/web
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Needed by the untranslated-strings gate below, which diffs against the
+          # base branch. A shallow clone has no merge base to diff against.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+
+      # A ratchet, not a sweep. The console still carries a backlog of hardcoded
+      # Spanish strings that render untranslated for an English user, and gating the
+      # whole tree would fail every PR until that backlog is gone — which is how a
+      # check ends up wrapped in continue-on-error and stops meaning anything.
+      #
+      # So this gates only the .tsx files the PR actually touches: the backlog is
+      # tolerated, adding to it is not. It fails the build, on purpose. When
+      # `node scripts/detect-untranslated.mjs` reports zero for the whole tree,
+      # drop the diff and gate everything.
+      - name: No new untranslated UI strings
+        if: github.event_name == 'pull_request'
+        working-directory: .
+        run: |
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- 'apps/web/**/*.tsx')
+          if [ -z "$changed" ]; then
+            echo "No .tsx files changed."
+            exit 0
+          fi
+          echo "$changed"
+          node scripts/detect-untranslated.mjs $changed
 
       # `npm install`, not `npm ci`: the lockfile was generated on a different
       # architecture and lacks some optional native deps. Same reason as web.Dockerfile.

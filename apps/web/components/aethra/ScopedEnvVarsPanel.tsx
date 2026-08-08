@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { KeyRound, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -44,6 +45,8 @@ export function ScopedEnvVarsPanel({
   scopeType,
   scopeId,
 }: ScopedEnvVarsPanelProps) {
+  const v = useTranslations("components.env_vars");
+  const c = useTranslations("common");
   const scopeQuery = `scopeType=${encodeURIComponent(scopeType)}&scopeId=${encodeURIComponent(scopeId)}`;
 
   const [loading, setLoading] = useState(true);
@@ -117,14 +120,14 @@ export function ScopedEnvVarsPanel({
       toast.success("Variables de entorno guardadas");
       await load();
     } catch (e) {
-      toast.error(formatError(e, "No se pudieron guardar las variables"));
+      toast.error(formatError(e, v("save_error")));
     } finally {
       setSavingVars(false);
     }
   }
 
   async function deleteVar(key: string) {
-    if (!confirm(`¿Eliminar la variable "${key}"?`)) return;
+    if (!confirm(v("confirm_delete_var", { key }))) return;
     try {
       await api(
         `/api/env-vars?${scopeQuery}&key=${encodeURIComponent(key)}`,
@@ -133,7 +136,7 @@ export function ScopedEnvVarsPanel({
       toast.success("Variable eliminada");
       await load();
     } catch (e) {
-      toast.error(formatError(e, "No se pudo eliminar la variable"));
+      toast.error(formatError(e, v("delete_var_error")));
     }
   }
 
@@ -158,7 +161,7 @@ export function ScopedEnvVarsPanel({
       .filter((s) => s.key.trim().length > 0)
       .map((s) => ({ key: s.key.trim(), value: s.value }));
     if (payload.length === 0) {
-      toast.error("Agrega al menos un secreto con clave");
+      toast.error(v("need_secret"));
       return;
     }
     setSavingSecrets(true);
@@ -171,14 +174,14 @@ export function ScopedEnvVarsPanel({
       setNewSecrets([]);
       await load();
     } catch (e) {
-      toast.error(formatError(e, "No se pudieron guardar los secretos"));
+      toast.error(formatError(e, v("save_secrets_error")));
     } finally {
       setSavingSecrets(false);
     }
   }
 
   async function deleteSecret(key: string) {
-    if (!confirm(`¿Eliminar el secreto "${key}"?`)) return;
+    if (!confirm(v("confirm_delete_secret", { key }))) return;
     try {
       await api(
         `/api/secrets?${scopeQuery}&key=${encodeURIComponent(key)}`,
@@ -187,7 +190,7 @@ export function ScopedEnvVarsPanel({
       toast.success("Secreto eliminado");
       await load();
     } catch (e) {
-      toast.error(formatError(e, "No se pudo eliminar el secreto"));
+      toast.error(formatError(e, v("delete_secret_error")));
     }
   }
 
@@ -225,7 +228,7 @@ export function ScopedEnvVarsPanel({
                     ) : (
                       <Save className="mr-2 h-4 w-4" />
                     )}
-                    Guardar
+                    {c("save")}
                   </Button>
                 </div>
               </div>
@@ -247,7 +250,7 @@ export function ScopedEnvVarsPanel({
                           colSpan={5}
                           className="h-20 text-center text-sm text-muted-foreground"
                         >
-                          Sin variables de entorno.
+                          {v("empty_vars")}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -338,7 +341,7 @@ export function ScopedEnvVarsPanel({
                     ) : (
                       <Save className="mr-2 h-4 w-4" />
                     )}
-                    Guardar
+                    {c("save")}
                   </Button>
                 </div>
               </div>
@@ -346,8 +349,8 @@ export function ScopedEnvVarsPanel({
               {existingSecrets.length === 0 && newSecrets.length === 0 ? (
                 <EmptyState
                   icon={<KeyRound className="h-6 w-6" />}
-                  title="Sin secretos"
-                  description="Los secretos son de solo escritura: su valor nunca se muestra."
+                  title={v("empty_secrets")}
+                  description={v("empty_secrets_desc")}
                 />
               ) : (
                 <div className="rounded-md border border-border bg-card">
@@ -422,8 +425,7 @@ export function ScopedEnvVarsPanel({
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Los secretos son de solo escritura. Al guardar se envían los
-                nuevos valores; los existentes solo pueden eliminarse.
+                {v("secrets_note")}
               </p>
             </section>
           </>
