@@ -83,7 +83,7 @@ internal sealed class EfTemplateLookup(ProjectsDbContext db, IWebhookSecretCodec
                 .Select(s => new TemplateServiceView(
                     s.Name, s.Image, s.Port, s.PathPrefixes, s.Env, s.BuildMode, s.DockerfilePath,
                     s.Volumes?.Select(v => new ServiceVolumeView(v.Name, v.ContainerPath, v.ReadOnly)).ToList(),
-                    s.Hostname, s.BuildContext))
+                    s.Hostname, s.BuildContext, s.HostPort))
                 .ToList(),
             AccessTokenCredentialName: t.Source.AccessTokenCredentialName);
 }

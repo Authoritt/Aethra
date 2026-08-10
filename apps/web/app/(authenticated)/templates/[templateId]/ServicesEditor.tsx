@@ -17,6 +17,7 @@ interface Row {
   image: string;
   dockerfilePath: string;
   port: string;
+  hostPort: string;
   pathPrefixes: string;
   hostname: string;
   buildContext: string;
@@ -31,6 +32,7 @@ function toRow(s: TemplateServiceDef): Row {
     image: s.image ?? "",
     dockerfilePath: s.dockerfilePath ?? "",
     port: String(s.port ?? ""),
+    hostPort: s.hostPort == null ? "" : String(s.hostPort),
     pathPrefixes: (s.pathPrefixes ?? []).join(", "),
     hostname: s.hostname ?? "",
     buildContext: s.buildContext ?? "",
@@ -42,7 +44,7 @@ function toRow(s: TemplateServiceDef): Row {
 }
 
 function emptyRow(): Row {
-  return { name: "", buildMode: "registry", image: "", dockerfilePath: "", port: "", pathPrefixes: "", hostname: "", buildContext: "", envText: "", volumesText: "" };
+  return { name: "", buildMode: "registry", image: "", dockerfilePath: "", port: "", hostPort: "", pathPrefixes: "", hostname: "", buildContext: "", envText: "", volumesText: "" };
 }
 
 /** Parsea "nombre:/ruta[:ro]" por línea → {name, containerPath, readOnly}. */
@@ -87,6 +89,7 @@ export function ServicesEditor({
           name: r.name.trim(),
           image: r.buildMode === "git" ? "" : r.image.trim(),
           port: Number.parseInt(r.port, 10) || 0,
+          hostPort: r.hostPort.trim() ? Number.parseInt(r.hostPort, 10) : null,
           pathPrefixes: r.pathPrefixes
             .split(",")
             .map((p) => p.trim())
@@ -161,6 +164,9 @@ export function ServicesEditor({
             )}
             <Field label="Puerto interno">
               <Input value={r.port} onChange={(e) => update(i, { port: e.target.value })} placeholder="5006" inputMode="numeric" />
+            </Field>
+            <Field label="Puerto host pÃºblico (opcional)">
+              <Input value={r.hostPort} onChange={(e) => update(i, { hostPort: e.target.value })} placeholder="25" inputMode="numeric" />
             </Field>
             <Field label="Rutas (pathPrefix, CSV)">
               <Input value={r.pathPrefixes} onChange={(e) => update(i, { pathPrefixes: e.target.value })} placeholder="/api, /hubs   ·   vacío = interno" className="font-mono text-xs" />

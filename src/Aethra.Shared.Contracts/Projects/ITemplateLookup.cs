@@ -68,7 +68,8 @@ public sealed record TemplateServiceView(
     string? DockerfilePath = null,
     IReadOnlyList<ServiceVolumeView>? Volumes = null,
     string? Hostname = null,
-    string? BuildContext = null);
+    string? BuildContext = null,
+    int? HostPort = null);
 
 /// <summary>
 /// F13.3 — proyección de un volumen persistente de un servicio. <c>Name</c> admite el token

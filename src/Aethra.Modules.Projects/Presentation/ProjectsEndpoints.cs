@@ -180,7 +180,7 @@ public static class ProjectsEndpoints
                     .Select(s => new TemplateServiceInput(
                         s.Name, s.Image, s.Port, s.PathPrefixes, s.Env, s.BuildMode, s.DockerfilePath,
                         s.Volumes?.Select(v => new TemplateVolumeInput(v.Name, v.ContainerPath, v.ReadOnly)).ToList(),
-                        s.Hostname, s.BuildContext))
+                        s.Hostname, s.BuildContext, s.HostPort))
                     .ToList());
             var r = await m.Send(cmd, ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
@@ -582,7 +582,8 @@ public static class ProjectsEndpoints
         string? DockerfilePath = null,
         IReadOnlyList<SetTemplateVolumeItem>? Volumes = null,
         string? Hostname = null,
-        string? BuildContext = null);
+        string? BuildContext = null,
+        int? HostPort = null);
 
     public sealed record SetTemplateVolumeItem(
         string Name,

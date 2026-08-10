@@ -30,7 +30,8 @@ public sealed record TemplateService(
     string? Hostname = null,
     // Subdirectorio (relativo a la raíz del repo) usado como contexto de `docker build` de este
     // servicio. null = raíz. Para Dockerfiles que asumen context=su subcarpeta. jsonb sin campo = null.
-    string? BuildContext = null);
+    string? BuildContext = null,
+    int? HostPort = null);
 
 /// <summary>
 /// F13.3 — un volumen persistente montado en un servicio del deploy nativo. El token

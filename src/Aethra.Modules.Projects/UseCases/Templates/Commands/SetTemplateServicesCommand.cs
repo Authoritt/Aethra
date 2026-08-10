@@ -26,7 +26,8 @@ public sealed record TemplateServiceInput(
     string? DockerfilePath = null,
     IReadOnlyList<TemplateVolumeInput>? Volumes = null,
     string? Hostname = null,
-    string? BuildContext = null);
+    string? BuildContext = null,
+    int? HostPort = null);
 
 public sealed record TemplateVolumeInput(
     string Name,
@@ -51,6 +52,13 @@ internal sealed class SetTemplateServicesHandler(ProjectsDbContext db, IClock cl
             return Error.NotFound("template.not_found", $"Template '{request.TemplateId}' no existe.");
         }
 
+        if ((request.Services ?? []).Any(s => s.HostPort is < 1 or > 65535 ||
+                                             (s.HostPort is not null && s.HostPort != s.Port)))
+        {
+            return Error.Validation("template.invalid_host_port",
+                "El puerto host debe estar entre 1 y 65535 y coincidir con el puerto interno del servicio.");
+        }
+
         var services = (request.Services ?? [])
             .Select(s => new TemplateService(
                 Name: s.Name.Trim(),
@@ -66,7 +74,8 @@ internal sealed class SetTemplateServicesHandler(ProjectsDbContext db, IClock cl
                     .Select(v => new ServiceVolume(v.Name.Trim(), v.ContainerPath.Trim(), v.ReadOnly))
                     .ToList(),
                 Hostname: string.IsNullOrWhiteSpace(s.Hostname) ? null : s.Hostname.Trim().ToLowerInvariant(),
-                BuildContext: string.IsNullOrWhiteSpace(s.BuildContext) ? null : s.BuildContext.Trim()))
+                BuildContext: string.IsNullOrWhiteSpace(s.BuildContext) ? null : s.BuildContext.Trim(),
+                HostPort: s.HostPort))
             .ToList();
 
         template.ReplaceServices(services, clock.UtcNow);

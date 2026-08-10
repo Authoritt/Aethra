@@ -209,7 +209,11 @@ public sealed class NativeDeployRunner(
                 ContainerName: containerName,
                 ImageRef: image,
                 Env: env,
-                Ports: [new PortBinding(svc.Port, null, "tcp")],
+                Ports: [new PortBinding(
+                    svc.Port,
+                    svc.HostPort,
+                    "tcp",
+                    svc.HostPort is null ? null : "0.0.0.0")],
                 Volumes: volumes,
                 Command: null,
                 Healthcheck: null,
