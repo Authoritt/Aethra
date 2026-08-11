@@ -124,15 +124,30 @@ public sealed class BuildContextBuilderTests
     }
 
     /// <summary>
-    /// Un prefijo NO basta. Aceptarlo reabriría la ambigüedad que esta comprobación cierra: dos
-    /// commits distintos pueden compartir prefijo, y "empieza igual" no es "es el mismo".
+    /// Un SHA ABREVIADO satisface al commit completo que git resolvió. <c>GitSha.Create</c> acepta
+    /// hex de 7 a 40 caracteres, pero <c>git rev-parse HEAD</c> devuelve siempre 40: exigir igualdad
+    /// exacta rechazaría toda build lanzada con un SHA corto, que es un caso soportado.
+    ///
+    /// <para>Aceptar el prefijo no reabre la ambigüedad: si el nombre abreviado fuera ambiguo,
+    /// <c>git checkout</c> habría fallado antes de llegar aquí. La desambiguación la hace git contra
+    /// el repo real; esta comprobación solo descarta que el árbol acabara en OTRO commit.</para>
     /// </summary>
     [Theory]
-    [InlineData("a9f88cb", "a9f88cbdeadbeef")]
-    [InlineData("a9f88cbdeadbeef", "a9f88cb")]
-    public void ResolvedSha_prefix_matches_are_not_enough(string requested, string resolved)
+    [InlineData("a9f88cb", "a9f88cbdeadbeef1234567890abcdef123456789")]
+    [InlineData("a9f88cbdead", "a9f88cbdeadbeef1234567890abcdef123456789")]
+    public void An_abbreviated_sha_is_satisfied_by_the_full_commit_git_resolved(string requested, string resolved)
     {
-        BuildContextBuilder.ResolvedShaSatisfiesRequest(requested, resolved).Should().BeFalse();
+        BuildContextBuilder.ResolvedShaSatisfiesRequest(requested, resolved).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Lo contrario sí es un fallo: si lo pedido es MÁS largo que lo resuelto, el árbol no puede ser
+    /// el commit solicitado.
+    /// </summary>
+    [Fact]
+    public void A_requested_sha_longer_than_the_resolved_one_is_rejected()
+    {
+        BuildContextBuilder.ResolvedShaSatisfiesRequest("a9f88cbdeadbeef", "a9f88cb").Should().BeFalse();
     }
 
     /// <summary>Si no se pudo resolver HEAD, no se puede afirmar que sea el commit pedido.</summary>

@@ -286,14 +286,21 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
     /// ¿El árbol que se va a empaquetar corresponde al commit que pidió el llamante?
     ///
     /// <para>Sin commit pedido no hay nada que satisfacer: se construye lo que haya en el branch, que
-    /// es el contrato normal de un deploy por rama. Con commit pedido, la igualdad tiene que ser
-    /// exacta — un prefijo no basta. Aceptar prefijos permitiría que <c>abc1234</c> se diera por
-    /// satisfecho con cualquier commit que empiece igual, que es precisamente la ambigüedad que esta
-    /// comprobación existe para cerrar.</para>
+    /// es el contrato normal de un deploy por rama.</para>
     ///
-    /// <para>La comparación ignora la caja porque git emite los SHA en minúsculas pero el llamante
-    /// puede haberlos escrito en mayúsculas; el mismo commit escrito distinto sigue siendo el mismo
-    /// commit.</para>
+    /// <para><b>El SHA pedido puede venir abreviado.</b> <c>GitSha.Create</c> acepta hex de 7 a 40
+    /// caracteres y el validador de build también, mientras que <c>git rev-parse HEAD</c> devuelve
+    /// SIEMPRE los 40. Exigir igualdad exacta rechazaría toda build lanzada con un SHA corto —un
+    /// caso de uso soportado— y la abortaría sin motivo. Por eso se compara por prefijo.</para>
+    ///
+    /// <para>El prefijo es identidad suficiente <b>aquí</b>, y no por comodidad: cuando el nombre
+    /// abreviado es ambiguo, <c>git checkout</c> falla con "ambiguous argument" y esta función ni
+    /// llega a ejecutarse. O sea que la desambiguación ya la hizo git contra el repo real; lo que
+    /// queda por descartar es que el árbol acabara en un commit <i>distinto</i> del resuelto, que es
+    /// lo que un prefijo no coincidente delata.</para>
+    ///
+    /// <para>Se ignora la caja porque git emite los SHA en minúsculas pero el llamante puede
+    /// haberlos escrito en mayúsculas: el mismo commit escrito distinto sigue siendo el mismo.</para>
     /// </summary>
     internal static bool ResolvedShaSatisfiesRequest(string? requestedSha, string? resolvedSha)
     {
@@ -301,8 +308,11 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
         {
             return true;
         }
-        return !string.IsNullOrWhiteSpace(resolvedSha)
-            && string.Equals(requestedSha.Trim(), resolvedSha.Trim(), StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(resolvedSha))
+        {
+            return false;
+        }
+        return resolvedSha.Trim().StartsWith(requestedSha.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     private static string Trim(string s) => s.Length > 500 ? s[..500] : s.Trim();
