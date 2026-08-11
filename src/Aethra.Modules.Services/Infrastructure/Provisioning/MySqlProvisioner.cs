@@ -103,19 +103,19 @@ public partial class MySqlProvisioner : IServiceProvisioner
         }
     }
 
-    public async Task<RevokeOutcome> RevokeAsync(ManagedService service, ServiceBinding binding, CancellationToken cancellationToken)
+    public async Task<RevokeOutcome> RevokeAsync(ManagedService service, ServiceBinding binding, BindingCredentials credentials, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(binding);
+        ArgumentNullException.ThrowIfNull(credentials);
 
-        if (!SafeIdentifierPattern().IsMatch(binding.ResourceName))
+        if (!SafeIdentifierPattern().IsMatch(binding.ResourceName) ||
+            !SafeIdentifierPattern().IsMatch(credentials.Username))
         {
-            return new RevokeOutcome(false, "mysql.invalid_identifier", "ResourceName fuera del alfabeto permitido.");
+            return new RevokeOutcome(false, "mysql.invalid_identifier", "ResourceName/Username fuera del alfabeto permitido.");
         }
 
-        // Mismo nombre que el resource sirve como fallback cuando no nos pasan el user;
-        // los DROP IF EXISTS son idempotentes.
-        var user = QuoteValue(binding.ResourceName);
+        var user = QuoteValue(credentials.Username);
         var db = Quote(binding.ResourceName);
 
         try

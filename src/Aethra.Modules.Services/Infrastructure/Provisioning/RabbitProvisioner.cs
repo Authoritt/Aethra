@@ -84,10 +84,11 @@ public sealed class RabbitProvisioner : IServiceProvisioner
         }
     }
 
-    public async Task<RevokeOutcome> RevokeAsync(ManagedService service, ServiceBinding binding, CancellationToken cancellationToken)
+    public async Task<RevokeOutcome> RevokeAsync(ManagedService service, ServiceBinding binding, BindingCredentials credentials, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(binding);
+        ArgumentNullException.ThrowIfNull(credentials);
 
         try
         {
@@ -96,7 +97,7 @@ public sealed class RabbitProvisioner : IServiceProvisioner
 
             // Mismo nombre que el resource sirve como fallback cuando el caller no nos pasa el
             // user explícito; idempotente porque 404 lo aceptamos como éxito.
-            var user = Uri.EscapeDataString(binding.ResourceName);
+            var user = Uri.EscapeDataString(credentials.Username);
 
             await EnsureSuccessOrNotFoundAsync(
                 await client.DeleteAsync(new Uri($"api/users/{user}", UriKind.Relative), cancellationToken).ConfigureAwait(false),

@@ -58,14 +58,15 @@ public sealed partial class RedisProvisioner : IServiceProvisioner
         }
     }
 
-    public async Task<RevokeOutcome> RevokeAsync(ManagedService service, ServiceBinding binding, CancellationToken cancellationToken)
+    public async Task<RevokeOutcome> RevokeAsync(ManagedService service, ServiceBinding binding, BindingCredentials credentials, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(binding);
+        ArgumentNullException.ThrowIfNull(credentials);
 
-        if (!SafeNamePattern().IsMatch(binding.ResourceName))
+        if (!SafeNamePattern().IsMatch(credentials.Username))
         {
-            return new RevokeOutcome(false, "redis.invalid_identifier", "ResourceName fuera del alfabeto permitido.");
+            return new RevokeOutcome(false, "redis.invalid_identifier", "Username fuera del alfabeto permitido.");
         }
 
         try
@@ -73,7 +74,7 @@ public sealed partial class RedisProvisioner : IServiceProvisioner
             await using var mux = await ConnectAdminAsync(service, cancellationToken).ConfigureAwait(false);
             var db = mux.GetDatabase();
             // ACL DELUSER es idempotente: devuelve el conteo de usuarios borrados.
-            await db.ExecuteAsync("ACL", "DELUSER", binding.ResourceName).ConfigureAwait(false);
+            await db.ExecuteAsync("ACL", "DELUSER", credentials.Username).ConfigureAwait(false);
             return new RevokeOutcome(true, null, null);
         }
         catch (RedisException ex)

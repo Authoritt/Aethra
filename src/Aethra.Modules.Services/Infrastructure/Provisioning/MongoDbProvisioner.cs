@@ -90,20 +90,19 @@ public sealed partial class MongoDbProvisioner : IServiceProvisioner
         }
     }
 
-    public async Task<RevokeOutcome> RevokeAsync(ManagedService service, ServiceBinding binding, CancellationToken cancellationToken)
+    public async Task<RevokeOutcome> RevokeAsync(ManagedService service, ServiceBinding binding, BindingCredentials credentials, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(binding);
+        ArgumentNullException.ThrowIfNull(credentials);
 
-        if (!SafeIdentifierPattern().IsMatch(binding.ResourceName))
+        if (!SafeIdentifierPattern().IsMatch(binding.ResourceName) ||
+            !SafeIdentifierPattern().IsMatch(credentials.Username))
         {
-            return new RevokeOutcome(false, "mongodb.invalid_identifier", "ResourceName fuera del alfabeto permitido.");
+            return new RevokeOutcome(false, "mongodb.invalid_identifier", "ResourceName/Username fuera del alfabeto permitido.");
         }
 
-        // Mismo nombre que el resource sirve como fallback si el caller no nos pasa el user.
-        var username = binding.ResourceName;
-
-        var dropUserCmd = new BsonDocument { { "dropUser", username } };
+        var dropUserCmd = new BsonDocument { { "dropUser", credentials.Username } };
 
         try
         {
