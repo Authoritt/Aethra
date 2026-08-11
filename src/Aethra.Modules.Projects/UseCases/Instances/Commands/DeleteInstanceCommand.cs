@@ -13,10 +13,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Aethra.Modules.Projects.UseCases.Instances.Commands;
 
 /// <summary>
-/// F12.3 — borra una Instance. Emite el integration event <c>InstanceRemoved</c> para que
-/// Proxy/Cloudflare/Containers limpien rutas, DNS y contenedores. Para Instances productivas
-/// requiere doble confirmación (responsabilidad del caller); el handler solo verifica que
-/// no estamos borrando una Instance ephemeral huérfana sin avisar.
+/// F12.3 - borra una Instance. Emite el integration event <c>InstanceRemoved</c> para que
+/// Proxy/Cloudflare/Containers limpien rutas, DNS y contenedores. Las Instances no efimeras
+/// requieren confirmacion destructiva explicita mediante <paramref name="ForceEphemeral"/>.
 /// </summary>
 public sealed record DeleteInstanceCommand(string InstanceId, bool ForceEphemeral) : ICommand;
 
@@ -42,8 +41,9 @@ internal sealed class DeleteInstanceHandler(
         }
         if (!instance.IsEphemeral && !request.ForceEphemeral)
         {
-            // Por defecto solo permitimos borrar ephemerals — borrar productivas tiene un endpoint
-            // separado con auditoria adicional (no introducido en F12.3).
+            return Error.Conflict(
+                "instance.delete_requires_confirmation",
+                "La instance no es efímera. Confirma el borrado destructivo pasando force=true.");
         }
 
         // Nombres de contenedor a derribar: {slug}-{servicio} por cada servicio del template

@@ -10,6 +10,10 @@
     <ProjectReference Include="..\Aethra.Shared.Infrastructure\Aethra.Shared.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Aethra.Modules.Projects.Tests" />
+  </ItemGroup>
+
   <!-- Microsoft.Extensions.* (DI, Hosting, Configuration, Options, Logging) y los runtime
        de ASP.NET vienen incluidos via FrameworkReference Microsoft.AspNetCore.App.
        Solo declaramos los paquetes que NO están en el framework de ASP.NET. -->
