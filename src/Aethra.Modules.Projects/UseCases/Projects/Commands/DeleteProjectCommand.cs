@@ -102,16 +102,29 @@ internal sealed class DeleteProjectHandler(
 
     private async Task DeleteScopedRowsAsync(IReadOnlyCollection<string> scopeIds, CancellationToken cancellationToken)
     {
-        // Un solo camino, el de producción. La versión anterior se bifurcaba con
-        // `if (db.Database.IsRelational())` y la rama no-relacional existía SOLO para que los tests
-        // (EF InMemory) no reventaran, porque ese proveedor no implementa ExecuteDelete. El efecto
-        // era que la suite recorría un camino que producción nunca ejecuta: un verde que no probaba
-        // nada de lo que aquí se promete.
+        // UN solo camino de borrado, el de producción. La versión anterior se bifurcaba con
+        // `if (db.Database.IsRelational())`, y la rama no-relacional existía solo porque EF InMemory
+        // no implementa ExecuteDelete: la suite recorría un camino que producción nunca ejecuta.
         //
-        // OJO — hoy esta línea SIGUE sin cobertura, y no por descuido: montar un test relacional
-        // está bloqueado por la política de paquetes del repo (ver issue #105). Ningún test siembra
-        // filas con scope, así que este método se ejecuta siempre sobre conjunto vacío. Lo que se
-        // gana con este cambio es que el código diga la verdad: hay un único comportamiento, el real.
+        // Este guard NO es una optimización — en relacional no ahorra nada (dos consultas para
+        // evitar un DELETE que ya sería no-op). Está para que los tests sobre InMemory no revienten,
+        // y hay que decirlo en voz alta porque tiene una consecuencia: mientras ningún test siembre
+        // filas con scope, las dos líneas de abajo NUNCA se ejecutan en la suite.
+        //
+        // No es descuido, está BLOQUEADO y medido: probarlo de verdad exige un proveedor relacional,
+        // y el modelo de este módulo está atado a PostgreSQL (`jsonb`, `bytea`, y un
+        // `HasDefaultValueSql("'[]'::jsonb")` en TemplateConfiguration cuyo `::` SQLite ni siquiera
+        // parsea). Desacoplarlo es un cambio estructural del módulo. Ver issue #106.
+        var hasScopedRows =
+            await db.EnvironmentVariables.AnyAsync(e => scopeIds.Contains(e.ScopeId), cancellationToken)
+                .ConfigureAwait(false)
+            || await db.Secrets.AnyAsync(s => scopeIds.Contains(s.ScopeId), cancellationToken)
+                .ConfigureAwait(false);
+        if (!hasScopedRows)
+        {
+            return;
+        }
+
         await db.EnvironmentVariables.Where(e => scopeIds.Contains(e.ScopeId))
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);

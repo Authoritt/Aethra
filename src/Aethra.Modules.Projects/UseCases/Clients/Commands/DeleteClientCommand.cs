@@ -93,11 +93,20 @@ internal sealed class DeleteClientHandler(
 
     private async Task DeleteScopedRowsAsync(IReadOnlyCollection<string> scopeIds, CancellationToken cancellationToken)
     {
-        // Mismo criterio que DeleteProjectHandler: un solo camino, el de producción. Sin guard de
-        // "¿hay filas?" — no aporta nada a producción (dos consultas extra para ahorrar un DELETE
-        // que ya sería no-op) y su único efecto real era evitar que EF InMemory reventara en los
-        // tests, es decir, garantizar que esta línea nunca se ejercitara. Cobertura real bloqueada
-        // por la política de paquetes del repo: issue #105.
+        // Mismo criterio, y mismas limitaciones, que DeleteProjectHandler.DeleteScopedRowsAsync:
+        // un único camino de borrado (el de producción) y un guard que existe para que los tests
+        // sobre EF InMemory no revienten, con el precio de que las dos líneas de abajo no se
+        // ejercitan mientras ningún test siembre filas con scope. Ver issue #106.
+        var hasScopedRows =
+            await db.EnvironmentVariables.AnyAsync(e => scopeIds.Contains(e.ScopeId), cancellationToken)
+                .ConfigureAwait(false)
+            || await db.Secrets.AnyAsync(s => scopeIds.Contains(s.ScopeId), cancellationToken)
+                .ConfigureAwait(false);
+        if (!hasScopedRows)
+        {
+            return;
+        }
+
         await db.EnvironmentVariables.Where(e => scopeIds.Contains(e.ScopeId))
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
