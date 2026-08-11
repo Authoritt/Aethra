@@ -54,7 +54,6 @@ internal sealed class DeactivateUserHandler(
         // real y rechazará limpiamente. Se envuelve en la estrategia porque una transacción manual
         // con NpgsqlRetryingExecutionStrategy debe ejecutarse dentro de la unidad reintentable.
         var adminRole = await roles.FindBySlugAsync(Role.AdminSlug, cancellationToken).ConfigureAwait(false);
-        var targetIsAdmin = adminRole is not null && user.Roles.Any(r => r.RoleId == adminRole.Id);
 
         Result outcome = Result.Success();
         var strategy = db.Database.CreateExecutionStrategy();
@@ -64,19 +63,32 @@ internal sealed class DeactivateUserHandler(
                 .BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (targetIsAdmin)
+            if (adminRole is not null)
             {
-                // Contamos otros admins activos vía SQL para no traer toda la tabla.
-                var otherAdminsActive = await db.Users
-                    .Where(u => u.IsActive && u.Id != typedId && u.Roles.Any(ur => ur.RoleId == adminRole!.Id))
-                    .CountAsync(cancellationToken)
+                // La pertenencia al rol admin se lee DENTRO de la transacción, no del agregado que
+                // se cargó antes. Con la lectura fuera, este caso quedaba abierto: cargamos al
+                // objetivo como no-admin, otra petición lo promueve y degrada al que era el último
+                // admin, y ese `false` en caché haría saltarse el conteo y desactivar al que acaba
+                // de quedar como único administrador. PostgreSQL no puede detectar una dependencia
+                // sobre datos que la transacción nunca leyó.
+                var targetIsAdmin = await db.Users
+                    .AnyAsync(u => u.Id == typedId && u.Roles.Any(ur => ur.RoleId == adminRole.Id), cancellationToken)
                     .ConfigureAwait(false);
-                if (!AdminInvariantRules.CanDeactivate(targetIsAdmin, otherAdminsActive))
+
+                if (targetIsAdmin)
                 {
-                    outcome = Error.Conflict(
-                        AdminInvariantRules.LastAdminErrorCode,
-                        "No se puede desactivar al último admin activo.");
-                    return;
+                    // Contamos otros admins activos vía SQL para no traer toda la tabla.
+                    var otherAdminsActive = await db.Users
+                        .Where(u => u.IsActive && u.Id != typedId && u.Roles.Any(ur => ur.RoleId == adminRole.Id))
+                        .CountAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    if (!AdminInvariantRules.CanDeactivate(targetIsAdmin, otherAdminsActive))
+                    {
+                        outcome = Error.Conflict(
+                            AdminInvariantRules.LastAdminErrorCode,
+                            "No se puede desactivar al último admin activo.");
+                        return;
+                    }
                 }
             }
 
