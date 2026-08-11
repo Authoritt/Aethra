@@ -1,4 +1,5 @@
 using Aethra.Modules.Identity.Domain;
+using Microsoft.EntityFrameworkCore;
 using Aethra.Modules.Identity.Infrastructure;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Shared.Infrastructure.Cqrs;
@@ -93,6 +94,31 @@ internal sealed class UpdateUserHandler(
                     return Error.Validation("user.role_not_found", $"Rol '{slug}' no existe.");
                 }
                 resolvedIds.Add(role.Id);
+            }
+
+            // El invariante del último administrador se aplicaba SOLO al desactivar, no aquí, así
+            // que una edición de roles normal podía dejar la instalación sin ningún admin activo y
+            // obligar a recuperarla por base de datos. Misma regla y mismo código de error que
+            // DeactivateUserHandler: son dos rutas hacia el mismo estado prohibido.
+            var adminRole = await roles.FindBySlugAsync(Role.AdminSlug, cancellationToken).ConfigureAwait(false);
+            if (adminRole is not null)
+            {
+                var isAdminNow = user.Roles.Any(r => r.RoleId == adminRole.Id);
+                var keepsAdmin = resolvedIds.Contains(adminRole.Id);
+                if (user.IsActive && isAdminNow && !keepsAdmin)
+                {
+                    var otherActiveAdmins = await db.Users
+                        .Where(u => u.IsActive && u.Id != typedId && u.Roles.Any(ur => ur.RoleId == adminRole.Id))
+                        .CountAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    if (!AdminInvariantRules.CanReplaceRoles(
+                            user.IsActive, isAdminNow, keepsAdmin, otherActiveAdmins))
+                    {
+                        return Error.Conflict(
+                            AdminInvariantRules.LastAdminErrorCode,
+                            "No se puede quitar el rol admin al último administrador activo.");
+                    }
+                }
             }
 
             user.ReplaceRoles(resolvedIds, now);

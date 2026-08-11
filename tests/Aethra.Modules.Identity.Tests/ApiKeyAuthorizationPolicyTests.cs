@@ -168,16 +168,23 @@ public sealed class ApiKeyAuthorizationPolicyTests
     }
 
     /// <summary>
-    /// El claim de scope SÍ concede aunque el identity no esté autenticado, porque
-    /// <c>HasScopeClaim</c> no comprueba <c>IsAuthenticated</c>. Hoy es inalcanzable: los claims
-    /// de scope solo los emite el handler de auth tras validar la key. Se fija aquí para que si
-    /// algún día otra vía inyecta claims sin autenticar, el cambio de comportamiento se vea en
-    /// esta prueba en vez de en producción.
+    /// Un claim de scope sobre un principal SIN autenticar ya no concede (issue #29).
+    ///
+    /// <para>Este test afirmaba lo contrario, y a propósito: dejaba constancia de que
+    /// <c>HasScopeClaim</c> no comprobaba <c>IsAuthenticated</c> mientras <c>HasAdminRoleClaim</c>
+    /// sí, con el argumento de que era inalcanzable porque los claims de scope solo los emite el
+    /// handler tras validar la key. Se escribió literalmente "para que si algún día otra vía inyecta
+    /// claims sin autenticar, el cambio de comportamiento se vea en esta prueba en vez de en
+    /// producción" — y es justo lo que ha ocurrido: la asimetría se cerró y este test lo detectó.</para>
+    ///
+    /// <para>Se invierte porque el razonamiento de "es inalcanzable" describe una propiedad del
+    /// handler de API key de hoy, no de la policy; y la policy es lo que protege el endpoint. Ahora
+    /// los dos caminos de autorización exigen lo mismo: identidad autenticada.</para>
     /// </summary>
     [Fact]
-    public async Task El_claim_de_scope_no_exige_estar_autenticado()
+    public async Task El_claim_de_scope_sin_autenticar_no_concede()
     {
-        (await Concede(UnScope, Anonimo(Scope(UnScope)))).Should().BeTrue();
+        (await Concede(UnScope, Anonimo(Scope(UnScope)))).Should().BeFalse();
     }
 
     [Fact]
