@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Loader2, ShieldCheck, ShieldX } from "lucide-react";
+import QRCode from "qrcode";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,7 @@ export function TwoFactorPanel({
   const [enabled, setEnabled] = useState(initiallyEnabled);
   const [step, setStep] = useState<Step>("idle");
   const [enroll, setEnroll] = useState<EnrollResponse | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
@@ -48,14 +51,27 @@ export function TwoFactorPanel({
 
   async function startEnroll() {
     setBusy(true);
+    setStep("enrolling");
+    setQrDataUrl(null);
     try {
       const data = await api<EnrollResponse>("/api/identity/me/totp/enroll", {
         method: "POST",
       });
+      const dataUrl = await QRCode.toDataURL(data.otpauth_uri, {
+        width: 240,
+        margin: 1,
+        errorCorrectionLevel: "M",
+        color: {
+          dark: "#020617",
+          light: "#ffffff",
+        },
+      });
       setEnroll(data);
+      setQrDataUrl(dataUrl);
       setStep("showing-qr");
     } catch (e) {
       toast.error(formatError(e, "Failed to start enrollment"));
+      setStep("idle");
     } finally {
       setBusy(false);
     }
@@ -97,6 +113,7 @@ export function TwoFactorPanel({
       setEnabled(false);
       setShowDisable(false);
       setDisableCode("");
+      setQrDataUrl(null);
       setRecoveryCodes(null);
       setStep("idle");
       toast.success("Two-factor authentication disabled");
@@ -236,8 +253,7 @@ export function TwoFactorPanel({
     );
   }
 
-  if (step === "showing-qr" && enroll) {
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(enroll.otpauth_uri)}`;
+  if (step === "showing-qr" && enroll && qrDataUrl) {
     return (
       <div className="space-y-4">
         <div>
@@ -246,11 +262,12 @@ export function TwoFactorPanel({
           </p>
         </div>
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-start">
-          <img
-            src={qrUrl}
+          <Image
+            src={qrDataUrl}
             alt="2FA QR code"
             width={240}
             height={240}
+            unoptimized
             className="rounded-md border bg-white p-2"
           />
           <div className="space-y-2 text-sm">
@@ -290,6 +307,7 @@ export function TwoFactorPanel({
               onClick={() => {
                 setStep("idle");
                 setEnroll(null);
+                setQrDataUrl(null);
                 setCode("");
               }}
               disabled={busy}

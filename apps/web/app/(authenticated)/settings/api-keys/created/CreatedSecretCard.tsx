@@ -18,9 +18,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
-  clearSecretFromSession,
-  readSecretFromSession,
-} from "../CreateKeyForm";
+  clearApiKeySecret,
+  consumeApiKeySecret,
+} from "@/lib/api-key-secret-handoff";
 
 type LoadState =
   | { kind: "loading" }
@@ -36,16 +36,23 @@ export function CreatedSecretCard({ id }: { id: string | null }) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!id) {
-      setState({ kind: "missing" });
-      return;
-    }
-    const secret = readSecretFromSession(id);
-    if (!secret) {
-      setState({ kind: "missing" });
-      return;
-    }
-    setState({ kind: "loaded", secret });
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (!id) {
+        setState({ kind: "missing" });
+        return;
+      }
+      const secret = consumeApiKeySecret(id);
+      if (!secret) {
+        setState({ kind: "missing" });
+        return;
+      }
+      setState({ kind: "loaded", secret });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   async function copy() {
@@ -61,7 +68,7 @@ export function CreatedSecretCard({ id }: { id: string | null }) {
   }
 
   function done() {
-    if (id) clearSecretFromSession(id);
+    if (id) clearApiKeySecret(id);
     router.push("/settings/api-keys");
     router.refresh();
   }
