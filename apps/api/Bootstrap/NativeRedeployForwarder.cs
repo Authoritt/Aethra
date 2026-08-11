@@ -35,7 +35,22 @@ internal sealed class NativeRedeployForwarder(
                     .ConfigureAwait(false);
                 if (r.Success)
                 {
-                    logger.LogInformation("native-redeploy {Inst} OK (healthy={H})", notification.InstanceId, r.Healthy);
+                    if (r.Warnings.Count > 0)
+                    {
+                        logger.LogWarning(
+                            "native-redeploy {Inst} OK con {WarningCount} aviso(s) (healthy={H}): {Warnings}",
+                            notification.InstanceId,
+                            r.Warnings.Count,
+                            r.Healthy,
+                            r.Warnings);
+                    }
+                    else
+                    {
+                        logger.LogInformation(
+                            "native-redeploy {Inst} OK sin avisos (healthy={H})",
+                            notification.InstanceId,
+                            r.Healthy);
+                    }
                 }
                 else
                 {
