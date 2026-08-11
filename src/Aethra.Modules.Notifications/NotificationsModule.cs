@@ -5,6 +5,7 @@ using Aethra.Modules.Notifications.Infrastructure.Email;
 using Aethra.Modules.Notifications.Infrastructure.Handlers;
 using Aethra.Modules.Notifications.Infrastructure.Security;
 using Aethra.Modules.Notifications.Presentation;
+using Aethra.Shared.Infrastructure.Http;
 using Aethra.Shared.Infrastructure.Modules;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -44,7 +45,10 @@ public static class NotificationsModule
         services.AddHttpClient("notifications", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
-        });
+        })
+        // Un canal webhook lleva URL, metodo y cabeceras elegidos por quien lo configura: sin esto,
+        // el plano de control es un proxy hacia loopback, la malla privada y los metadatos de la nube.
+        .GuardOutboundDestinations();
 
         // Singleton para que el BackgroundService pueda inyectarse en handlers transient (TestChannel)
         // sin crear scopes nuevos. Internamente abre un scope por batch para acceder al DbContext.

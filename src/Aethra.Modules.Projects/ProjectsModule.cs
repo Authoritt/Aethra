@@ -5,6 +5,7 @@ using Aethra.Modules.Projects.Infrastructure.Lookups;
 using Aethra.Modules.Projects.Infrastructure.Security;
 using Aethra.Modules.Projects.Presentation;
 using Aethra.Shared.Contracts.Projects;
+using Aethra.Shared.Infrastructure.Http;
 using Aethra.Shared.Infrastructure.Modules;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -37,6 +38,9 @@ public static class ProjectsModule
         // ProjectsDbContext del scope corriente. Cada writer llama SaveChangesAsync por sí
         // mismo: no hay transacción cross-DbContext entre el caller (p.ej. ServicesDbContext)
         // y este ProjectsDbContext, así que invocar el writer ES un punto-de-no-retorno.
+        // Politica de destinos para el  de discovery (SSRF desde el plano de control).
+        services.AddOutboundDestinationGuard();
+
         services.AddScoped<ITemplateLookup, EfTemplateLookup>();
         services.AddScoped<IInstanceLookup, EfInstanceLookup>();
         services.AddScoped<ITenantContext, EfTenantContext>();
