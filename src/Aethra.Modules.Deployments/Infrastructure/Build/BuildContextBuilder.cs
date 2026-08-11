@@ -85,7 +85,17 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
                 }
             }
 
-            // === Checkout del SHA solicitado (best-effort) ===
+            // === Checkout del SHA solicitado — EXIGIDO, no best-effort ===
+            //
+            // Antes esto era best-effort: si el fetch/checkout fallaba se anotaba en el log
+            // "se usa HEAD del branch" y se seguía empaquetando ESE árbol. Consecuencia: una build
+            // identificada como el commit A podía contener el código del commit B. Eso rompe lo que
+            // el resto del sistema da por cierto — rollbacks, auditoría y procedencia de artefactos
+            // se apoyan en que "build de X" signifique X — y un operador podía promover un artefacto
+            // creyendo estar promoviendo el commit que aprobó.
+            //
+            // Pedir un commit concreto y recibir otro no es una degradación aceptable: es la
+            // respuesta equivocada. Si no se puede materializar, la build falla.
             if (!string.IsNullOrWhiteSpace(gitSha))
             {
                 var head = await RunGitAsync(["rev-parse", "HEAD"], workDir, ct).ConfigureAwait(false);
@@ -93,18 +103,33 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
                 if (!string.Equals(currentSha, gitSha, StringComparison.OrdinalIgnoreCase))
                 {
                     // El clone shallow puede no contener el commit: lo traemos puntualmente.
-                    await RunGitAsync(["fetch", "--depth", "1", "origin", gitSha!], workDir, ct)
+                    var fetch = await RunGitAsync(["fetch", "--depth", "1", "origin", gitSha!], workDir, ct)
                         .ConfigureAwait(false);
                     var checkout = await RunGitAsync(["checkout", "--detach", gitSha!], workDir, ct)
                         .ConfigureAwait(false);
-                    log.Add(checkout.ExitCode == 0
-                        ? $"Checkout commit {Short(gitSha!)} OK."
-                        : $"No se pudo hacer checkout de {Short(gitSha!)}; se usa HEAD del branch {branch}.");
+                    if (checkout.ExitCode != 0)
+                    {
+                        var detail = Trim(checkout.StdErr.Length > 0 ? checkout.StdErr : fetch.StdErr);
+                        throw new InvalidOperationException(
+                            $"No se pudo hacer checkout del commit {Short(gitSha!)} solicitado en el branch "
+                            + $"{branch}: {Redact(detail, accessToken)}. La build se aborta: empaquetar el HEAD "
+                            + "del branch produciría un artefacto con código distinto del commit pedido.");
+                    }
+                    log.Add($"Checkout commit {Short(gitSha!)} OK.");
                 }
             }
 
             var resolved = await RunGitAsync(["rev-parse", "HEAD"], workDir, ct).ConfigureAwait(false);
             var resolvedSha = resolved.StdOut.Trim();
+
+            // Cinturón y tirantes: que el checkout devuelva 0 no garantiza que HEAD sea lo pedido.
+            // Lo que se empaqueta tiene que ser el commit solicitado.
+            if (!ResolvedShaSatisfiesRequest(gitSha, resolvedSha))
+            {
+                throw new InvalidOperationException(
+                    $"Se solicitó el commit {Short(gitSha!)} pero el árbol quedó en {Short(resolvedSha)}. "
+                    + "La build se aborta para no producir un artefacto que declare un commit que no contiene.");
+            }
 
             // === Resolver raíz del contexto (BaseDirectory) ===
             var contextRoot = workDir;
@@ -256,6 +281,39 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
     }
 
     private static string Short(string sha) => sha.Length >= 7 ? sha[..7] : sha;
+
+    /// <summary>
+    /// ¿El árbol que se va a empaquetar corresponde al commit que pidió el llamante?
+    ///
+    /// <para>Sin commit pedido no hay nada que satisfacer: se construye lo que haya en el branch, que
+    /// es el contrato normal de un deploy por rama.</para>
+    ///
+    /// <para><b>El SHA pedido puede venir abreviado.</b> <c>GitSha.Create</c> acepta hex de 7 a 40
+    /// caracteres y el validador de build también, mientras que <c>git rev-parse HEAD</c> devuelve
+    /// SIEMPRE los 40. Exigir igualdad exacta rechazaría toda build lanzada con un SHA corto —un
+    /// caso de uso soportado— y la abortaría sin motivo. Por eso se compara por prefijo.</para>
+    ///
+    /// <para>El prefijo es identidad suficiente <b>aquí</b>, y no por comodidad: cuando el nombre
+    /// abreviado es ambiguo, <c>git checkout</c> falla con "ambiguous argument" y esta función ni
+    /// llega a ejecutarse. O sea que la desambiguación ya la hizo git contra el repo real; lo que
+    /// queda por descartar es que el árbol acabara en un commit <i>distinto</i> del resuelto, que es
+    /// lo que un prefijo no coincidente delata.</para>
+    ///
+    /// <para>Se ignora la caja porque git emite los SHA en minúsculas pero el llamante puede
+    /// haberlos escrito en mayúsculas: el mismo commit escrito distinto sigue siendo el mismo.</para>
+    /// </summary>
+    internal static bool ResolvedShaSatisfiesRequest(string? requestedSha, string? resolvedSha)
+    {
+        if (string.IsNullOrWhiteSpace(requestedSha))
+        {
+            return true;
+        }
+        if (string.IsNullOrWhiteSpace(resolvedSha))
+        {
+            return false;
+        }
+        return resolvedSha.Trim().StartsWith(requestedSha.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string Trim(string s) => s.Length > 500 ? s[..500] : s.Trim();
 
