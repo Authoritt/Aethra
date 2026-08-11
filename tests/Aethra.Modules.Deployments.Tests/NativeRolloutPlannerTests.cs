@@ -30,7 +30,18 @@ public sealed class NativeRolloutPlannerTests
         Running("factusforge-landing", "aethra/factusforge-landing:d7e38aa"),
     ];
 
+    /// <summary>
+    /// Sustitución en el caso NORMAL: el <c>remove</c> del contenedor previo se ejecutó sin error,
+    /// así que la revisión anterior ya no está y hay que restaurarla si el rollout falla.
+    /// </summary>
     private static ServiceReplacement Replace(string service, string newSha)
+        => Captured(service, newSha) with { OldContainerRemoved = true };
+
+    /// <summary>Sustitución cuyo <c>remove</c> FALLÓ: el contenedor anterior sigue vivo.</summary>
+    private static ServiceReplacement ReplaceWithFailedRemoval(string service, string newSha)
+        => Captured(service, newSha);
+
+    private static ServiceReplacement Captured(string service, string newSha)
         => NativeRolloutPlanner.Capture(
             service, $"factusforge-{service}", $"aethra/factusforge-{service}:{newSha}", ProdBefore);
 
@@ -161,15 +172,70 @@ public sealed class NativeRolloutPlannerTests
     /// confundirse con "no hay nada que restaurar".
     /// </summary>
     [Fact]
-    public void Redeploying_the_same_image_still_produces_a_restore_step()
+    public void Redeploying_the_same_image_reference_is_not_restorable()
     {
+        // Este test afirmaba lo contrario y era el bug: si la referencia previa y la nueva son la
+        // MISMA (un rebuild de git reutilizando el tag {slug}-{svc}:{shortSha}), ese tag ya apunta a
+        // la imagen recién construida. "Restaurar" relanzaría exactamente la revisión que falló.
+        // Decirlo es mejor que fingir un rollback que no puede cumplir.
         var replaced = NativeRolloutPlanner.Capture(
-            "api", "factusforge-api", "aethra/factusforge-api:d7e38aa", ProdBefore);
+            "api", "factusforge-api", "aethra/factusforge-api:d7e38aa", ProdBefore) with { OldContainerRemoved = true };
 
         var plan = NativeRolloutPlanner.PlanRollback([replaced]);
 
-        plan[0].Action.Should().Be(RollbackAction.RestorePrevious);
-        plan[0].RestoreImageRef.Should().Be("aethra/factusforge-api:d7e38aa");
+        plan[0].Action.Should().Be(RollbackAction.CannotRestore);
+    }
+
+    /// <summary>
+    /// Hallazgo P1 del G2 del PR #101. Si el <c>remove</c> del contenedor previo lanzó (y el runner
+    /// lo ignoraba con un <c>LogDebug</c>), la revisión anterior sigue VIVA y sana. Un rollback que
+    /// la borre para recrearla convierte un rollout fallido e inocuo en la destrucción de producción
+    /// — y si el <c>run</c> de restauración fallara, el servicio quedaría caído por culpa del propio
+    /// rollback. Aquí no se toca nada.
+    /// </summary>
+    [Fact]
+    public void A_previous_container_that_was_never_removed_is_left_intact()
+    {
+        var replaced = ReplaceWithFailedRemoval("api", "nuevo");
+
+        var plan = NativeRolloutPlanner.PlanRollback([replaced]);
+
+        plan.Should().ContainSingle();
+        plan[0].Action.Should().Be(RollbackAction.LeaveIntact);
+    }
+
+    /// <summary>
+    /// El orden de las guardas importa: "no había revisión previa" gana sobre "no se pudo borrar",
+    /// porque en un primer deploy no hay nada que preservar y el contenedor nuevo debe quedarse para
+    /// poder leer sus logs.
+    /// </summary>
+    [Fact]
+    public void A_first_deploy_is_diagnosed_even_if_the_removal_failed()
+    {
+        var first = NativeRolloutPlanner.Capture(
+            "recien", "factusforge-recien", "aethra/factusforge-recien:1", ProdBefore);
+
+        first.OldContainerRemoved.Should().BeFalse();
+        NativeRolloutPlanner.PlanRollback([first])[0].Action.Should().Be(RollbackAction.LeaveForDiagnosis);
+    }
+
+    /// <summary>
+    /// Una tanda mixta: cada servicio se decide por su propio estado, no por el del lote. Se
+    /// comprueba además que el orden sigue siendo LIFO (el último sustituido se deshace primero).
+    /// </summary>
+    [Fact]
+    public void Each_service_is_decided_on_its_own_state()
+    {
+        var plan = NativeRolloutPlanner.PlanRollback([
+            Replace("api", "nuevo"),                        // remove OK, tag distinto → restaurar
+            ReplaceWithFailedRemoval("admin", "nuevo"),     // remove falló → intacto
+            Replace("tenant", "d7e38aa"),                   // mismo tag → no restaurable
+        ]);
+
+        plan.Select(s => s.ServiceName).Should().Equal("tenant", "admin", "api");
+        plan[0].Action.Should().Be(RollbackAction.CannotRestore);
+        plan[1].Action.Should().Be(RollbackAction.LeaveIntact);
+        plan[2].Action.Should().Be(RollbackAction.RestorePrevious);
     }
 
     [Fact]

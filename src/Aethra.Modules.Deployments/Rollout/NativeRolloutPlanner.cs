@@ -17,12 +17,18 @@ namespace Aethra.Modules.Deployments.Rollout;
 /// Id del contenedor previo, para <c>Deployment.RecordOldContainer</c> (el agregado exige tenerlo
 /// registrado antes de admitir la transición a <c>RolledBack</c>).
 /// </param>
+/// <param name="OldContainerRemoved">
+/// Si el <c>SendRemoveAsync</c> del contenedor previo se ejecutó SIN error. Es la diferencia entre
+/// "lo sustituí" y "lo intenté": cuando el remove falla, el contenedor viejo sigue vivo y sano, y
+/// un rollback que lo borre para recrearlo destruiría producción sin necesidad (G2 del PR #101).
+/// </param>
 public sealed record ServiceReplacement(
     string ServiceName,
     string ContainerName,
     string NewImageRef,
     string? PreviousImageRef,
-    string? PreviousContainerId);
+    string? PreviousContainerId,
+    bool OldContainerRemoved = false);
 
 /// <summary>Qué hacer con un servicio al deshacer un rollout fallido.</summary>
 public enum RollbackAction
@@ -36,6 +42,24 @@ public enum RollbackAction
     /// no hay tráfico anterior que proteger.
     /// </summary>
     LeaveForDiagnosis = 1,
+
+    /// <summary>
+    /// El contenedor previo NUNCA llegó a borrarse (su <c>remove</c> falló), así que la revisión
+    /// anterior sigue viva y sirviendo. No se toca: retirarla para recrearla convertiría un rollout
+    /// fallido e inocuo en la destrucción de un contenedor sano, y si el <c>run</c> de restauración
+    /// fallara, el servicio quedaría caído por culpa del propio rollback.
+    /// </summary>
+    LeaveIntact = 2,
+
+    /// <summary>
+    /// Había revisión previa pero NO se puede restaurar con garantías, porque su referencia de
+    /// imagen es la MISMA que la del despliegue nuevo (típico cuando un rebuild de git reutiliza el
+    /// tag <c>{slug}-{svc}:{shortSha}</c>). Ese tag ya apunta a la imagen recién construida, así que
+    /// "restaurar" relanzaría exactamente la revisión que acaba de fallar. Se reporta como fallo del
+    /// rollback en vez de simularlo: un rollback que no puede cumplir es peor mentira que uno que
+    /// avisa. Cerrarlo de verdad exige que el satélite devuelva el ID/digest de la imagen.
+    /// </summary>
+    CannotRestore = 3,
 }
 
 /// <summary>Un paso concreto del plan de deshacer, ya resuelto (sin decisiones pendientes).</summary>
@@ -188,10 +212,38 @@ public static class NativeRolloutPlanner
         for (var i = replacements.Count - 1; i >= 0; i--)
         {
             var r = replacements[i];
-            steps.Add(string.IsNullOrWhiteSpace(r.PreviousImageRef)
-                ? new RollbackStep(r.ServiceName, r.ContainerName, RollbackAction.LeaveForDiagnosis, null)
-                : new RollbackStep(r.ServiceName, r.ContainerName, RollbackAction.RestorePrevious, r.PreviousImageRef));
+            steps.Add(new RollbackStep(r.ServiceName, r.ContainerName, DecideAction(r), r.PreviousImageRef));
         }
         return steps;
+    }
+
+    /// <summary>
+    /// Qué hacer con un servicio concreto al deshacer. El orden de las guardas importa: cada una
+    /// descarta un motivo distinto por el que restaurar sería inútil o dañino, y solo lo que
+    /// sobrevive a las tres se restaura de verdad.
+    /// </summary>
+    private static RollbackAction DecideAction(ServiceReplacement r)
+    {
+        // 1) No había nada antes: primer deploy. El contenedor nuevo se queda para diagnosticar.
+        if (string.IsNullOrWhiteSpace(r.PreviousImageRef))
+        {
+            return RollbackAction.LeaveForDiagnosis;
+        }
+
+        // 2) El remove falló: la revisión anterior nunca se fue y sigue sirviendo. Tocarla es el
+        //    único modo de convertir este fallo en una caída.
+        if (!r.OldContainerRemoved)
+        {
+            return RollbackAction.LeaveIntact;
+        }
+
+        // 3) El tag previo y el nuevo son el mismo: restaurarlo relanzaría la imagen que ha fallado.
+        //    Mejor decir que no se puede que fingir que se hizo.
+        if (string.Equals(r.PreviousImageRef, r.NewImageRef, StringComparison.Ordinal))
+        {
+            return RollbackAction.CannotRestore;
+        }
+
+        return RollbackAction.RestorePrevious;
     }
 }

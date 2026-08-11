@@ -280,6 +280,10 @@ public sealed class NativeDeployRunner(
             try
             {
                 await satellite.SendRemoveAsync(instance.TargetVmId, containerName, force: true, ct).ConfigureAwait(false);
+                // G2 PR #101 — "lo sustituí" y "lo intenté" no son lo mismo. Si el remove falla, el
+                // contenedor viejo sigue VIVO y sano: un rollback que lo borre para recrearlo
+                // destruiría producción sin necesidad. El plan de deshacer lo lee de aquí.
+                replacements[^1] = replacements[^1] with { OldContainerRemoved = true };
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -858,6 +862,30 @@ public sealed class NativeDeployRunner(
             {
                 notes.Add((DeploymentLogLevel.Warn,
                     $"rollback: '{step.ServiceName}' no tenía revisión previa (primer deploy); se deja {step.ContainerName} en su sitio para poder leer sus logs."));
+                continue;
+            }
+
+            if (step.Action == RollbackAction.LeaveIntact)
+            {
+                // La revisión anterior nunca se fue: sigue sirviendo. No cuenta como intento, porque
+                // no hay nada que restaurar — y tocarla sería el único modo de provocar una caída.
+                notes.Add((DeploymentLogLevel.Warn,
+                    $"rollback: '{step.ServiceName}' conserva su contenedor anterior intacto (su retirada había fallado), "
+                    + "así que la revisión previa sigue en servicio y no se toca."));
+                continue;
+            }
+
+            if (step.Action == RollbackAction.CannotRestore)
+            {
+                // Cuenta como intento FALLIDO a propósito: así el deployment no se marca RolledBack
+                // y el estado refleja que este servicio quedó sin su revisión buena.
+                attempted++;
+                notes.Add((DeploymentLogLevel.Error,
+                    $"rollback: '{step.ServiceName}' NO se puede restaurar: su imagen previa y la nueva son la misma "
+                    + $"referencia ({step.RestoreImageRef}), que ya apunta a la revisión recién construida. "
+                    + "Restaurarla relanzaría exactamente lo que acaba de fallar; requiere intervención manual."));
+                log.LogError("native-deploy rollback: {Container} NO restaurable (tag mutable {Image})",
+                    step.ContainerName, step.RestoreImageRef);
                 continue;
             }
 
