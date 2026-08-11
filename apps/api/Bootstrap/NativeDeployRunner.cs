@@ -5,6 +5,7 @@ using Aethra.Modules.Cloudflare.UseCases.Zones.Queries;
 using Aethra.Modules.Deployments.Domain.Deployment;
 using Aethra.Modules.Deployments.Infrastructure;
 using Aethra.Modules.Deployments.Infrastructure.Build;
+using Aethra.Modules.Deployments.Rollout;
 using Aethra.Modules.Monitoring.UseCases.Commands;
 using Aethra.Modules.Proxy.UseCases.Routes;
 using Aethra.Modules.Proxy.UseCases.Routes.Commands;
@@ -19,13 +20,19 @@ using Microsoft.Extensions.Logging;
 
 namespace Aethra.Api.Bootstrap;
 
+/// <param name="Warnings">
+/// OT-006 — hechos del rollout que NO tumban el deploy pero no pueden quedar mudos: monitores que no
+/// se crearon (<c>#53</c>) y el detalle de cada restauración de contenedor (<c>#49</c>/<c>#50</c>),
+/// con su éxito o su fallo. Van además al log persistido del <c>Deployment</c>.
+/// </param>
 public sealed record NativeDeployResult(
     bool Success,
     string? Error,
     string? Hostname,
     bool Healthy,
     IReadOnlyList<string> Services,
-    IReadOnlyList<string> Routes);
+    IReadOnlyList<string> Routes,
+    IReadOnlyList<string> Warnings);
 
 public sealed record NativeRestartResult(
     bool Success,
@@ -116,6 +123,19 @@ public sealed class NativeDeployRunner(
         deploymentsDb.Deployments.Add(deployment);
         await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
 
+        // OT-006 #49/#50 — estado del rollout. Se declara FUERA del try porque el manejador de
+        // excepciones también tiene que poder restaurar lo que ya se había sustituido.
+        // - replacements: servicios cuyo contenedor ya se destruyó, EN ORDEN de aplicación.
+        // - specsByService: la spec con la que se levantó cada uno; el restore reusa la MISMA
+        //   cambiando solo la imagen (mismo criterio que DeploymentOrchestrator.DoRollbackAsync).
+        var replacements = new List<ServiceReplacement>();
+        var specsByService = new Dictionary<string, RunSpec>(StringComparer.Ordinal);
+        var warnings = new List<string>();
+        // Pasa a true en cuanto el healthcheck da sano. A partir de ahí NADA revierte contenedores:
+        // lo que falle después (rutas, monitor, limpieza, persistencia) no es motivo para tumbar una
+        // revisión que ya está corriendo sana — sería provocar la caída que esta OT existe para evitar.
+        var swapConfirmed = false;
+
         try
         {
             deployment.Transition(DeploymentStatus.Pulling, clock.UtcNow);
@@ -144,6 +164,12 @@ public sealed class NativeDeployRunner(
 
         deployment.Transition(DeploymentStatus.Starting, clock.UtcNow);
         await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        // OT-006 #49 — foto del runtime ANTES de tocar nada: de aquí sale la imagen del contenedor
+        // previo de cada servicio, lo único que permite restaurarlo si el reemplazo no queda sano
+        // (el remove es force:true y no deja rastro). Una sola llamada, no N: los contenedores de
+        // esta Instance solo cambian por este mismo deploy.
+        var containersBefore = await ListContainersSafeAsync(instance.TargetVmId, ct).ConfigureAwait(false);
 
         var deployedServices = new List<string>();
         foreach (var svc in services)
@@ -175,26 +201,18 @@ public sealed class NativeDeployRunner(
                 await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
                 if (!br.Success)
                 {
-                    await FailNativeDeploymentAsync(deployment, "build_failed",
-                        $"Build git del servicio '{svc.Name}' fallo: {br.ErrorMessage}", ct).ConfigureAwait(false);
-                }
-                if (!br.Success)
-                {
-                    return Fail($"Build (git) del servicio '{svc.Name}' falló: {br.ErrorMessage}", hostname);
+                    var buildError = $"Build (git) del servicio '{svc.Name}' falló: {br.ErrorMessage}";
+                    await FailNativeDeploymentAsync(deployment, "build_failed", buildError, ct).ConfigureAwait(false);
+                    // OT-006 #50 — este servicio aún no se tocó, pero los 1..k-1 ya fueron
+                    // sustituidos: sin esto el despliegue quedaba a medias y sin recuperación.
+                    warnings.AddRange(await RollbackReplacementsAsync(
+                        deployment, instance.TargetVmId, replacements, specsByService, ct).ConfigureAwait(false));
+                    return Fail(buildError, hostname, warnings);
                 }
             }
             else
             {
                 image = svc.Image;
-            }
-
-            try
-            {
-                await satellite.SendRemoveAsync(instance.TargetVmId, containerName, force: true, ct).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                log.LogDebug("native-deploy: remove previo de {Name} ignorado: {Msg}", containerName, ex.Message);
             }
 
             // F13.3 — volúmenes persistentes (ej. DataProtection keys). El nombre admite {instance}
@@ -206,6 +224,8 @@ public sealed class NativeDeployRunner(
                     v.ReadOnly))
                 .ToList();
 
+            // OT-006 — la spec se arma ANTES del remove (es cálculo puro, sin I/O) para que el
+            // restore pueda reusar EXACTAMENTE la misma spec cambiando solo la imagen.
             var spec = new RunSpec(
                 ContainerName: containerName,
                 ImageRef: image,
@@ -217,45 +237,82 @@ public sealed class NativeDeployRunner(
                     svc.HostPort is null ? null : "0.0.0.0")],
                 Volumes: volumes,
                 Command: null,
+                // Healthcheck del contenedor: null a propósito → se hereda el HEALTHCHECK de la
+                // imagen (si lo declara) y ContainerHealthRules LEE su veredicto del estado que
+                // reporta el runtime. Poder configurar uno por servicio exige un campo en
+                // TemplateServiceView (Shared.Contracts + Modules.Projects): gap encolado en OT-006.
                 Healthcheck: null,
                 NetworkName: _appNetwork,
                 RestartPolicy: "unless-stopped");
+            specsByService[svc.Name] = spec;
+
+            // OT-006 #49 — capturar la revisión previa ANTES del remove destructivo y anotarla como
+            // reemplazo ANTES de ejecutarlo: desde esta línea el servicio ya no tiene contenedor
+            // propio, así que entra en el plan de restauración pase lo que pase después.
+            var replacement = NativeRolloutPlanner.Capture(svc.Name, containerName, image, containersBefore);
+            replacements.Add(replacement);
+            if (deployment.OldContainerId is null && replacement.PreviousContainerId is { } previousId)
+            {
+                // El agregado exige tener registrado el contenedor previo para admitir RolledBack.
+                deployment.RecordOldContainer(previousId, replacement.PreviousImageRef ?? string.Empty, clock.UtcNow);
+            }
+
+            // El remove NO es opcional ni se puede posponer: Docker rechaza crear un contenedor con
+            // un nombre ya tomado (aunque el viejo esté PARADO) y ISatelliteRpcClient no expone
+            // rename, así que no hay forma de apartar al anterior. La seguridad no viene de
+            // conservarlo vivo —eso sería el split-brain que CleanupStaleContainersAsync documenta—
+            // sino de poder RESTAURARLO, que es lo que se capturó arriba.
+            try
+            {
+                await satellite.SendRemoveAsync(instance.TargetVmId, containerName, force: true, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.LogDebug("native-deploy: remove previo de {Name} ignorado: {Msg}", containerName, ex.Message);
+            }
 
             var run = await satellite.SendRunAsync(instance.TargetVmId, spec, pullFrom: null, ct).ConfigureAwait(false);
             if (!run.Success)
             {
-                await FailNativeDeploymentAsync(deployment, "run_failed",
-                    $"Servicio '{svc.Name}' no arranco: {run.ErrorMessage}", ct).ConfigureAwait(false);
-            }
-            if (!run.Success)
-            {
-                return Fail($"Servicio '{svc.Name}' no arrancó: {run.ErrorMessage}", hostname);
+                var runError = $"Servicio '{svc.Name}' no arrancó: {run.ErrorMessage}";
+                await FailNativeDeploymentAsync(deployment, "run_failed", runError, ct).ConfigureAwait(false);
+                // OT-006 #49/#50 — incluye a ESTE servicio (ya se le borró el contenedor) y a los
+                // 1..k-1 previos.
+                warnings.AddRange(await RollbackReplacementsAsync(
+                    deployment, instance.TargetVmId, replacements, specsByService, ct).ConfigureAwait(false));
+                return Fail(runError, hostname, warnings);
             }
             deployedServices.Add($"{svc.Name} ({svc.BuildMode}) → {image}");
         }
 
-        // Healthcheck: todos los contenedores Up.
-        var names = services.Select(s => $"{instance.Slug}-{s.Name}").ToHashSet(StringComparer.Ordinal);
-        deployment.RecordNewContainer(names.First(), clock.UtcNow);
+        // Healthcheck. OT-006 #51 — "sano" ya no es `Status.StartsWith("Up")`: ese predicado daba
+        // verdadero para "Up 2 minutes (unhealthy)" y para "Up 3 seconds (health: starting)", o sea
+        // que un contenedor con el healthcheck FALLANDO sustituía a la revisión anterior. La
+        // decisión vive ahora en ContainerHealthRules (función pura, testeada).
+        var names = services.Select(s => $"{instance.Slug}-{s.Name}").ToList();
+        deployment.RecordNewContainer(names[0], clock.UtcNow);
         deployment.Transition(DeploymentStatus.Healthcheck, clock.UtcNow);
         await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
-        var healthy = false;
-        for (var attempt = 1; attempt <= 15 && !healthy; attempt++)
+        var verdict = new RolloutHealthVerdict(false, ["healthcheck aún no ejecutado"]);
+        for (var attempt = 1; attempt <= 15 && !verdict.AllHealthy; attempt++)
         {
             await Task.Delay(2000, ct).ConfigureAwait(false);
             var containers = await satellite.SendListContainersAsync(instance.TargetVmId, ct).ConfigureAwait(false);
-            healthy = names.All(nm => containers.Any(c =>
-                string.Equals(c.Name, nm, StringComparison.Ordinal)
-                && c.Status.StartsWith("Up", StringComparison.OrdinalIgnoreCase)));
+            verdict = ContainerHealthRules.EvaluateAll(names, containers);
         }
+        var healthy = verdict.AllHealthy;
         if (!healthy)
         {
-            await FailNativeDeploymentAsync(deployment, "healthcheck_failed",
-                "Uno o mas servicios no alcanzaron estado Up dentro del tiempo de espera.", ct).ConfigureAwait(false);
-            return new NativeDeployResult(false,
-                "Uno o mas servicios no alcanzaron estado Up dentro del tiempo de espera.",
-                hostname, false, deployedServices, []);
+            var healthError = "Uno o más servicios no quedaron sanos dentro del tiempo de espera: "
+                + string.Join("; ", verdict.Blockers);
+            await FailNativeDeploymentAsync(deployment, "healthcheck_failed", healthError, ct).ConfigureAwait(false);
+            // OT-006 #49 — el reemplazo no pasó el healthcheck: se retira y vuelve la revisión
+            // anterior. Antes se devolvía Fail y el servicio quedaba SIN NADA corriendo.
+            warnings.AddRange(await RollbackReplacementsAsync(
+                deployment, instance.TargetVmId, replacements, specsByService, ct).ConfigureAwait(false));
+            return new NativeDeployResult(false, healthError, hostname, false, deployedServices, [], warnings);
         }
+        swapConfirmed = true;
 
         deployment.Transition(DeploymentStatus.Swapping, clock.UtcNow);
         await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -264,8 +321,25 @@ public sealed class NativeDeployRunner(
         var anyServiceHost = services.Any(s => !string.IsNullOrWhiteSpace(s.Hostname));
         if (!string.IsNullOrWhiteSpace(hostname) || anyServiceHost)
         {
-            routes = await ReconcileRoutingAsync(
+            var routing = await ReconcileRoutingAsync(
                 instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, ct).ConfigureAwait(false);
+            routes = [.. routing.Routes];
+            foreach (var w in routing.Warnings)
+            {
+                warnings.Add(w);
+                deployment.AppendLog(DeploymentLogLevel.Warn, "swapping", w, clock.UtcNow);
+            }
+            if (routing.Error is { } routingError)
+            {
+                // OT-006 #52 — un fallo REAL de creación de ruta (distinto de "ya existía") deja la
+                // URL sin servir y antes se reportaba como éxito. Se propaga: el Deployment queda
+                // Failed y el resultado dice por qué.
+                // Los contenedores NO se revierten: ya están sanos, y tumbar la revisión nueva por
+                // un fallo del proxy provocaría justo la caída que esta OT existe para evitar — lo
+                // que falta es el enrutado, no la app.
+                await FailNativeDeploymentAsync(deployment, "route_failed", routingError, ct).ConfigureAwait(false);
+                return new NativeDeployResult(false, routingError, hostname, true, deployedServices, routes, warnings);
+            }
         }
         else
         {
@@ -288,14 +362,31 @@ public sealed class NativeDeployRunner(
         deployment.Complete(clock.UtcNow);
         await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
 
-        log.LogInformation("native-deploy {Inst} OK (healthy={H}, {N} servicios)", instance.Slug, healthy, deployedServices.Count);
-        return new NativeDeployResult(true, null, hostname, healthy, deployedServices, routes);
+        log.LogInformation("native-deploy {Inst} OK (healthy={H}, {N} servicios, {W} avisos)",
+            instance.Slug, healthy, deployedServices.Count, warnings.Count);
+        return new NativeDeployResult(true, null, hostname, healthy, deployedServices, routes, warnings);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             log.LogError(ex, "native-deploy {Inst} fallo", instance.Slug);
             await FailNativeDeploymentAsync(deployment, "internal_error", ex.Message, ct).ConfigureAwait(false);
-            return Fail(ex.Message, hostname);
+            if (!swapConfirmed)
+            {
+                // OT-006 #50 — una excepción a media tanda dejaba igual de huérfanos a los servicios
+                // ya sustituidos que un Fail explícito.
+                warnings.AddRange(await RollbackReplacementsAsync(
+                    deployment, instance.TargetVmId, replacements, specsByService, ct).ConfigureAwait(false));
+            }
+            else
+            {
+                // La excepción ocurrió DESPUÉS de que el healthcheck diera sano (rutas, monitor,
+                // limpieza, persistencia): los contenedores nuevos están corriendo y se quedan.
+                var note = "el fallo ocurrió tras confirmar el healthcheck: los contenedores nuevos NO se revierten "
+                    + "(la revisión desplegada está sana; lo que falló es posterior al swap).";
+                warnings.Add(note);
+                log.LogWarning("native-deploy {Inst}: {Warning}", instance.Slug, note);
+            }
+            return Fail(ex.Message, hostname, warnings);
         }
     }
 
@@ -409,22 +500,45 @@ public sealed class NativeDeployRunner(
         {
             return;
         }
-        await ReconcileRoutingAsync(instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, ct)
-            .ConfigureAwait(false);
+        var routing = await ReconcileRoutingAsync(
+            instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, ct).ConfigureAwait(false);
+        foreach (var w in routing.Warnings)
+        {
+            log.LogWarning("reconcile-routing {Inst}: {Warning}", instance.Slug, w);
+        }
+        if (routing.Error is { } err)
+        {
+            // OT-006 #52 — este camino (cambio de dominio) tampoco puede tragarse un fallo de ruta.
+            log.LogError("reconcile-routing {Inst}: {Error}", instance.Slug, err);
+            return;
+        }
         log.LogInformation("reconcile-routing {Inst}: rutas/CNAME/monitor sincronizados (multi-host)", instance.Slug);
     }
 
     /// <summary>
-    /// Asegura las rutas del <paramref name="hostname"/> deseado (una por servicio×pathPrefix →
+    /// Resultado de una reconciliación de routing. <paramref name="Error"/> no nulo = al menos una
+    /// ruta NO se pudo crear por una causa distinta de "ya existía" (OT-006 <c>#52</c>);
+    /// <paramref name="Warnings"/> recoge lo que no tumba el deploy pero no puede quedar mudo
+    /// (monitores no creados, OT-006 <c>#53</c>).
+    /// </summary>
+    private sealed record RoutingOutcome(
+        IReadOnlyList<string> Routes,
+        IReadOnlyList<string> Warnings,
+        string? Error);
+
+    /// <summary>
+    /// Asegura las rutas del <paramref name="instanceHostname"/> deseado (una por servicio×pathPrefix →
     /// <c>{slug}-{svc}:{port}</c>), BORRA las rutas que apuntan a contenedores de esta Instance pero
     /// bajo OTRO hostname (limpieza de URL anterior), y refresca CNAME + monitor. Crea-antes-de-borrar
     /// para no dejar la URL caída en la transición.
     /// </summary>
-    private async Task<List<string>> ReconcileRoutingAsync(
+    private async Task<RoutingOutcome> ReconcileRoutingAsync(
         string slug, string instanceId, string projectId,
         IReadOnlyList<TemplateServiceView> services, string? instanceHostname, CancellationToken ct)
     {
         var routes = new List<string>();
+        var warnings = new List<string>();
+        string? error = null;
         // Set deseado de (host, pathPrefix) para limpiar SOLO rutas mías realmente obsoletas.
         var desired = new HashSet<(string Host, string Prefix)>();
         var hostsTouched = new List<string>();
@@ -456,7 +570,28 @@ public sealed class NativeDeployRunner(
                 var r = await mediator.Send(new CreateRouteCommand(
                     host, backend, false, prefix,
                     "app_environment", instanceId, RouteOwnershipRules.NativeDeployOrigin), ct).ConfigureAwait(false);
-                routes.Add(r.IsSuccess ? $"{host}{prefix} → {backend}" : $"{host}{prefix} (ya existía)");
+                // OT-006 #52 — antes CUALQUIER fallo se etiquetaba "(ya existía)". Solo el conflicto
+                // de hostname lo es; el resto (backend inválido, hostname inválido, validación) deja
+                // la URL sin servir y no puede reportarse como éxito.
+                var outcome = DeploySideEffectRules.ClassifyRoute(r.IsSuccess, r.IsSuccess ? null : r.Error.Code);
+                if (outcome == SideEffectOutcome.Created)
+                {
+                    routes.Add($"{host}{prefix} → {backend}");
+                }
+                else if (outcome == SideEffectOutcome.AlreadyExists)
+                {
+                    routes.Add($"{host}{prefix} (ya existía)");
+                }
+                else
+                {
+                    var msg = $"ruta {host}{prefix} → {backend} NO se pudo crear: [{r.Error.Code}] {r.Error.Message}";
+                    routes.Add($"{host}{prefix} FALLÓ [{r.Error.Code}]");
+                    error ??= msg;
+                    log.LogError("reconcile-routing {Slug}: {Error}", slug, msg);
+                }
+                // Se añade al set deseado incluso si falló: `desired` es lo que protege a una ruta de
+                // ser borrada en el paso 3, y una ruta que queríamos crear nunca debe quedar expuesta
+                // a la limpieza por el hecho de que su creación fallara.
                 desired.Add((host.ToLowerInvariant(), prefix));
             }
         }
@@ -470,17 +605,28 @@ public sealed class NativeDeployRunner(
         // 3) Limpiar SOLO rutas mías ({slug}-{svc}: + Origin propio) que NO estén en el set deseado
         // (host+prefix). Borra hosts viejos de ESTA Instance sin tocar las rutas multi-host vigentes
         // ni las que apuntan al mismo backend pero no creamos nosotros (ver OT-001, RouteOwnershipRules).
+        // OT-006 #52 — si alguna ruta deseada NO se pudo crear, el estado deseado está incompleto y
+        // este paso es el ÚNICO destructivo del método: borrar rutas viejas apoyándose en un set
+        // deseado incompleto puede dejar el host sin ninguna ruta viva. Se omite y se reporta.
         var myBackends = services.Select(s => $"http://{slug}-{s.Name}:").ToList();
-        var all = await mediator.Send(new ListRoutesQuery(), ct).ConfigureAwait(false);
-        if (all.IsSuccess)
+        if (error is not null)
         {
-            foreach (var rt in all.Value)
+            log.LogWarning(
+                "reconcile-routing {Slug}: limpieza de rutas obsoletas OMITIDA porque una ruta deseada falló", slug);
+        }
+        else
+        {
+            var all = await mediator.Send(new ListRoutesQuery(), ct).ConfigureAwait(false);
+            if (all.IsSuccess)
             {
-                if (RouteOwnershipRules.IsObsoleteOwnRoute(rt, myBackends, desired))
+                foreach (var rt in all.Value)
                 {
-                    await mediator.Send(new DeleteRouteCommand(rt.Id), ct).ConfigureAwait(false);
-                    routes.Add($"− {rt.Hostname}{rt.PathPrefix} (obsoleta, borrada)");
-                    log.LogInformation("reconcile-routing {Slug}: ruta obsoleta borrada {Host}{Path}", slug, rt.Hostname, rt.PathPrefix);
+                    if (RouteOwnershipRules.IsObsoleteOwnRoute(rt, myBackends, desired))
+                    {
+                        await mediator.Send(new DeleteRouteCommand(rt.Id), ct).ConfigureAwait(false);
+                        routes.Add($"− {rt.Hostname}{rt.PathPrefix} (obsoleta, borrada)");
+                        log.LogInformation("reconcile-routing {Slug}: ruta obsoleta borrada {Host}{Path}", slug, rt.Hostname, rt.PathPrefix);
+                    }
                 }
             }
         }
@@ -489,14 +635,25 @@ public sealed class NativeDeployRunner(
         foreach (var host in hostsTouched)
         {
             var monSlug = hostsTouched.Count > 1 ? host.Split('.')[0] : slug;
-            await mediator.Send(new CreateMonitorCommand(
+            var mon = await mediator.Send(new CreateMonitorCommand(
                 Slug: monSlug, Name: host, Url: $"https://{host}/",
                 HttpMethod: "GET", ExpectedStatusCodes: [200, 301, 302, 307, 308],
                 IntervalSec: 120, TimeoutMs: 15000, Headers: null, BodyTemplate: null,
                 InstanceId: instanceId, ProjectId: projectId), ct).ConfigureAwait(false);
+            // OT-006 #53 — antes el resultado ni se asignaba: un monitor que no se crea dejaba la
+            // app sin vigilancia y era invisible. Los dos conflictos benignos son el caso normal del
+            // redeploy; cualquier otro error sale como aviso del deploy y al log del Deployment.
+            if (DeploySideEffectRules.ClassifyMonitor(mon.IsSuccess, mon.IsSuccess ? null : mon.Error.Code)
+                == SideEffectOutcome.Failed)
+            {
+                var msg = $"monitor '{monSlug}' para {host} NO se creó: [{mon.Error.Code}] {mon.Error.Message} "
+                    + "— la app queda desplegada pero SIN vigilancia de disponibilidad.";
+                warnings.Add(msg);
+                log.LogWarning("reconcile-routing {Slug}: {Warning}", slug, msg);
+            }
         }
 
-        return routes;
+        return new RoutingOutcome(routes, warnings, error);
     }
 
     /// <summary>
@@ -575,8 +732,139 @@ public sealed class NativeDeployRunner(
         }
     }
 
-    private static NativeDeployResult Fail(string error, string? hostname = null)
-        => new(false, error, hostname, false, [], []);
+    /// <summary>
+    /// OT-006 — lista los contenedores de la VM sin dejar que un satélite caído rompa el deploy: si
+    /// no se puede listar, devolvemos vacío y el rollout se comporta como "no había revisión previa
+    /// que restaurar" (mismo criterio que <c>DeploymentOrchestrator.FindPreviousContainerAsync</c>).
+    /// Perder la foto degrada la capacidad de rollback, no la corrección del deploy.
+    /// </summary>
+    private async Task<IReadOnlyList<ContainerInfo>> ListContainersSafeAsync(string vmId, CancellationToken ct)
+    {
+        try
+        {
+            return await satellite.SendListContainersAsync(vmId, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex,
+                "native-deploy: no se pudo listar contenedores de la VM {Vm}; este rollout no tendrá revisión previa que restaurar",
+                vmId);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// OT-006 <c>#49</c>/<c>#50</c> — deshace los reemplazos ya aplicados cuando el rollout falla:
+    /// por cada servicio ya sustituido retira el contenedor nuevo y vuelve a levantar la imagen
+    /// previa con la MISMA spec. El plan (qué y en qué orden) lo decide
+    /// <see cref="NativeRolloutPlanner.PlanRollback"/>; aquí solo se ejecuta el I/O.
+    ///
+    /// <para>
+    /// Best-effort deliberado: un paso que falla no aborta los demás — dejar restaurados 3 de 4
+    /// servicios es estrictamente mejor que dejar 0. Cada paso, salga bien o mal, queda en el log
+    /// persistido del <c>Deployment</c> y en los avisos del resultado: un rollback silencioso sería
+    /// el mismo modo de fallo que esta OT persigue.
+    /// </para>
+    ///
+    /// <para>
+    /// El agregado pasa a <c>RolledBack</c> solo si TODO lo que había que restaurar se restauró; si
+    /// quedó algo a medias el deployment se queda en <c>Failed</c>, que es la verdad.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<string>> RollbackReplacementsAsync(
+        Deployment deployment,
+        string vmId,
+        IReadOnlyList<ServiceReplacement> replacements,
+        Dictionary<string, RunSpec> specsByService,
+        CancellationToken ct)
+    {
+        var notes = new List<string>();
+        var plan = NativeRolloutPlanner.PlanRollback(replacements);
+        if (plan.Count == 0)
+        {
+            return notes;
+        }
+
+        var attempted = 0;
+        var restored = 0;
+        foreach (var step in plan)
+        {
+            if (step.Action == RollbackAction.LeaveForDiagnosis)
+            {
+                Note(DeploymentLogLevel.Warn,
+                    $"rollback: '{step.ServiceName}' no tenía revisión previa (primer deploy); se deja {step.ContainerName} en su sitio para poder leer sus logs.");
+                continue;
+            }
+
+            attempted++;
+            if (!specsByService.TryGetValue(step.ServiceName, out var spec))
+            {
+                Note(DeploymentLogLevel.Error,
+                    $"rollback: no hay spec registrada para '{step.ServiceName}'; {step.ContainerName} NO se pudo restaurar.");
+                continue;
+            }
+
+            try
+            {
+                // Retirar el contenedor nuevo libera el nombre y los puertos publicados; sin esto el
+                // run de la imagen previa chocaría con el nombre ya tomado.
+                await satellite.SendRemoveAsync(vmId, step.ContainerName, force: true, ct).ConfigureAwait(false);
+                var restoreSpec = spec with { ImageRef = step.RestoreImageRef! };
+                var run = await satellite.SendRunAsync(vmId, restoreSpec, pullFrom: null, ct).ConfigureAwait(false);
+                if (run.Success)
+                {
+                    restored++;
+                    Note(DeploymentLogLevel.Warn,
+                        $"rollback: '{step.ServiceName}' restaurado a la revisión previa {step.RestoreImageRef}.");
+                    log.LogWarning("native-deploy rollback: {Container} restaurado a {Image}",
+                        step.ContainerName, step.RestoreImageRef);
+                }
+                else
+                {
+                    Note(DeploymentLogLevel.Error,
+                        $"rollback: '{step.ServiceName}' NO se pudo restaurar a {step.RestoreImageRef}: {run.ErrorMessage}");
+                    log.LogError("native-deploy rollback: {Container} NO restaurado: {Err}",
+                        step.ContainerName, run.ErrorMessage);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Note(DeploymentLogLevel.Error,
+                    $"rollback: '{step.ServiceName}' lanzó excepción al restaurar: {ex.Message}");
+                log.LogError(ex, "native-deploy rollback: excepción restaurando {Container}", step.ContainerName);
+            }
+        }
+
+        // El agregado solo admite Failed → RolledBack, y exige tener capturado el contenedor previo.
+        if (attempted > 0 && restored == attempted
+            && deployment.Status == DeploymentStatus.Failed
+            && !string.IsNullOrWhiteSpace(deployment.OldContainerId))
+        {
+            deployment.Rollback(clock.UtcNow);
+        }
+
+        try
+        {
+            await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Persistir la bitácora del rollback no puede tapar el fallo que lo provocó.
+            log.LogError(ex, "native-deploy rollback: no se pudo persistir la bitácora del rollback");
+        }
+
+        return notes;
+
+        void Note(DeploymentLogLevel level, string text)
+        {
+            notes.Add(text);
+            deployment.AppendLog(level, "swapping", text, clock.UtcNow);
+        }
+    }
+
+    private static NativeDeployResult Fail(
+        string error, string? hostname = null, IReadOnlyList<string>? warnings = null)
+        => new(false, error, hostname, false, [], [], warnings ?? []);
 
     private static NativeRestartResult RestartFail(string error)
         => new(false, error, []);
