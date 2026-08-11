@@ -25,14 +25,7 @@ public static class NativeDeployEndpoints
             {
                 return Results.Problem(r.Error);
             }
-            return Results.Ok(new
-            {
-                instanceId,
-                hostname = r.Hostname,
-                healthy = r.Healthy,
-                services = r.Services,
-                routes = r.Routes,
-            });
+            return Results.Ok(CreateDeployNativeResponse(instanceId, r));
         })
         .RequireAuthorization("scope:projects:write")
         .WithName("DeployInstanceNative")
@@ -96,6 +89,17 @@ public static class NativeDeployEndpoints
 
         return app;
     }
+
+    public static object CreateDeployNativeResponse(string instanceId, NativeDeployResult result)
+        => new
+        {
+            instanceId,
+            hostname = result.Hostname,
+            healthy = result.Healthy,
+            services = result.Services,
+            routes = result.Routes,
+            warnings = result.Warnings ?? [],
+        };
 
     public sealed record DeployNativeRequest(string? Hostname, string? ServiceName = null);
 
