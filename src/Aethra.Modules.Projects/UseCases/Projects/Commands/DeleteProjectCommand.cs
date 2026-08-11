@@ -1,9 +1,13 @@
 using Aethra.Modules.Projects.Domain;
 using Aethra.Modules.Projects.Infrastructure;
+using Aethra.Modules.Projects.UseCases.Instances.Commands;
+using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Infrastructure.Cqrs;
+using Aethra.Shared.Infrastructure.Outbox;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Ids;
 using Aethra.Shared.Kernel.Results;
+using Aethra.Shared.Kernel.Time;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aethra.Modules.Projects.UseCases.Projects.Commands;
@@ -14,11 +18,15 @@ namespace Aethra.Modules.Projects.UseCases.Projects.Commands;
 /// garantiza EF al borrar los aggregates trackeados (instancias → templates/clients → project).
 ///
 /// <paramref name="Force"/> es obligatorio si el proyecto tiene instancias desplegadas: borrar
-/// el registro NO detiene contenedores ni elimina rutas del proxy (eso lo limpia el caller).
+/// en cascada emite <c>InstanceRemoved</c> para que Proxy/Cloudflare/Monitoring/Deployments limpien
+/// rutas, DNS, monitores y contenedores.
 /// </summary>
 public sealed record DeleteProjectCommand(string ProjectId, bool Force = false) : ICommand;
 
-internal sealed class DeleteProjectHandler(ProjectsDbContext db)
+internal sealed class DeleteProjectHandler(
+    ProjectsDbContext db,
+    IClock clock,
+    IOutboxWriter<ProjectsDbContext> outbox)
     : ICommandHandler<DeleteProjectCommand>
 {
     public async Task<Result> Handle(DeleteProjectCommand request, CancellationToken cancellationToken)
@@ -53,6 +61,19 @@ internal sealed class DeleteProjectHandler(ProjectsDbContext db)
                 $"El proyecto tiene {instances.Count} instancia(s) desplegada(s). Confirma el borrado en cascada (force).");
         }
 
+        foreach (var inst in instances)
+        {
+            var template = templates.FirstOrDefault(t => t.Id == inst.TemplateId);
+            await outbox.EnqueueAsync(new InstanceRemovedIntegrationEvent(
+                InstanceId: inst.Id.ToString(),
+                AutoHostname: inst.AutoHostname,
+                CustomDomain: inst.CustomDomain,
+                RemovedAt: clock.UtcNow,
+                TargetVmId: inst.TargetVmId,
+                ContainerNames: DeleteInstanceHandler.ResolveContainerNames(
+                    inst.Slug, inst.ContainerName, template)), cancellationToken).ConfigureAwait(false);
+        }
+
         // EnvVars y Secrets son polimórficos (scope_id sin FK): se borran por scope de cada
         // aggregate del proyecto.
         var scopeIds = new List<string> { projectId.ToString() };
@@ -66,8 +87,7 @@ internal sealed class DeleteProjectHandler(ProjectsDbContext db)
         await strategy.ExecuteAsync(async () =>
         {
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            await db.EnvironmentVariables.Where(e => scopeIds.Contains(e.ScopeId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-            await db.Secrets.Where(s => scopeIds.Contains(s.ScopeId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await DeleteScopedRowsAsync(scopeIds, cancellationToken).ConfigureAwait(false);
 
             db.Instances.RemoveRange(instances);
             db.Templates.RemoveRange(templates);
@@ -78,5 +98,28 @@ internal sealed class DeleteProjectHandler(ProjectsDbContext db)
         }).ConfigureAwait(false);
 
         return Result.Success();
+    }
+
+    private async Task DeleteScopedRowsAsync(IReadOnlyCollection<string> scopeIds, CancellationToken cancellationToken)
+    {
+        if (db.Database.IsRelational())
+        {
+            await db.EnvironmentVariables.Where(e => scopeIds.Contains(e.ScopeId))
+                .ExecuteDeleteAsync(cancellationToken)
+                .ConfigureAwait(false);
+            await db.Secrets.Where(s => scopeIds.Contains(s.ScopeId))
+                .ExecuteDeleteAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        db.EnvironmentVariables.RemoveRange(
+            await db.EnvironmentVariables.Where(e => scopeIds.Contains(e.ScopeId))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false));
+        db.Secrets.RemoveRange(
+            await db.Secrets.Where(s => scopeIds.Contains(s.ScopeId))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false));
     }
 }

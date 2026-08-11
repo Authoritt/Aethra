@@ -42,8 +42,9 @@ internal sealed class DeleteInstanceHandler(
         }
         if (!instance.IsEphemeral && !request.ForceEphemeral)
         {
-            // Por defecto solo permitimos borrar ephemerals — borrar productivas tiene un endpoint
-            // separado con auditoria adicional (no introducido en F12.3).
+            return Error.Conflict(
+                "instance.delete_requires_confirmation",
+                "La instance no es efímera. Confirma el borrado destructivo pasando force=true.");
         }
 
         // Nombres de contenedor a derribar: {slug}-{servicio} por cada servicio del template
