@@ -46,6 +46,38 @@ public sealed record RollbackStep(
     string? RestoreImageRef);
 
 /// <summary>
+/// Foto del runtime tomada antes de la fase destructiva, CON su fiabilidad explícita.
+///
+/// <para>
+/// El campo <see cref="Succeeded"/> no es decorativo: una lista vacía es AMBIGUA. Puede significar
+/// "esta Instance no tiene contenedores todavía" (primer deploy, seguro destruir nada) o "no pude
+/// preguntarle al satélite" (un timeout transitorio). Confundirlas es lo que convierte un deploy con
+/// rollback en uno destructivo: si el listado falla y aun así seguimos, cada servicio se clasifica
+/// como "sin revisión previa", se borra su contenedor con <c>force:true</c> y no queda nada que
+/// restaurar. Por eso la fiabilidad viaja con los datos y no se infiere del <c>Count</c>.
+/// </para>
+/// </summary>
+public sealed record ContainerSnapshot(bool Succeeded, IReadOnlyList<ContainerInfo> Containers)
+{
+    /// <summary>Foto tomada con éxito. Una lista vacía aquí SÍ significa "no hay contenedores".</summary>
+    public static ContainerSnapshot Taken(IReadOnlyList<ContainerInfo> containers) => new(true, containers);
+
+    /// <summary>No se pudo consultar el runtime: no sabemos qué hay, así que no se destruye nada.</summary>
+    public static ContainerSnapshot Unavailable() => new(false, []);
+}
+
+/// <summary>
+/// Veredicto sobre si es seguro sustituir el contenedor de un servicio.
+/// </summary>
+/// <param name="CanProceed">Si se puede ejecutar la fase destructiva (remove + run).</param>
+/// <param name="Replacement">Reemplazo capturado; no nulo si y solo si <paramref name="CanProceed"/>.</param>
+/// <param name="AbortReason">Motivo del rechazo; no nulo si y solo si NO se puede proceder.</param>
+public sealed record ReplacementDecision(
+    bool CanProceed,
+    ServiceReplacement? Replacement,
+    string? AbortReason);
+
+/// <summary>
 /// OT-006 <c>#49</c>/<c>#50</c> — decide QUÉ hay que deshacer cuando un rollout nativo multi-servicio
 /// falla, y en qué orden. Función pura: el runner solo ejecuta el plan.
 ///
@@ -105,6 +137,37 @@ public static class NativeRolloutPlanner
         var previousId = string.IsNullOrWhiteSpace(previous?.Id) ? null : previous!.Id;
 
         return new ServiceReplacement(serviceName, containerName, newImageRef, previousImage, previousId);
+    }
+
+    /// <summary>
+    /// Decide si se puede sustituir el contenedor de un servicio, y con qué información de vuelta.
+    ///
+    /// <para><b>Falla cerrado.</b> Si la foto del runtime no se pudo tomar
+    /// (<see cref="ContainerSnapshot.Succeeded"/> = <c>false</c>) se RECHAZA la sustitución, aunque
+    /// el satélite pudiera atender el <c>run</c>. El razonamiento: el <c>remove</c> es
+    /// <c>force:true</c> e irreversible, y sin la foto no sabemos si hay una revisión viva que
+    /// perderíamos ni con qué imagen restaurarla. Un deploy que no ocurre se reintenta; un
+    /// contenedor de producción borrado sin copia de su identidad, no. Abortar es estrictamente
+    /// más barato que el fallo que evita.</para>
+    ///
+    /// <para>Una foto EXITOSA en la que el servicio no aparece sí es información: es un primer
+    /// deploy legítimo y se procede sin revisión previa que restaurar.</para>
+    /// </summary>
+    public static ReplacementDecision DecideReplacement(
+        string serviceName,
+        string containerName,
+        string newImageRef,
+        ContainerSnapshot snapshot)
+    {
+        if (!snapshot.Succeeded)
+        {
+            return new ReplacementDecision(false, null,
+                $"no se pudo consultar el estado del runtime antes de sustituir '{serviceName}': "
+                + $"sin esa foto, borrar {containerName} seria destructivo e irreversible "
+                + "(no sabriamos si hay revision previa ni con que imagen restaurarla).");
+        }
+        return new ReplacementDecision(
+            true, Capture(serviceName, containerName, newImageRef, snapshot.Containers), null);
     }
 
     /// <summary>
