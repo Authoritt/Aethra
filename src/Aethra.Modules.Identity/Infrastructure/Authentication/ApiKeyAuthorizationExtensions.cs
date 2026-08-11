@@ -45,12 +45,24 @@ public static class ApiKeyAuthorizationExtensions
     }
 
     /// <summary>
-    /// True si el principal tiene un claim <c>scope</c> con el valor exacto o <c>*</c>.
-    /// Esto cubre tanto API keys (handler de auth emite scope claims) como cookies de
-    /// users multi-user (login agrega scope claims agregados de los roles).
+    /// True si el principal está AUTENTICADO y tiene un claim <c>scope</c> con el valor exacto o
+    /// <c>*</c>. Esto cubre tanto API keys (el handler de auth emite scope claims) como cookies de
+    /// users multi-user (el login agrega los scopes de sus roles).
+    ///
+    /// <para>La comprobación de autenticación no es redundante. Sin ella, este camino y
+    /// <see cref="HasAdminRoleClaim"/> tendrían requisitos de confianza DISTINTOS para la misma
+    /// decisión: cualquier esquema de autenticación futuro, transformación de claims, host de
+    /// pruebas o middleware que dejara un claim <c>scope</c> sobre un principal no autenticado
+    /// satisfaría la policy. El handler de API key de hoy solo emite scopes tras validar la clave,
+    /// pero eso es una propiedad de ESE handler, no de la policy — y la policy es lo que protege el
+    /// endpoint. Se exige aquí para que el invariante no dependa de quién puebla los claims.</para>
     /// </summary>
     private static bool HasScopeClaim(AuthorizationHandlerContext ctx, string scope)
     {
+        if (ctx.User.Identity?.IsAuthenticated != true)
+        {
+            return false;
+        }
         return ctx.User.HasClaim(c =>
             c.Type == ApiKeyAuthSchemes.ScopeClaim
             && (c.Value == scope || c.Value == ApiKey.AdminScope));
