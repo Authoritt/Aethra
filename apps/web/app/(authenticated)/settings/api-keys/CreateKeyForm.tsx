@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
@@ -22,41 +22,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ApiError, api } from "@/lib/api";
+import { handOffApiKeySecret } from "@/lib/api-key-secret-handoff";
 import type { CreateApiKeyRequest, CreateApiKeyResult } from "@/lib/types";
 import { ScopesGrid } from "./ScopesGrid";
 
 const NAME_MAX = 80;
 
 type ExpiresPreset = "never" | "30d" | "90d" | "365d" | "custom";
-
-const SESSION_KEY_PREFIX = "aethra.api-key.secret.";
-
-export function persistSecretInSession(id: string, secret: string) {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(SESSION_KEY_PREFIX + id, secret);
-  } catch {
-    // sessionStorage puede fallar en modo privado; ignoramos silenciosamente.
-  }
-}
-
-export function readSecretFromSession(id: string): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.sessionStorage.getItem(SESSION_KEY_PREFIX + id);
-  } catch {
-    return null;
-  }
-}
-
-export function clearSecretFromSession(id: string) {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.removeItem(SESSION_KEY_PREFIX + id);
-  } catch {
-    /* no-op */
-  }
-}
 
 function presetToIso(preset: ExpiresPreset, custom: string): string | null {
   if (preset === "never") return null;
@@ -79,6 +51,7 @@ export function CreateKeyForm() {
   const [scopes, setScopes] = useState<string[]>([]);
   const [scopesTouched, setScopesTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [createdAtMs] = useState(() => Date.now());
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -107,14 +80,14 @@ export function CreateKeyForm() {
             if (!values.customDate) return false;
             const d = new Date(values.customDate);
             if (Number.isNaN(d.getTime())) return false;
-            return d.getTime() > Date.now();
+            return d.getTime() > createdAtMs;
           },
           {
             message: t("validation_future"),
             path: ["customDate"],
           },
         ),
-    [t],
+    [createdAtMs, t],
   );
 
   type FormValues = z.infer<typeof schema>;
@@ -128,7 +101,10 @@ export function CreateKeyForm() {
     },
   });
 
-  const preset = form.watch("preset");
+  const preset = useWatch({
+    control: form.control,
+    name: "preset",
+  });
 
   async function onSubmit(values: FormValues) {
     if (scopes.length === 0) {
@@ -150,7 +126,7 @@ export function CreateKeyForm() {
           body: JSON.stringify(body),
         },
       );
-      persistSecretInSession(created.id, created.secret);
+      handOffApiKeySecret(created.id, created.secret);
       toast.success(t("toast_created"));
       router.push(`/settings/api-keys/created?id=${encodeURIComponent(created.id)}`);
       router.refresh();
