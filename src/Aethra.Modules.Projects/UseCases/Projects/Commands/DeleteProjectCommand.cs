@@ -61,19 +61,6 @@ internal sealed class DeleteProjectHandler(
                 $"El proyecto tiene {instances.Count} instancia(s) desplegada(s). Confirma el borrado en cascada (force).");
         }
 
-        foreach (var inst in instances)
-        {
-            var template = templates.FirstOrDefault(t => t.Id == inst.TemplateId);
-            await outbox.EnqueueAsync(new InstanceRemovedIntegrationEvent(
-                InstanceId: inst.Id.ToString(),
-                AutoHostname: inst.AutoHostname,
-                CustomDomain: inst.CustomDomain,
-                RemovedAt: clock.UtcNow,
-                TargetVmId: inst.TargetVmId,
-                ContainerNames: DeleteInstanceHandler.ResolveContainerNames(
-                    inst.Slug, inst.ContainerName, template)), cancellationToken).ConfigureAwait(false);
-        }
-
         // EnvVars y Secrets son polimórficos (scope_id sin FK): se borran por scope de cada
         // aggregate del proyecto.
         var scopeIds = new List<string> { projectId.ToString() };
@@ -87,6 +74,28 @@ internal sealed class DeleteProjectHandler(
         await strategy.ExecuteAsync(async () =>
         {
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            // Los eventos de limpieza se encolan DENTRO de la unidad reintentable, no fuera.
+            // Si se encolaran antes: en un fallo reintentable de PostgreSQL posterior al
+            // SaveChangesAsync pero anterior al commit confirmado, la estrategia vuelve a ejecutar
+            // SOLO esta lambda. Las entidades del outbox ya habrían quedado `Unchanged` en el
+            // ChangeTracker (el primer save las dio por insertadas) y el rollback las habría borrado
+            // de la base, así que el reintento NO las reinsertaría — pero sí completaría el borrado.
+            // Resultado: proyecto borrado y cero eventos de limpieza, o sea contenedores, rutas, DNS
+            // y monitores abandonados. Justo el fallo que este comando existe para evitar.
+            foreach (var inst in instances)
+            {
+                var template = templates.FirstOrDefault(t => t.Id == inst.TemplateId);
+                await outbox.EnqueueAsync(new InstanceRemovedIntegrationEvent(
+                    InstanceId: inst.Id.ToString(),
+                    AutoHostname: inst.AutoHostname,
+                    CustomDomain: inst.CustomDomain,
+                    RemovedAt: clock.UtcNow,
+                    TargetVmId: inst.TargetVmId,
+                    ContainerNames: DeleteInstanceHandler.ResolveContainerNames(
+                        inst.Slug, inst.ContainerName, template)), cancellationToken).ConfigureAwait(false);
+            }
+
             await DeleteScopedRowsAsync(scopeIds, cancellationToken).ConfigureAwait(false);
 
             db.Instances.RemoveRange(instances);

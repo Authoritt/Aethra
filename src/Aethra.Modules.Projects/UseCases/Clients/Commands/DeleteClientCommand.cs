@@ -60,19 +60,6 @@ internal sealed class DeleteClientHandler(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        foreach (var inst in instances)
-        {
-            var template = templates.FirstOrDefault(t => t.Id == inst.TemplateId);
-            await outbox.EnqueueAsync(new InstanceRemovedIntegrationEvent(
-                InstanceId: inst.Id.ToString(),
-                AutoHostname: inst.AutoHostname,
-                CustomDomain: inst.CustomDomain,
-                RemovedAt: clock.UtcNow,
-                TargetVmId: inst.TargetVmId,
-                ContainerNames: DeleteInstanceHandler.ResolveContainerNames(
-                    inst.Slug, inst.ContainerName, template)), cancellationToken).ConfigureAwait(false);
-        }
-
         var scopeIds = new List<string> { clientId.ToString() };
         scopeIds.AddRange(instances.Select(i => i.Id.ToString()));
 
@@ -80,6 +67,25 @@ internal sealed class DeleteClientHandler(
         await strategy.ExecuteAsync(async () =>
         {
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            // Encolado DENTRO de la unidad reintentable, por el mismo motivo que en
+            // DeleteProjectHandler: si se hiciera fuera, un fallo reintentable posterior al
+            // SaveChangesAsync y anterior al commit confirmado re-ejecutaría solo esta lambda, con
+            // los eventos ya marcados `Unchanged` en el ChangeTracker y borrados de la base por el
+            // rollback. El client se borraría y sus recursos externos quedarían abandonados.
+            foreach (var inst in instances)
+            {
+                var template = templates.FirstOrDefault(t => t.Id == inst.TemplateId);
+                await outbox.EnqueueAsync(new InstanceRemovedIntegrationEvent(
+                    InstanceId: inst.Id.ToString(),
+                    AutoHostname: inst.AutoHostname,
+                    CustomDomain: inst.CustomDomain,
+                    RemovedAt: clock.UtcNow,
+                    TargetVmId: inst.TargetVmId,
+                    ContainerNames: DeleteInstanceHandler.ResolveContainerNames(
+                        inst.Slug, inst.ContainerName, template)), cancellationToken).ConfigureAwait(false);
+            }
+
             await DeleteScopedRowsAsync(scopeIds, cancellationToken).ConfigureAwait(false);
 
             db.Instances.RemoveRange(instances);
