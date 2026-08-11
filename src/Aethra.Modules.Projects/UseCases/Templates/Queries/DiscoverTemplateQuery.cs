@@ -55,7 +55,15 @@ internal sealed partial class DiscoverTemplateHandler(ILogger<DiscoverTemplateHa
 
         try
         {
-            // Shallow clone. Si --branch falla (no existe o el repo es vacío), reintentamos sin él.
+            // Shallow clone. Si el llamante pidió una rama CONCRETA y no se puede clonar, es un
+            // error suyo (typo, rama borrada, sin permisos) y así se le devuelve.
+            //
+            // Antes había un reintento sin `--branch` que clonaba la rama POR DEFECTO y seguía
+            // adelante en silencio. El resultado era una discovery exitosa que describía código de
+            // otra rama: un typo producía una inspección plausible del sitio equivocado, y a partir
+            // de ahí se podía crear o desplegar un template creyendo haber analizado lo pedido.
+            // Sustituir la entrada del usuario por otra sin avisar convierte un error detectable en
+            // uno silencioso.
             var hasBranch = !string.IsNullOrWhiteSpace(request.Branch);
             string[] cloneArgs = hasBranch
                 ? ["clone", "--depth", "1", "--branch", request.Branch!.Trim(), "--single-branch", request.GitRepoUrl, workDir]
@@ -64,26 +72,13 @@ internal sealed partial class DiscoverTemplateHandler(ILogger<DiscoverTemplateHa
             var clone = await RunGitAsync(cloneArgs, cancellationToken).ConfigureAwait(false);
             if (clone.ExitCode != 0)
             {
-                if (hasBranch)
-                {
-                    // Retry sin --branch.
-                    try { Directory.Delete(workDir, recursive: true); }
-                    catch (IOException) { /* best-effort */ }
-                    Directory.CreateDirectory(workDir);
-                    var retry = await RunGitAsync(
-                        ["clone", "--depth", "1", request.GitRepoUrl, workDir], cancellationToken)
-                        .ConfigureAwait(false);
-                    if (retry.ExitCode != 0)
-                    {
-                        return Error.Validation("template.discover_clone_failed",
-                            $"No se pudo clonar el repo: {Trim(retry.StdErr)}");
-                    }
-                }
-                else
-                {
-                    return Error.Validation("template.discover_clone_failed",
+                return hasBranch
+                    ? Error.Validation("template.branch_not_found",
+                        $"No se pudo clonar la rama '{request.Branch!.Trim()}' del repo: {Trim(clone.StdErr)}. "
+                        + "Comprueba que existe y que la credencial tiene acceso. No se inspecciona otra rama "
+                        + "en su lugar: el resultado describiría código distinto del solicitado.")
+                    : Error.Validation("template.discover_clone_failed",
                         $"No se pudo clonar el repo: {Trim(clone.StdErr)}");
-                }
             }
 
             // === Inspección de la raíz ===

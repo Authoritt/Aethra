@@ -83,4 +83,65 @@ public sealed class BuildContextBuilderTests
     {
         BuildContextBuilder.Redact("nothing to redact here", token).Should().Be("nothing to redact here");
     }
+
+    // ---------- ResolvedShaSatisfiesRequest ----------
+
+    /// <summary>
+    /// Sin commit pedido se construye lo que haya en el branch: es el contrato normal de un deploy
+    /// por rama y no hay nada que verificar.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolvedSha_without_a_requested_commit_is_always_satisfied(string? requested)
+    {
+        BuildContextBuilder.ResolvedShaSatisfiesRequest(requested, "a9f88cbdeadbeef").Should().BeTrue();
+    }
+
+    [Fact]
+    public void ResolvedSha_equal_to_the_requested_one_satisfies_it()
+    {
+        BuildContextBuilder.ResolvedShaSatisfiesRequest("a9f88cb", "a9f88cb").Should().BeTrue();
+    }
+
+    /// <summary>El mismo commit escrito en otra caja sigue siendo el mismo commit.</summary>
+    [Fact]
+    public void ResolvedSha_comparison_ignores_case()
+    {
+        BuildContextBuilder.ResolvedShaSatisfiesRequest("A9F88CB", "a9f88cb").Should().BeTrue();
+    }
+
+    /// <summary>
+    /// El caso que motiva la comprobación: se pidió un commit y el árbol quedó en otro. Antes esto
+    /// se anotaba en el log y se empaquetaba igual, produciendo un artefacto que declaraba un commit
+    /// que no contenía.
+    /// </summary>
+    [Fact]
+    public void ResolvedSha_different_from_the_requested_one_is_rejected()
+    {
+        BuildContextBuilder.ResolvedShaSatisfiesRequest("a9f88cb", "d7e38aa").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Un prefijo NO basta. Aceptarlo reabriría la ambigüedad que esta comprobación cierra: dos
+    /// commits distintos pueden compartir prefijo, y "empieza igual" no es "es el mismo".
+    /// </summary>
+    [Theory]
+    [InlineData("a9f88cb", "a9f88cbdeadbeef")]
+    [InlineData("a9f88cbdeadbeef", "a9f88cb")]
+    public void ResolvedSha_prefix_matches_are_not_enough(string requested, string resolved)
+    {
+        BuildContextBuilder.ResolvedShaSatisfiesRequest(requested, resolved).Should().BeFalse();
+    }
+
+    /// <summary>Si no se pudo resolver HEAD, no se puede afirmar que sea el commit pedido.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void An_unresolvable_head_never_satisfies_a_requested_commit(string? resolved)
+    {
+        BuildContextBuilder.ResolvedShaSatisfiesRequest("a9f88cb", resolved).Should().BeFalse();
+    }
 }
