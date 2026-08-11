@@ -102,24 +102,21 @@ internal sealed class DeleteProjectHandler(
 
     private async Task DeleteScopedRowsAsync(IReadOnlyCollection<string> scopeIds, CancellationToken cancellationToken)
     {
-        if (db.Database.IsRelational())
-        {
-            await db.EnvironmentVariables.Where(e => scopeIds.Contains(e.ScopeId))
-                .ExecuteDeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
-            await db.Secrets.Where(s => scopeIds.Contains(s.ScopeId))
-                .ExecuteDeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return;
-        }
-
-        db.EnvironmentVariables.RemoveRange(
-            await db.EnvironmentVariables.Where(e => scopeIds.Contains(e.ScopeId))
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false));
-        db.Secrets.RemoveRange(
-            await db.Secrets.Where(s => scopeIds.Contains(s.ScopeId))
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false));
+        // Un solo camino, el de producción. La versión anterior se bifurcaba con
+        // `if (db.Database.IsRelational())` y la rama no-relacional existía SOLO para que los tests
+        // (EF InMemory) no reventaran, porque ese proveedor no implementa ExecuteDelete. El efecto
+        // era que la suite recorría un camino que producción nunca ejecuta: un verde que no probaba
+        // nada de lo que aquí se promete.
+        //
+        // OJO — hoy esta línea SIGUE sin cobertura, y no por descuido: montar un test relacional
+        // está bloqueado por la política de paquetes del repo (ver issue #105). Ningún test siembra
+        // filas con scope, así que este método se ejecuta siempre sobre conjunto vacío. Lo que se
+        // gana con este cambio es que el código diga la verdad: hay un único comportamiento, el real.
+        await db.EnvironmentVariables.Where(e => scopeIds.Contains(e.ScopeId))
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await db.Secrets.Where(s => scopeIds.Contains(s.ScopeId))
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 }
