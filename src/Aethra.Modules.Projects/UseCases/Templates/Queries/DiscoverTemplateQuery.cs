@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Aethra.Modules.Projects.UseCases.Templates.Dtos;
 using Aethra.Shared.Infrastructure.Cqrs;
+using Aethra.Shared.Infrastructure.Http;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Results;
 using FluentValidation;
@@ -41,15 +42,51 @@ public sealed partial class DiscoverTemplateValidator : AbstractValidator<Discov
                 || url.StartsWith("git://", StringComparison.OrdinalIgnoreCase));
 }
 
-internal sealed partial class DiscoverTemplateHandler(ILogger<DiscoverTemplateHandler> logger)
+internal sealed partial class DiscoverTemplateHandler(
+    ILogger<DiscoverTemplateHandler> logger,
+    IOutboundDestinationGuard destinations)
     : IQueryHandler<DiscoverTemplateQuery, TemplateDiscoverResult>
 {
     private static readonly TimeSpan GitTimeout = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// Desactiva el seguimiento de redirecciones HTTP en git.
+    ///
+    /// <para>Sin esto, la validacion del destino se puede saltar entera: git trae
+    /// <c>http.followRedirects=initial</c> por defecto, asi que un endpoint publico y permitido puede
+    /// responder un 302 hacia loopback, hacia el endpoint de metadatos o hacia cualquier servicio
+    /// interno, y git sigue esa redireccion sin volver a preguntarnos. Comprobar solo el host
+    /// original deja abierta exactamente la puerta que la politica cierra.</para>
+    ///
+    /// <para>Va como <c>-c</c> por invocacion y no en la config global a proposito: el ajuste tiene
+    /// que viajar con el comando que lo necesita, no depender del estado de la maquina.</para>
+    /// </summary>
+    private static readonly string[] NoRedirects = ["-c", "http.followRedirects=false"];
 
     public async Task<Result<TemplateDiscoverResult>> Handle(
         DiscoverTemplateQuery request,
         CancellationToken cancellationToken)
     {
+        // El repo lo elige quien llama y el clone se ejecuta DESDE el plano de control, que alcanza
+        // loopback, la malla privada y el endpoint de metadatos de la nube. Sin esta comprobacion,
+        // discovery es un SSRF con git de transporte.
+        //
+        // Limitacion conocida y aceptada: git resuelve el nombre por su cuenta al conectar, asi que
+        // aqui solo se puede validar por adelantado. El rebinding entre esta comprobacion y el clone
+        // queda fuera de alcance sin un proxy de salida; para los destinos HTTP del propio proceso si
+        // se cierra, porque la validacion ocurre en el socket (GuardOutboundDestinations).
+        var destinationHost = ExtractHost(request.GitRepoUrl);
+        if (destinationHost is null)
+        {
+            return Error.Validation("template.discover_invalid_url",
+                "No se pudo determinar el host del repositorio.");
+        }
+        var verdict = await destinations.CheckHostAsync(destinationHost, cancellationToken).ConfigureAwait(false);
+        if (!verdict.Allowed)
+        {
+            return Error.Validation("template.destination_blocked", verdict.Reason!);
+        }
+
         var workDir = Path.Combine(Path.GetTempPath(), "aethra-discover", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workDir);
 
@@ -66,8 +103,8 @@ internal sealed partial class DiscoverTemplateHandler(ILogger<DiscoverTemplateHa
             // uno silencioso.
             var hasBranch = !string.IsNullOrWhiteSpace(request.Branch);
             string[] cloneArgs = hasBranch
-                ? ["clone", "--depth", "1", "--branch", request.Branch!.Trim(), "--single-branch", request.GitRepoUrl, workDir]
-                : ["clone", "--depth", "1", request.GitRepoUrl, workDir];
+                ? [..NoRedirects, "clone", "--depth", "1", "--branch", request.Branch!.Trim(), "--single-branch", request.GitRepoUrl, workDir]
+                : [..NoRedirects, "clone", "--depth", "1", request.GitRepoUrl, workDir];
 
             var clone = await RunGitAsync(cloneArgs, cancellationToken).ConfigureAwait(false);
             if (clone.ExitCode != 0)
@@ -155,6 +192,38 @@ internal sealed partial class DiscoverTemplateHandler(ILogger<DiscoverTemplateHa
     // -------------------------------------------------------------------------
     // Detección heurística de lenguajes a partir de archivos en la raíz.
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Host de una URL de repositorio, en cualquiera de las formas que acepta el validador:
+    /// <c>https://host/...</c>, <c>ssh://host/...</c>, <c>git://host/...</c> y el SCP
+    /// <c>git@host:ruta</c>, que NO es una URI valida y hay que partir a mano.
+    /// Devuelve <c>null</c> si no se puede determinar: sin host no se puede autorizar el destino.
+    /// </summary>
+    internal static string? ExtractHost(string? repoUrl)
+    {
+        if (string.IsNullOrWhiteSpace(repoUrl))
+        {
+            return null;
+        }
+        var value = repoUrl.Trim();
+
+        if (Uri.TryCreate(value, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.IdnHost))
+        {
+            return uri.IdnHost;
+        }
+
+        // Forma SCP: [user@]host:ruta. Se corta por el PRIMER ':' que va despues del '@' (si lo hay)
+        // para no confundirse con el ':' de un puerto ni con el de la ruta.
+        var atIndex = value.IndexOf('@');
+        var hostStart = atIndex >= 0 ? atIndex + 1 : 0;
+        var colonIndex = value.IndexOf(':', hostStart);
+        if (colonIndex > hostStart)
+        {
+            var host = value[hostStart..colonIndex];
+            return string.IsNullOrWhiteSpace(host) ? null : host;
+        }
+        return null;
+    }
 
     private static List<string> DetectLanguages(string repoRoot)
     {

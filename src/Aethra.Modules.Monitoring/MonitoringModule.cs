@@ -2,6 +2,7 @@ using Aethra.Modules.Monitoring.Infrastructure;
 using Aethra.Modules.Monitoring.Infrastructure.Probes;
 using Aethra.Modules.Monitoring.Infrastructure.Worker;
 using Aethra.Modules.Monitoring.Presentation;
+using Aethra.Shared.Infrastructure.Http;
 using Aethra.Shared.Infrastructure.Modules;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -44,10 +45,13 @@ public static class MonitoringModule
             client.Timeout = Timeout.InfiniteTimeSpan;
             client.DefaultRequestHeaders.UserAgent.ParseAdd("Aethra-Monitor/1.0");
         })
-        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        // La politica de destinos se aplica en el socket (SSRF, incluido DNS rebinding): un monitor
+        // lo configura el llamante y el plano de control tiene alcance a la malla privada y al
+        // endpoint de metadatos de la nube.
+        .GuardOutboundDestinations(handler =>
         {
             // No queremos seguir redirects ciegamente: una 302 a otra URL puede falsear el uptime.
-            AllowAutoRedirect = false,
+            handler.AllowAutoRedirect = false;
         });
 
         services.AddScoped<IMonitorProbe, HttpMonitorProbe>();
