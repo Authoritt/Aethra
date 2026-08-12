@@ -64,6 +64,13 @@ internal sealed record PostgresRevokePlan(
             admin.Username,
             PostgresIdentifier.Quote(resourceName),
             PostgresIdentifier.Quote(credentials.Username),
-            PostgresIdentifier.Quote(admin.Username));
+            // CURRENT_USER, no el nombre citado del admin. La sesion YA esta autenticada como ese
+            // rol, asi que es exactamente el destinatario correcto de la propiedad — y ademas evita
+            // un fallo real: PostgresIdentifier.Quote impone el alfabeto de los identificadores que
+            // NOSOTROS generamos, pero el admin de un servicio ADOPTADO lo eligio otro y puede llevar
+            // '-' o '@', que Postgres acepta perfectamente entre comillas. Con el nombre citado, un
+            // servicio adoptado con un rol asi podia provisionar bindings pero no revocarlos NUNCA:
+            // la credencial se quedaba activa para siempre.
+            "CURRENT_USER");
     }
 }

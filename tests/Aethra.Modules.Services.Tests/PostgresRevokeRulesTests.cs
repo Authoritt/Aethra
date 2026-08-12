@@ -53,4 +53,27 @@ public sealed class PostgresRevokeRulesTests
                 .Should().Be(PostgresRevokeErrorDecision.Fatal);
         }
     }
+
+    /// <summary>
+    /// Un servicio ADOPTADO trae un admin que eligió otro: puede llevar '-' o '@', que Postgres
+    /// acepta entre comillas pero el alfabeto de los identificadores que generamos nosotros no.
+    /// Citarlo con esa allowlist abortaba la revocación antes de tocar la base, así que ese servicio
+    /// podía provisionar bindings y no revocarlos <b>nunca</b>: la credencial quedaba activa para
+    /// siempre. Se reasigna la propiedad a CURRENT_USER, que es el mismo rol con el que ya está
+    /// autenticada la sesión, así que no hay nombre que citar.
+    /// </summary>
+    [Theory]
+    [InlineData("admin-user")]
+    [InlineData("svc@tenant")]
+    [InlineData("Admin.With.Dots")]
+    public void An_adopted_admin_name_never_blocks_the_plan(string adminUsername)
+    {
+        var plan = PostgresRevokePlan.Create(
+            "app_db",
+            new BindingCredentials("app_db_user", "secret"),
+            new AdminCredentials(adminUsername, "secret"));
+
+        plan.AdminIdentifier.Should().Be("CURRENT_USER");
+        plan.AdminUsername.Should().Be(adminUsername);
+    }
 }
