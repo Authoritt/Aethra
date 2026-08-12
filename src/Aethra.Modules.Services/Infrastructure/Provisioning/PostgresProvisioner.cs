@@ -7,14 +7,12 @@ using Npgsql;
 namespace Aethra.Modules.Services.Infrastructure.Provisioning;
 
 /// <summary>
-/// Aprovisiona BDs/usuarios sobre una instancia Postgres existente. Conecta con las
-/// credenciales admin descifradas y emite DDL contra <c>postgres</c> primero, luego
-/// contra la BD del binding cuando necesita GRANT a nivel schema.
+/// Provisions databases and roles on an existing PostgreSQL instance.
 /// </summary>
 public sealed class PostgresProvisioner : IServiceProvisioner
 {
     private const string AdminDatabase = "postgres";
-    private const string DuplicateObject = "42710";       // role ya existe
+    private const string DuplicateObject = "42710";
     private const string DuplicateDatabase = "42P04";
 
     private readonly IManagedServiceHostResolver _hostResolver;
@@ -74,50 +72,74 @@ public sealed class PostgresProvisioner : IServiceProvisioner
         }
         catch (PostgresException ex)
         {
-            _logger.LogError(ex, "Postgres provision falló para binding {Binding}: {SqlState}", binding.Id, ex.SqlState);
+            _logger.LogError(ex, "Postgres provision fallo para binding {Binding}: {SqlState}", binding.Id, ex.SqlState);
             return new ProvisionOutcome(false, $"postgres.{ex.SqlState}", ex.MessageText);
         }
         catch (NpgsqlException ex)
         {
-            _logger.LogError(ex, "Postgres provision falló (conexión) para binding {Binding}", binding.Id);
+            _logger.LogError(ex, "Postgres provision fallo de conexion para binding {Binding}", binding.Id);
             return new ProvisionOutcome(false, "postgres.connect_failed", ex.Message);
         }
     }
 
-    public async Task<RevokeOutcome> RevokeAsync(ManagedService service, ServiceBinding binding, CancellationToken cancellationToken)
+    public async Task<RevokeOutcome> RevokeAsync(ManagedService service, ServiceBinding binding, BindingCredentials credentials, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(binding);
+        ArgumentNullException.ThrowIfNull(credentials);
 
-        string dbQ, userQ;
+        PostgresRevokePlan plan;
+        AdminCredentials admin;
         try
         {
-            dbQ = PostgresIdentifier.Quote(binding.ResourceName);
-            // Username está cifrado: lo recibimos como parte del binding aún no, asi que reconstruimos
-            // a partir del role buscado vía SQL. Para MVP usamos resourceName como role name si están
-            // alineados; el caller debe pasar el username vía rotate antes. Cuando username difiere,
-            // este Revoke aún hace REVOKE/DROP idempotente sobre los objetos owned por la BD.
-            userQ = PostgresIdentifier.Quote(binding.ResourceName);
+            admin = _codec.Decode(service.AdminCredentialsCipher);
+            plan = PostgresRevokePlan.Create(binding.ResourceName, credentials, admin);
         }
         catch (ArgumentException ex)
         {
             return new RevokeOutcome(false, "postgres.invalid_identifier", ex.Message);
         }
+        catch (InvalidOperationException ex)
+        {
+            return new RevokeOutcome(false, "postgres.admin_credentials_unreadable", ex.Message);
+        }
 
         try
         {
-            await using var adminConn = await OpenAdminAsync(service, AdminDatabase, cancellationToken).ConfigureAwait(false);
+            await using var adminConn = await OpenAdminAsync(service, AdminDatabase, admin, cancellationToken).ConfigureAwait(false);
 
-            // REVOKE sobre la BD; si el role ya no existe el comando falla, lo ignoramos.
-            await TryExecuteAsync(adminConn, $"REVOKE ALL PRIVILEGES ON DATABASE {dbQ} FROM {userQ}", cancellationToken).ConfigureAwait(false);
-            await TryExecuteAsync(adminConn, $"DROP OWNED BY {userQ}", cancellationToken).ConfigureAwait(false);
-            await TryExecuteAsync(adminConn, $"DROP USER IF EXISTS {userQ}", cancellationToken).ConfigureAwait(false);
+            var outcome = await ExecuteRevokeStepAsync(adminConn, PostgresRevokeStep.RevokeDatabasePrivileges,
+                $"REVOKE ALL PRIVILEGES ON DATABASE {plan.DatabaseIdentifier} FROM {plan.UserIdentifier}", cancellationToken).ConfigureAwait(false);
+            if (!outcome.Success) { return outcome; }
+
+            outcome = await ExecuteRevokeStepAsync(adminConn, PostgresRevokeStep.RestoreDatabaseOwner,
+                $"ALTER DATABASE {plan.DatabaseIdentifier} OWNER TO {plan.AdminIdentifier}", cancellationToken).ConfigureAwait(false);
+            if (!outcome.Success) { return outcome; }
+
+            outcome = await CleanupTargetDatabaseAsync(service, plan.DatabaseName, admin,
+                plan.UserIdentifier, plan.AdminIdentifier, cancellationToken).ConfigureAwait(false);
+            if (!outcome.Success) { return outcome; }
+
+            outcome = await ExecuteRevokeStepAsync(adminConn, PostgresRevokeStep.DropRole,
+                $"DROP ROLE IF EXISTS {plan.UserIdentifier}", cancellationToken).ConfigureAwait(false);
+            if (!outcome.Success) { return outcome; }
+
+            if (await RoleExistsAsync(adminConn, plan.Username, cancellationToken).ConfigureAwait(false))
+            {
+                return new RevokeOutcome(false, "postgres.role_still_exists",
+                    $"Postgres role '{plan.Username}' still exists after revoke.");
+            }
 
             return new RevokeOutcome(true, null, null);
         }
+        catch (PostgresException ex)
+        {
+            _logger.LogError(ex, "Postgres revoke fallo para binding {Binding}: {SqlState}", binding.Id, ex.SqlState);
+            return new RevokeOutcome(false, $"postgres.{ex.SqlState}", ex.MessageText);
+        }
         catch (NpgsqlException ex)
         {
-            _logger.LogError(ex, "Postgres revoke falló para binding {Binding}", binding.Id);
+            _logger.LogError(ex, "Postgres revoke fallo de conexion para binding {Binding}", binding.Id);
             return new RevokeOutcome(false, "postgres.revoke_failed", ex.Message);
         }
     }
@@ -148,12 +170,12 @@ public sealed class PostgresProvisioner : IServiceProvisioner
         }
         catch (PostgresException ex)
         {
-            _logger.LogError(ex, "Postgres rotate falló binding {Binding}: {SqlState}", binding.Id, ex.SqlState);
+            _logger.LogError(ex, "Postgres rotate fallo binding {Binding}: {SqlState}", binding.Id, ex.SqlState);
             return new RotateOutcome(false, $"postgres.{ex.SqlState}", ex.MessageText);
         }
         catch (NpgsqlException ex)
         {
-            _logger.LogError(ex, "Postgres rotate falló (conexión) binding {Binding}", binding.Id);
+            _logger.LogError(ex, "Postgres rotate fallo de conexion binding {Binding}", binding.Id);
             return new RotateOutcome(false, "postgres.connect_failed", ex.Message);
         }
     }
@@ -177,8 +199,6 @@ public sealed class PostgresProvisioner : IServiceProvisioner
 
     private async Task ApplyReadOnlyAsync(ManagedService service, ServiceBinding binding, string userQ, CancellationToken cancellationToken)
     {
-        // ReadOnly: el GRANT ALL anterior dio CONNECT y CREATE temporal a nivel de BD; aquí
-        // recortamos: revocamos default y damos solo USAGE+SELECT en schema public.
         await using var dbConn = await OpenAdminAsync(service, binding.ResourceName, cancellationToken).ConfigureAwait(false);
         await ExecuteAsync(dbConn, $"REVOKE ALL ON SCHEMA public FROM {userQ}", cancellationToken).ConfigureAwait(false);
         await ExecuteAsync(dbConn, $"GRANT USAGE ON SCHEMA public TO {userQ}", cancellationToken).ConfigureAwait(false);
@@ -186,9 +206,72 @@ public sealed class PostgresProvisioner : IServiceProvisioner
         await ExecuteAsync(dbConn, $"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO {userQ}", cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task<RevokeOutcome> CleanupTargetDatabaseAsync(
+        ManagedService service,
+        string database,
+        AdminCredentials admin,
+        string userQ,
+        string adminQ,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var dbConn = await OpenAdminAsync(service, database, admin, cancellationToken).ConfigureAwait(false);
+
+            var outcome = await ExecuteRevokeStepAsync(dbConn, PostgresRevokeStep.ReassignOwnedObjects,
+                $"REASSIGN OWNED BY {userQ} TO {adminQ}", cancellationToken).ConfigureAwait(false);
+            if (!outcome.Success) { return outcome; }
+
+            return await ExecuteRevokeStepAsync(dbConn, PostgresRevokeStep.DropOwnedObjects,
+                $"DROP OWNED BY {userQ}", cancellationToken).ConfigureAwait(false);
+        }
+        catch (PostgresException ex) when (
+            PostgresRevokeRules.Classify(PostgresRevokeStep.OpenTargetDatabase, ex.SqlState) ==
+            PostgresRevokeErrorDecision.BenignIdempotent)
+        {
+            return new RevokeOutcome(true, null, null);
+        }
+    }
+
+    private static async Task<RevokeOutcome> ExecuteRevokeStepAsync(
+        NpgsqlConnection conn,
+        PostgresRevokeStep step,
+        string sql,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ExecuteAsync(conn, sql, cancellationToken).ConfigureAwait(false);
+            return new RevokeOutcome(true, null, null);
+        }
+        catch (PostgresException ex) when (
+            PostgresRevokeRules.Classify(step, ex.SqlState) == PostgresRevokeErrorDecision.BenignIdempotent)
+        {
+            return new RevokeOutcome(true, null, null);
+        }
+        catch (PostgresException ex)
+        {
+            return new RevokeOutcome(false, $"postgres.revoke.{ex.SqlState}",
+                $"{step} failed with SQLSTATE {ex.SqlState}: {ex.MessageText}");
+        }
+    }
+
+    private static async Task<bool> RoleExistsAsync(NpgsqlConnection conn, string username, CancellationToken cancellationToken)
+    {
+        await using var cmd = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = @username)", conn);
+        cmd.Parameters.AddWithValue("username", username);
+        var result = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return result is true;
+    }
+
     private async Task<NpgsqlConnection> OpenAdminAsync(ManagedService service, string database, CancellationToken cancellationToken)
     {
         var admin = _codec.Decode(service.AdminCredentialsCipher);
+        return await OpenAdminAsync(service, database, admin, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<NpgsqlConnection> OpenAdminAsync(ManagedService service, string database, AdminCredentials admin, CancellationToken cancellationToken)
+    {
         var host = await _hostResolver.ResolveAsync(service, cancellationToken).ConfigureAwait(false);
 
         var csb = new NpgsqlConnectionStringBuilder
@@ -222,19 +305,7 @@ public sealed class PostgresProvisioner : IServiceProvisioner
         }
         catch (PostgresException ex) when (ex.SqlState == sqlStateToIgnore)
         {
-            // Idempotente: el recurso ya existe.
-        }
-    }
-
-    private static async Task TryExecuteAsync(NpgsqlConnection conn, string sql, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await ExecuteAsync(conn, sql, cancellationToken).ConfigureAwait(false);
-        }
-        catch (PostgresException)
-        {
-            // Best-effort para revoke; el caller ya hace logging del Outcome.
+            // Idempotent: the resource already exists.
         }
     }
 

@@ -1,5 +1,6 @@
 using Aethra.Modules.Services.Domain;
 using Aethra.Modules.Services.Infrastructure;
+using Aethra.Modules.Services.Infrastructure.Binding;
 using Aethra.Modules.Services.Infrastructure.Provisioning;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Infrastructure.Cqrs;
@@ -17,6 +18,7 @@ public sealed record RevokeBindingCommand(string BindingId) : ICommand;
 internal sealed class RevokeBindingHandler(
     ServicesDbContext db,
     IEnumerable<IServiceProvisioner> provisioners,
+    IBindingCredentialsCodec bindingCodec,
     IEnvVarWriter envVarWriter,
     IClock clock,
     ILogger<RevokeBindingHandler> logger)
@@ -24,8 +26,6 @@ internal sealed class RevokeBindingHandler(
 {
     public async Task<Result> Handle(RevokeBindingCommand request, CancellationToken cancellationToken)
     {
-        // Comparamos por el wrapper tipado (ServiceBindingId) que SI traduce a SQL con el
-        // ValueConverter activo. Eso evita materializar toda la tabla en memoria.
         if (!AethraId.TryParse(request.BindingId, out var parsed) || parsed.Value.Prefix != "bnd")
         {
             return Error.NotFound("binding.not_found", $"Binding '{request.BindingId}' no existe.");
@@ -41,23 +41,35 @@ internal sealed class RevokeBindingHandler(
         {
             return Result.Success();
         }
-        var svc = await db.ManagedServices.FirstOrDefaultAsync(
-            s => s.Id == binding.ServiceId, cancellationToken);
+
+        var svc = await db.ManagedServices.FirstOrDefaultAsync(s => s.Id == binding.ServiceId, cancellationToken);
         if (svc is null)
         {
             return Error.NotFound("service.not_found", "Servicio asociado al binding no existe.");
         }
 
-        // Intentamos revocar credenciales reales en el servicio (best-effort: si el servicio
-        // está caído, igualmente marcamos revocado en BD para no bloquear al usuario).
         var provisioner = provisioners.FirstOrDefault(p => p.SupportedType == svc.Type);
         if (provisioner is not null && binding.ProvisionedAt is not null)
         {
-            var outcome = await provisioner.RevokeAsync(svc, binding, cancellationToken);
+            BindingCredentials credentials;
+            try
+            {
+                credentials = bindingCodec.Decode(binding.CredentialsCipher);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "No se pudieron descifrar credenciales del binding {Id}; revoke abortado", binding.Id);
+                return Error.Failure("binding.credentials_unreadable",
+                    "No se pudieron leer las credenciales originales del binding; no se puede confirmar la revocacion.");
+            }
+
+            var outcome = await provisioner.RevokeAsync(svc, binding, credentials, cancellationToken);
             if (!outcome.Success)
             {
-                logger.LogWarning("Revoke del provisioner falló para binding {Id}: {Code} {Msg} (marcamos revocado igual)",
+                logger.LogWarning("Revoke del provisioner fallo para binding {Id}: {Code} {Msg}",
                     binding.Id, outcome.ErrorCode, outcome.ErrorMessage);
+                return Error.Conflict(outcome.ErrorCode ?? "revoke_failed",
+                    outcome.ErrorMessage ?? "Revocacion fallo");
             }
         }
 
