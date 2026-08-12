@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 using Aethra.Modules.Deployments.Webhooks;
+using Aethra.Shared.Contracts.Projects;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Xunit;
 
 namespace Aethra.Modules.Deployments.Tests;
@@ -74,6 +76,152 @@ public sealed class WebhookTests
         GitHubSignatureValidator.Validate(Sign(body, "s"), body, "").Should().BeFalse();
     }
 
+    // ---------- WebhookTemplateAuthenticator ----------
+
+    [Fact]
+    public void FilterAuthenticatedTemplates_keeps_only_templates_verified_by_their_own_secret()
+    {
+        var body = Encoding.UTF8.GetBytes("payload");
+        var templates = new[]
+        {
+            Template("tpl-a", "secret-a"),
+            Template("tpl-b", "secret-b"),
+        };
+
+        var authenticated = WebhookTemplateAuthenticator.FilterAuthenticatedTemplates(
+            templates,
+            Sign(body, "secret-b"),
+            body);
+
+        authenticated.Select(t => t.TemplateId).Should().Equal("tpl-b");
+    }
+
+    [Fact]
+    public void FilterAuthenticatedTemplates_is_independent_of_template_order()
+    {
+        var body = Encoding.UTF8.GetBytes("payload");
+        var templates = new[]
+        {
+            Template("tpl-b", "secret-b"),
+            Template("tpl-a", "secret-a"),
+        };
+
+        var authenticated = WebhookTemplateAuthenticator.FilterAuthenticatedTemplates(
+            templates,
+            Sign(body, "secret-a"),
+            body);
+
+        authenticated.Select(t => t.TemplateId).Should().Equal("tpl-a");
+    }
+
+    [Fact]
+    public void FilterAuthenticatedTemplates_allows_multiple_templates_that_share_the_signature_secret()
+    {
+        var body = Encoding.UTF8.GetBytes("payload");
+        var templates = new[]
+        {
+            Template("tpl-a", "shared"),
+            Template("tpl-b", "shared"),
+            Template("tpl-c", "other"),
+        };
+
+        var authenticated = WebhookTemplateAuthenticator.FilterAuthenticatedTemplates(
+            templates,
+            Sign(body, "shared"),
+            body);
+
+        authenticated.Select(t => t.TemplateId).Should().Equal("tpl-a", "tpl-b");
+    }
+
+    [Fact]
+    public void FilterAuthenticatedTemplates_skips_templates_without_a_configured_secret()
+    {
+        var body = Encoding.UTF8.GetBytes("payload");
+        var templates = new[]
+        {
+            Template("tpl-a", ""),
+            Template("tpl-b", "   "),
+            Template("tpl-c", "secret"),
+        };
+
+        var authenticated = WebhookTemplateAuthenticator.FilterAuthenticatedTemplates(
+            templates,
+            Sign(body, "secret"),
+            body);
+
+        authenticated.Select(t => t.TemplateId).Should().Equal("tpl-c");
+    }
+
+    [Fact]
+    public void FilterAuthenticatedTemplates_returns_empty_when_no_template_secret_verifies()
+    {
+        var body = Encoding.UTF8.GetBytes("payload");
+        var templates = new[]
+        {
+            Template("tpl-a", "secret-a"),
+            Template("tpl-b", "secret-b"),
+        };
+
+        var authenticated = WebhookTemplateAuthenticator.FilterAuthenticatedTemplates(
+            templates,
+            Sign(body, "wrong"),
+            body);
+
+        authenticated.Should().BeEmpty();
+    }
+
+    // ---------- GitHubWebhookBodyReader ----------
+
+    [Fact]
+    public async Task ReadAsync_rejects_declared_content_length_above_limit_without_reading_body()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.ContentLength = 11;
+        context.Request.Body = new ThrowOnReadStream();
+
+        var result = await GitHubWebhookBodyReader.ReadAsync(context.Request, CancellationToken.None, maxBodyBytes: 10);
+
+        result.IsPayloadTooLarge.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ReadAsync_accepts_declared_content_length_at_limit()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.ContentLength = 10;
+        context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes("0123456789"));
+
+        var result = await GitHubWebhookBodyReader.ReadAsync(context.Request, CancellationToken.None, maxBodyBytes: 10);
+
+        result.IsPayloadTooLarge.Should().BeFalse();
+        Encoding.UTF8.GetString(result.Body).Should().Be("0123456789");
+    }
+
+    [Fact]
+    public async Task ReadAsync_rejects_chunked_body_that_exceeds_limit()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.ContentLength = null;
+        context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes("01234567890"));
+
+        var result = await GitHubWebhookBodyReader.ReadAsync(context.Request, CancellationToken.None, maxBodyBytes: 10);
+
+        result.IsPayloadTooLarge.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ReadAsync_accepts_chunked_body_at_limit()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.ContentLength = null;
+        context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes("0123456789"));
+
+        var result = await GitHubWebhookBodyReader.ReadAsync(context.Request, CancellationToken.None, maxBodyBytes: 10);
+
+        result.IsPayloadTooLarge.Should().BeFalse();
+        Encoding.UTF8.GetString(result.Body).Should().Be("0123456789");
+    }
+
     // ---------- GitHubPushPayload ----------
 
     [Theory]
@@ -127,5 +275,46 @@ public sealed class WebhookTests
     public void CandidateRepoUrls_is_empty_without_a_repository()
     {
         new GitHubPushPayload().CandidateRepoUrls().Should().BeEmpty();
+    }
+
+    private static TemplateForBuildView Template(string templateId, string webhookSecret)
+        => new(
+            TemplateId: templateId,
+            ProjectId: "project",
+            Slug: templateId,
+            Name: templateId,
+            GitRepoUrl: "https://github.com/acme/repo.git",
+            Branch: "main",
+            WebhookSecret: webhookSecret,
+            BaseDirectory: ".",
+            WatchPaths: [],
+            BuildType: "Dockerfile",
+            DockerfilePath: "Dockerfile");
+
+    private sealed class ThrowOnReadStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() => throw new NotSupportedException();
+
+        public override int Read(byte[] buffer, int offset, int count)
+            => throw new InvalidOperationException("The stream should not be read.");
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("The stream should not be read.");
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

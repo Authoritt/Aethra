@@ -60,10 +60,17 @@ public static class WebhookEndpoints
     {
         var logger = loggerFactory.CreateLogger("GitWebhook");
 
-        // 1. Body raw para HMAC.
-        using var ms = new MemoryStream();
-        await http.Request.Body.CopyToAsync(ms, ct).ConfigureAwait(false);
-        var body = ms.ToArray();
+        // 1. Body raw para HMAC, acotado antes de autenticar porque este endpoint es anonimo.
+        var bodyRead = await GitHubWebhookBodyReader.ReadAsync(http.Request, ct).ConfigureAwait(false);
+        if (bodyRead.IsPayloadTooLarge)
+        {
+            logger.LogWarning(
+                "Webhook payload excede el limite de {MaxBodyBytes} bytes desde {Ip}",
+                GitHubWebhookBodyReader.MaxBodyBytes,
+                http.Connection.RemoteIpAddress);
+            return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+        }
+        var body = bodyRead.Body;
 
         // Routing por X-GitHub-Event. Si está ausente, asumimos push para compatibilidad.
         var eventName = http.Request.Headers["X-GitHub-Event"].ToString();
@@ -134,23 +141,26 @@ public static class WebhookEndpoints
             return Results.Ok(new { matched_templates = 0 });
         }
 
-        // 3. Validar firma con el WebhookSecret del primer Template.
+        // 3. Validar firma por Template: cada Template conserva su propio WebhookSecret.
         var signatureHeader = http.Request.Headers["X-Hub-Signature-256"].ToString();
-        var sharedSecret = matchingTemplates[0].WebhookSecret;
-        if (!GitHubSignatureValidator.Validate(signatureHeader, body, sharedSecret))
+        var authenticatedTemplates = WebhookTemplateAuthenticator.FilterAuthenticatedTemplates(
+            matchingTemplates,
+            signatureHeader,
+            body);
+        if (authenticatedTemplates.Count == 0)
         {
             logger.LogWarning("Webhook firma inválida desde {Ip}", http.Connection.RemoteIpAddress);
             return Results.Unauthorized();
         }
 
-        // 4. Fan-out: por cada Template, evaluar WatchPaths y encolar Build.
+        // 4. Fan-out: por cada Template autenticado, evaluar WatchPaths y encolar Build.
         var affectedPaths = payload.AllAffectedPaths();
         var pusher = payload.Pusher?.Name ?? payload.Pusher?.Email;
         var triggered = new List<string>();
         var skipped = new List<string>();
 
         var nativeRedeploys = new List<string>();
-        foreach (var tpl in matchingTemplates)
+        foreach (var tpl in authenticatedTemplates)
         {
             if (!WatchPathMatcher.AnyMatches(affectedPaths, tpl.WatchPaths))
             {
@@ -201,7 +211,7 @@ public static class WebhookEndpoints
 
         return Results.Ok(new
         {
-            matched_templates = matchingTemplates.Count,
+            matched_templates = authenticatedTemplates.Count,
             triggered_template_ids = triggered,
             skipped_template_ids = skipped,
             native_redeploy_instance_ids = nativeRedeploys,
@@ -257,10 +267,13 @@ public static class WebhookEndpoints
             return Results.Ok(new { matched_templates = 0 });
         }
 
-        // 2. Validar HMAC con el primer Template (convención monorepo, igual que push).
+        // 2. Validar HMAC por Template, igual que push.
         var signatureHeader = http.Request.Headers["X-Hub-Signature-256"].ToString();
-        var sharedSecret = matchingTemplates[0].WebhookSecret;
-        if (!GitHubSignatureValidator.Validate(signatureHeader, body, sharedSecret))
+        var authenticatedTemplates = WebhookTemplateAuthenticator.FilterAuthenticatedTemplates(
+            matchingTemplates,
+            signatureHeader,
+            body);
+        if (authenticatedTemplates.Count == 0)
         {
             logger.LogWarning("PR webhook firma inválida desde {Ip}", http.Connection.RemoteIpAddress);
             return Results.Unauthorized();
@@ -274,11 +287,11 @@ public static class WebhookEndpoints
         return payload.Action switch
         {
             "opened" or "reopened" => await OpenOrReopenAsync(
-                payload, matchingTemplates, prNumber, headSha, prRef,
+                payload, authenticatedTemplates, prNumber, headSha, prRef,
                 mediator, gitHubUsers, coordinator, logger, ct).ConfigureAwait(false),
             "synchronize" => await SynchronizeAsync(
-                matchingTemplates, prNumber, headSha, prRef, mediator, logger, ct).ConfigureAwait(false),
-            "closed" => await ClosedAsync(matchingTemplates, prNumber, coordinator, logger, ct).ConfigureAwait(false),
+                authenticatedTemplates, prNumber, headSha, prRef, mediator, logger, ct).ConfigureAwait(false),
+            "closed" => await ClosedAsync(authenticatedTemplates, prNumber, coordinator, logger, ct).ConfigureAwait(false),
             _ => Results.Ok(new { action = payload.Action, handled = false }),
         };
     }
