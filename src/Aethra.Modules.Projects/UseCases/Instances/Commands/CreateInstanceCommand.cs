@@ -213,9 +213,24 @@ internal sealed class CreateInstanceHandler(
             {
                 return portResult.Error;
             }
-            var protocol = string.IsNullOrWhiteSpace(p.protocol) || string.Equals(p.protocol, "tcp", StringComparison.OrdinalIgnoreCase)
-                ? PortProtocol.Tcp
-                : PortProtocol.Udp;
+            // Sin protocolo se asume TCP, que es el caso normal. Pero un protocolo ESCRITO y no
+            // reconocido se rechaza: antes caía a UDP, así que un typo como "tpc" publicaba el
+            // puerto en otro transporte sin decir nada y el servicio quedaba inalcanzable por un
+            // motivo que no aparecía en ninguna parte.
+            var protocol = PortProtocol.Tcp;
+            if (!string.IsNullOrWhiteSpace(p.protocol)
+                && !PortMapping.TryParseProtocol(p.protocol, out protocol))
+            {
+                return Error.Validation(
+                    "instance.invalid_port_protocol",
+                    $"Protocolo '{p.protocol}' no soportado. Válidos: {string.Join(", ", PortMapping.SupportedProtocols)}.");
+            }
+            if (p.hostPort is { } hostPort && (hostPort < PortMapping.MinPort || hostPort > PortMapping.MaxPort))
+            {
+                return Error.Validation(
+                    "instance.invalid_host_port",
+                    $"El puerto del host {hostPort} está fuera de rango ({PortMapping.MinPort}-{PortMapping.MaxPort}).");
+            }
             mapped.Add(new PortMapping(portResult.Value, p.hostPort, protocol));
         }
         IReadOnlyList<PortMapping> result = mapped;

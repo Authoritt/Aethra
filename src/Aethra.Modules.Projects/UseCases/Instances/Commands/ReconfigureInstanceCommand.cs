@@ -60,9 +60,22 @@ internal sealed class ReconfigureInstanceHandler(ProjectsDbContext db, IClock cl
             {
                 return portResult.Error;
             }
-            var protocol = string.IsNullOrWhiteSpace(p.protocol) || string.Equals(p.protocol, "tcp", StringComparison.OrdinalIgnoreCase)
-                ? PortProtocol.Tcp
-                : PortProtocol.Udp;
+            // Mismo criterio que en la creación: sin protocolo se asume TCP, pero uno escrito y no
+            // reconocido se rechaza en vez de caer a UDP en silencio.
+            var protocol = PortProtocol.Tcp;
+            if (!string.IsNullOrWhiteSpace(p.protocol)
+                && !PortMapping.TryParseProtocol(p.protocol, out protocol))
+            {
+                return Error.Validation(
+                    "instance.invalid_port_protocol",
+                    $"Protocolo '{p.protocol}' no soportado. Válidos: {string.Join(", ", PortMapping.SupportedProtocols)}.");
+            }
+            if (p.hostPort is { } hostPort && (hostPort < PortMapping.MinPort || hostPort > PortMapping.MaxPort))
+            {
+                return Error.Validation(
+                    "instance.invalid_host_port",
+                    $"El puerto del host {hostPort} está fuera de rango ({PortMapping.MinPort}-{PortMapping.MaxPort}).");
+            }
             mappedPorts.Add(new PortMapping(portResult.Value, p.hostPort, protocol));
         }
 
