@@ -68,9 +68,7 @@ internal static class TotpVerifier
                 if (RecoveryCodes.IsUsed(user.TotpRecoveryCodesUsedMask, i)) { continue; }
                 if (string.Equals(codes[i], normalized, StringComparison.Ordinal))
                 {
-                    user.ConsumeRecoveryCode(i, clock.UtcNow);
-                    await db.SaveChangesAsync(ct).ConfigureAwait(false);
-                    return true;
+                    return await ConsumeAtomicallyAsync(user, i, db, clock, ct).ConfigureAwait(false);
                 }
             }
             return false;
@@ -79,5 +77,50 @@ internal static class TotpVerifier
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Marca el código de recuperación como usado con un <b>UPDATE condicional</b>, y devuelve si
+    /// esta petición fue la que lo consumió.
+    ///
+    /// <para>Un código de recuperación es de un solo uso: es el sustituto del segundo factor cuando
+    /// el usuario pierde el dispositivo. La versión anterior leía la máscara, buscaba el bit libre,
+    /// lo marcaba en memoria y guardaba — un <i>leer, modificar, escribir</i> sin control de
+    /// concurrencia. Dos intentos de login simultáneos con el MISMO código leían la misma máscara,
+    /// los dos veían el bit libre y los dos entraban. Un código robado se puede reutilizar
+    /// tantas veces como peticiones se lancen a la vez.</para>
+    ///
+    /// <para>La condición <c>(mask &amp; bit) = 0</c> viaja EN el <c>UPDATE</c>, así que la base
+    /// resuelve la carrera: el primero cambia una fila, el resto cambia cero. No hace falta ni token
+    /// de concurrencia ni transacción serializable — el propio <c>UPDATE</c> es el punto de
+    /// serialización, y el número de filas afectadas es la respuesta.</para>
+    /// </summary>
+    private static async Task<bool> ConsumeAtomicallyAsync(
+        User user, int index, IdentityDbContext db, IClock clock, CancellationToken ct)
+    {
+        var bit = 1 << index;
+        var now = clock.UtcNow;
+        var userId = user.Id;
+
+        var affected = await db.Users
+            .Where(u => u.Id == userId && (u.TotpRecoveryCodesUsedMask & bit) == 0)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(u => u.TotpRecoveryCodesUsedMask, u => u.TotpRecoveryCodesUsedMask | bit)
+                    .SetProperty(u => u.UpdatedAt, now),
+                ct)
+            .ConfigureAwait(false);
+
+        if (affected == 0)
+        {
+            // Otra petición se lo llevó entre la lectura y esta escritura. Rechazar es lo correcto:
+            // el código ya no está disponible, y quien lo consumió fue la otra.
+            return false;
+        }
+
+        // La entidad cargada quedó con la máscara vieja. Se refresca para que un SaveChanges
+        // posterior en la misma petición no la reescriba y "des-consuma" el código.
+        await db.Entry(user).ReloadAsync(ct).ConfigureAwait(false);
+        return true;
     }
 }
