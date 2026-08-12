@@ -141,6 +141,24 @@ public sealed class RenciSshProvisioner(
                 return Fail("extract_failed", $"tar/chmod falló: {extLog}", progress);
             }
 
+            // El token va a un fichero aparte, creado con permisos restrictivos ANTES de que exista
+            // la unit que lo referencia. Se usa `install -m 600` y no `tee` seguido de `chmod`
+            // porque crea el fichero YA con sus permisos: la secuencia tee+chmod deja una ventana,
+            // por breve que sea, en la que el secreto es legible por cualquier usuario de la máquina.
+            progress.Report($"Escribiendo el token en {TokenEnvFilePath} (solo root)…");
+            // Salto de línea explícito y en estilo Unix: el destino es systemd en Linux, no la
+            // máquina donde corre el central.
+            var tokenLine = $"AETHRA_SATELLITE_TOKEN={options.TokenPlaintext}\n";
+            var tokenB64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(tokenLine));
+            var (tokenOk, tokenLog) = await RunAsync(client,
+                "sudo -n mkdir -p /etc/aethra && " +
+                $"echo '{tokenB64}' | base64 -d | sudo -n install -m 600 -o root -g root /dev/stdin {TokenEnvFilePath}",
+                progress, cancellationToken);
+            if (!tokenOk)
+            {
+                return Fail("token_write_failed", $"Escribir el fichero de token fallo: {tokenLog}", progress);
+            }
+
             progress.Report("Escribiendo systemd unit en /etc/systemd/system/aethra-satellite.service…");
             var unit = BuildSystemdUnit(options);
             // tee escribe via stdin. Hacemos un base64 encode para evitar problemas de escape.
@@ -309,6 +327,17 @@ public sealed class RenciSshProvisioner(
                $"sudo -n systemctl enable --now {runtime}";
     }
 
+    /// <summary>
+    /// Ruta del fichero de entorno que guarda el token de enrolamiento.
+    ///
+    /// <para>El token NO va en la unit. Una unit de systemd es un artefacto de configuracion, no un
+    /// almacen de secretos: se lee sin privilegios especiales con , aparece en
+    /// diagnosticos y en cualquier copia de /etc, y sobrevive al enrolamiento. Un token de satelite
+    /// autoriza a registrarse contra el plano de control, asi que filtrarlo por ahi es entregar la
+    /// llave con la puerta.</para>
+    /// </summary>
+    private const string TokenEnvFilePath = "/etc/aethra/satellite.env";
+
     private static string BuildSystemdUnit(InstallOptions opts)
     {
         // Heredoc-style. Escapamos las comillas con interpolation.
@@ -322,8 +351,8 @@ public sealed class RenciSshProvisioner(
             Type=simple
             ExecStart=/opt/aethra-satellite/Aethra.Satellite
             Environment=AETHRA_CENTRAL_URL={opts.CentralUrl}
-            Environment=AETHRA_SATELLITE_TOKEN={opts.TokenPlaintext}
             Environment=Satellite__ContainerRuntime={opts.ContainerRuntime}
+            EnvironmentFile={TokenEnvFilePath}
             Restart=always
             RestartSec=5
 
