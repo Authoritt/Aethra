@@ -140,7 +140,10 @@ internal sealed class CreateInstanceHandler(
         }
 
         var volumes = MapVolumes(request.Volumes);
-        var healthcheck = MapHealthcheck(request.Healthcheck);
+        if (!TryMapHealthcheck(request.Healthcheck, out var healthcheck, out var healthcheckError))
+        {
+            return Error.Validation("instance.invalid_healthcheck", healthcheckError!);
+        }
 
         Instance instance;
         try
@@ -213,9 +216,24 @@ internal sealed class CreateInstanceHandler(
             {
                 return portResult.Error;
             }
-            var protocol = string.IsNullOrWhiteSpace(p.protocol) || string.Equals(p.protocol, "tcp", StringComparison.OrdinalIgnoreCase)
-                ? PortProtocol.Tcp
-                : PortProtocol.Udp;
+            // Sin protocolo se asume TCP, que es el caso normal. Pero un protocolo ESCRITO y no
+            // reconocido se rechaza: antes caía a UDP, así que un typo como "tpc" publicaba el
+            // puerto en otro transporte sin decir nada y el servicio quedaba inalcanzable por un
+            // motivo que no aparecía en ninguna parte.
+            var protocol = PortProtocol.Tcp;
+            if (!string.IsNullOrWhiteSpace(p.protocol)
+                && !PortMapping.TryParseProtocol(p.protocol, out protocol))
+            {
+                return Error.Validation(
+                    "instance.invalid_port_protocol",
+                    $"Protocolo '{p.protocol}' no soportado. Válidos: {string.Join(", ", PortMapping.SupportedProtocols)}.");
+            }
+            if (p.hostPort is { } hostPort && (hostPort < PortMapping.MinPort || hostPort > PortMapping.MaxPort))
+            {
+                return Error.Validation(
+                    "instance.invalid_host_port",
+                    $"El puerto del host {hostPort} está fuera de rango ({PortMapping.MinPort}-{PortMapping.MaxPort}).");
+            }
             mapped.Add(new PortMapping(portResult.Value, p.hostPort, protocol));
         }
         IReadOnlyList<PortMapping> result = mapped;
@@ -231,13 +249,26 @@ internal sealed class CreateInstanceHandler(
         return [.. volumes.Select(v => new VolumeMount(v.name, v.containerPath, v.readOnly))];
     }
 
-    private static Healthcheck? MapHealthcheck(CreateInstanceHealthcheckDto? hc)
+    /// <summary>
+    /// Mapea el healthcheck del DTO, validandolo en el borde. Devuelve el motivo del rechazo en
+    /// <paramref name="error"/> si la configuracion no es sensata.
+    /// </summary>
+    private static bool TryMapHealthcheck(
+        CreateInstanceHealthcheckDto? hc, out Healthcheck? healthcheck, out string? error)
     {
+        healthcheck = null;
+        error = null;
         if (hc is null)
         {
-            return null;
+            return true;
         }
-        return new Healthcheck(hc.test, hc.intervalSeconds, hc.retries, hc.timeoutSeconds, hc.startPeriodSeconds);
+        error = Healthcheck.Validate(hc.test, hc.intervalSeconds, hc.retries, hc.timeoutSeconds, hc.startPeriodSeconds);
+        if (error is not null)
+        {
+            return false;
+        }
+        healthcheck = new Healthcheck(hc.test, hc.intervalSeconds, hc.retries, hc.timeoutSeconds, hc.startPeriodSeconds);
+        return true;
     }
 
     private static InstanceDetail Project(Instance i, string clientSlug, Template template)

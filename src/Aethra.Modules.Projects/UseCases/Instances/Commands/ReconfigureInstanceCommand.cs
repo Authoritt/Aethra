@@ -60,19 +60,44 @@ internal sealed class ReconfigureInstanceHandler(ProjectsDbContext db, IClock cl
             {
                 return portResult.Error;
             }
-            var protocol = string.IsNullOrWhiteSpace(p.protocol) || string.Equals(p.protocol, "tcp", StringComparison.OrdinalIgnoreCase)
-                ? PortProtocol.Tcp
-                : PortProtocol.Udp;
+            // Mismo criterio que en la creación: sin protocolo se asume TCP, pero uno escrito y no
+            // reconocido se rechaza en vez de caer a UDP en silencio.
+            var protocol = PortProtocol.Tcp;
+            if (!string.IsNullOrWhiteSpace(p.protocol)
+                && !PortMapping.TryParseProtocol(p.protocol, out protocol))
+            {
+                return Error.Validation(
+                    "instance.invalid_port_protocol",
+                    $"Protocolo '{p.protocol}' no soportado. Válidos: {string.Join(", ", PortMapping.SupportedProtocols)}.");
+            }
+            if (p.hostPort is { } hostPort && (hostPort < PortMapping.MinPort || hostPort > PortMapping.MaxPort))
+            {
+                return Error.Validation(
+                    "instance.invalid_host_port",
+                    $"El puerto del host {hostPort} está fuera de rango ({PortMapping.MinPort}-{PortMapping.MaxPort}).");
+            }
             mappedPorts.Add(new PortMapping(portResult.Value, p.hostPort, protocol));
         }
 
         var mappedVolumes = (request.Volumes ?? [])
             .Select(v => new VolumeMount(v.name, v.containerPath, v.readOnly)).ToArray();
 
-        Healthcheck? healthcheck = request.Healthcheck is null
-            ? null
-            : new Healthcheck(request.Healthcheck.test, request.Healthcheck.intervalSeconds,
+        // Se valida en el borde, no en el constructor del record: EF materializa Healthcheck por su
+        // constructor al leer la columna JSON, y una guarda ahi haria reventar la LECTURA de las
+        // instancias ya guardadas con valores que antes se aceptaban.
+        Healthcheck? healthcheck = null;
+        if (request.Healthcheck is not null)
+        {
+            var hcError = Healthcheck.Validate(
+                request.Healthcheck.test, request.Healthcheck.intervalSeconds, request.Healthcheck.retries,
+                request.Healthcheck.timeoutSeconds, request.Healthcheck.startPeriodSeconds);
+            if (hcError is not null)
+            {
+                return Error.Validation("instance.invalid_healthcheck", hcError);
+            }
+            healthcheck = new Healthcheck(request.Healthcheck.test, request.Healthcheck.intervalSeconds,
                 request.Healthcheck.retries, request.Healthcheck.timeoutSeconds, request.Healthcheck.startPeriodSeconds);
+        }
 
         var now = clock.UtcNow;
         try
