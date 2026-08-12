@@ -118,9 +118,29 @@ internal static class TotpVerifier
             return false;
         }
 
-        // La entidad cargada quedó con la máscara vieja. Se refresca para que un SaveChanges
-        // posterior en la misma petición no la reescriba y "des-consuma" el código.
-        await db.Entry(user).ReloadAsync(ct).ConfigureAwait(false);
+        // La entidad cargada quedó con la máscara vieja: hay que sincronizarla para que un
+        // SaveChanges posterior en la misma petición no la reescriba y "des-consuma" el código.
+        //
+        // Se hace EN MEMORIA, sin volver a consultar. Un ReloadAsync aquí sería una segunda
+        // operación que puede fallar (cancelación, error transitorio) DESPUÉS de que el UPDATE ya
+        // se haya confirmado solo: el código quedaría consumido para siempre y el catch de arriba
+        // convertiría esa excepción en "código inválido", dejando fuera a un usuario que acaba de
+        // gastar —quizá— su último código de recuperación. Pasado el punto de no retorno, nada que
+        // pueda fallar debe decidir si el login se acepta.
+        var entry = db.Entry(user);
+        SyncTracked(entry.Property(u => u.TotpRecoveryCodesUsedMask), user.TotpRecoveryCodesUsedMask | bit);
+        SyncTracked(entry.Property(u => u.UpdatedAt), now);
         return true;
+
+        // Se ajustan CurrentValue y OriginalValue a la vez: así el valor queda al día y además la
+        // propiedad NO se marca como modificada, que es lo que evita que un SaveChanges posterior
+        // vuelva a escribirla.
+        static void SyncTracked<T>(
+            Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry<User, T> property, T value)
+        {
+            property.CurrentValue = value;
+            property.OriginalValue = value;
+            property.IsModified = false;
+        }
     }
 }
