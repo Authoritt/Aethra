@@ -77,6 +77,19 @@ public sealed class CertificateTests
     }
 
     [Fact]
+    public void MarkIssued_after_initial_failure_raises_issued_event()
+    {
+        var cert = NewRequested();
+        cert.MarkFailed("acme unavailable");
+        cert.ClearDomainEvents();
+
+        cert.MarkIssued("c1", Now, Now.AddDays(90), 30, Now);
+
+        cert.Status.Should().Be(CertificateStatus.Issued);
+        cert.DomainEvents.Should().ContainSingle().Which.Should().BeOfType<CertificateIssuedDomainEvent>();
+    }
+
+    [Fact]
     public void MarkIssued_throws_on_blank_pfx()
     {
         var cert = NewRequested();
@@ -121,6 +134,18 @@ public sealed class CertificateTests
     }
 
     [Fact]
+    public void MarkRenewing_from_expired_succeeds_for_explicit_reissue()
+    {
+        var cert = NewRequested();
+        cert.MarkIssued("c1", Now, Now.AddDays(90), 30, Now);
+        cert.MarkExpired();
+
+        cert.MarkRenewing();
+
+        cert.Status.Should().Be(CertificateStatus.Renewing);
+    }
+
+    [Fact]
     public void MarkRenewing_from_pending_throws()
     {
         var cert = NewRequested();
@@ -143,5 +168,59 @@ public sealed class CertificateTests
         cert.LastError.Should().Be("acme rate limited");
         cert.PfxCipherText.Should().Be("c1");
         cert.DomainEvents.Should().ContainSingle().Which.Should().BeOfType<CertificateFailedEvent>();
+    }
+
+    [Fact]
+    public void ScheduleRenewalRetry_on_failed_updates_renew_after_only_for_that_certificate()
+    {
+        var cert = NewRequested();
+        cert.MarkIssued("c1", Now, Now.AddDays(90), 30, Now);
+        cert.MarkFailed("dns challenge failed");
+        var retryAfter = Now.AddHours(6);
+
+        cert.ScheduleRenewalRetry(retryAfter);
+
+        cert.Status.Should().Be(CertificateStatus.Failed);
+        cert.RenewAfter.Should().Be(retryAfter);
+    }
+
+    [Fact]
+    public void ScheduleRenewalRetry_from_issued_throws()
+    {
+        var cert = NewRequested();
+        cert.MarkIssued("c1", Now, Now.AddDays(90), 30, Now);
+
+        var act = () => cert.ScheduleRenewalRetry(Now.AddHours(6));
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void MarkExpired_sets_expired_and_removes_from_automatic_schedule()
+    {
+        var cert = NewRequested();
+        cert.MarkIssued("c1", Now, Now.AddDays(90), 30, Now);
+
+        cert.MarkExpired();
+
+        cert.Status.Should().Be(CertificateStatus.Expired);
+        cert.RenewAfter.Should().BeNull();
+        cert.PfxCipherText.Should().Be("c1");
+    }
+
+    [Fact]
+    public void MarkIssued_after_expired_recovers_certificate_as_renewed()
+    {
+        var cert = NewRequested();
+        cert.MarkIssued("c1", Now, Now.AddDays(90), 30, Now);
+        cert.MarkExpired();
+        cert.ClearDomainEvents();
+
+        cert.MarkIssued("c2", Now.AddDays(91), Now.AddDays(181), 30, Now.AddDays(91));
+
+        cert.Status.Should().Be(CertificateStatus.Issued);
+        cert.PfxCipherText.Should().Be("c2");
+        cert.LastError.Should().BeNull();
+        cert.DomainEvents.Should().ContainSingle().Which.Should().BeOfType<CertificateRenewedDomainEvent>();
     }
 }

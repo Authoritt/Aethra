@@ -15,4 +15,5 @@ public enum CertificateStatus
     Issued = 1,
     Failed = 2,
     Renewing = 3,
+    Expired = 4,
 }

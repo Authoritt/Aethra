@@ -12,7 +12,7 @@ public interface ICertificateStore
 {
     Task<Certificate?> FindByIdAsync(CertificateId id, CancellationToken ct);
     Task<Certificate?> FindByHostnameAsync(Hostname hostname, CancellationToken ct);
-    Task<IReadOnlyList<Certificate>> ListIssuedDueForRenewalAsync(DateTimeOffset now, CancellationToken ct);
+    Task<IReadOnlyList<Certificate>> ListDueForRenewalAttemptAsync(DateTimeOffset now, CancellationToken ct);
     Task AddAsync(Certificate certificate, CancellationToken ct);
     Task SaveChangesAsync(CancellationToken ct);
 
