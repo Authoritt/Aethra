@@ -39,10 +39,9 @@ public sealed class CertRenewalWorker(
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var anyFailure = false;
             try
             {
-                anyFailure = await RunPassAsync(stoppingToken).ConfigureAwait(false);
+                await RunPassAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -53,13 +52,11 @@ public sealed class CertRenewalWorker(
 #pragma warning restore CA1031
             {
                 logger.LogError(ex, "CertRenewalWorker falló en el loop principal");
-                anyFailure = true;
             }
 
-            var next = anyFailure ? BackoffInterval : NormalInterval;
             try
             {
-                await Task.Delay(next, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(NormalInterval, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -68,7 +65,7 @@ public sealed class CertRenewalWorker(
         }
     }
 
-    private async Task<bool> RunPassAsync(CancellationToken ct)
+    private async Task RunPassAsync(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<ICertificateStore>();
@@ -76,15 +73,14 @@ public sealed class CertRenewalWorker(
         var outbox = scope.ServiceProvider.GetRequiredService<IOutboxWriter<ProxyDbContext>>();
 
         var now = clock.GetUtcNow();
-        var due = await store.ListIssuedDueForRenewalAsync(now, ct).ConfigureAwait(false);
+        var due = await store.ListDueForRenewalAttemptAsync(now, ct).ConfigureAwait(false);
         if (due.Count == 0)
         {
-            return false;
+            return;
         }
 
         logger.LogInformation("Renovando {Count} certificate(s) en este pase", due.Count);
 
-        var anyFailure = false;
         foreach (var cert in due)
         {
             if (ct.IsCancellationRequested)
@@ -93,16 +89,27 @@ public sealed class CertRenewalWorker(
             }
 
             // Si ya expiró antes de poder renovar, marcamos y publicamos evento de expiración.
-            if (cert.NotAfter is { } na && na <= now)
+            var decision = CertRenewalRules.Decide(cert.Status, cert.RenewAfter, cert.NotAfter, now);
+            if (decision == CertRenewalDecision.Skip)
+            {
+                continue;
+            }
+
+            if (decision == CertRenewalDecision.Expire)
             {
                 logger.LogWarning("Certificate {CertId} ({Host}) expiró: emitiendo CertificateExpiredEvent",
                     cert.Id, cert.Hostname.Value);
 
+                cert.MarkExpired();
                 await outbox.EnqueueAsync(
                     new CertificateExpiredEvent(cert.Id.ToString(), cert.Hostname.Value, now, cert.LastError),
                     ct).ConfigureAwait(false);
+
+                // Se programa el siguiente intento antes de seguir: el certificado ya caduco, pero
+                // eso es justo cuando mas urge renovarlo. Marcarlo y olvidarlo dejaria el host sin
+                // TLS de forma permanente. El evento ya no se repetira porque el estado cambio.
+                cert.ScheduleRenewalRetry(CertRenewalRules.NextRetryAfter(now, BackoffInterval));
                 await store.SaveChangesAsync(ct).ConfigureAwait(false);
-                anyFailure = true;
                 continue;
             }
 
@@ -111,9 +118,13 @@ public sealed class CertRenewalWorker(
             {
                 logger.LogWarning("Renovación fallida para {CertId} ({Host}): {Error}",
                     cert.Id, cert.Hostname.Value, result.Error);
-                anyFailure = true;
+
+                if (cert.Status == CertificateStatus.Failed)
+                {
+                    cert.ScheduleRenewalRetry(CertRenewalRules.NextRetryAfter(now, BackoffInterval));
+                    await store.SaveChangesAsync(ct).ConfigureAwait(false);
+                }
             }
         }
-        return anyFailure;
     }
 }

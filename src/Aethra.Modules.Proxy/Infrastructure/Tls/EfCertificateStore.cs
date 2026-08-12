@@ -26,11 +26,16 @@ public sealed class EfCertificateStore(DbContext db) : ICertificateStore
     public Task<Certificate?> FindByHostnameAsync(Hostname hostname, CancellationToken ct)
         => Certificates.FirstOrDefaultAsync(c => c.Hostname == hostname, ct);
 
-    public async Task<IReadOnlyList<Certificate>> ListIssuedDueForRenewalAsync(DateTimeOffset now, CancellationToken ct)
+    public async Task<IReadOnlyList<Certificate>> ListDueForRenewalAttemptAsync(DateTimeOffset now, CancellationToken ct)
     {
         var list = await Certificates
-            .Where(c => c.Status == CertificateStatus.Issued
+            // Expired incluido: un certificado caducado sigue siendo elegible para recuperarse.
+            // Excluirlo lo dejaria muerto para siempre y el host sin TLS, sin reintento alguno.
+            .Where(c => (c.Status == CertificateStatus.Issued
+                         || c.Status == CertificateStatus.Failed
+                         || c.Status == CertificateStatus.Expired)
                         && c.RenewAfter != null
+                        && c.NotAfter != null
                         && c.RenewAfter <= now)
             .ToListAsync(ct)
             .ConfigureAwait(false);

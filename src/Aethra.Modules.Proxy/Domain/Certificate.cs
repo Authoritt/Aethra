@@ -60,7 +60,10 @@ public sealed class Certificate : AggregateRoot<CertificateId>
             throw new ArgumentOutOfRangeException(nameof(renewBeforeDays), "Debe ser > 0.");
         }
 
-        var wasIssued = Status == CertificateStatus.Issued || Status == CertificateStatus.Renewing;
+        var wasIssued = Status == CertificateStatus.Issued
+            || Status == CertificateStatus.Renewing
+            || Status == CertificateStatus.Expired
+            || (Status == CertificateStatus.Failed && PfxCipherText is not null);
 
         PfxCipherText = pfxCipherText;
         Status = CertificateStatus.Issued;
@@ -86,7 +89,9 @@ public sealed class Certificate : AggregateRoot<CertificateId>
     /// </summary>
     public void MarkRenewing()
     {
-        if (Status != CertificateStatus.Issued && Status != CertificateStatus.Failed)
+        if (Status != CertificateStatus.Issued
+            && Status != CertificateStatus.Failed
+            && Status != CertificateStatus.Expired)
         {
             throw new InvalidOperationException(
                 $"Sólo se puede renovar un cert Issued/Failed. Estado actual: {Status}.");
@@ -103,6 +108,29 @@ public sealed class Certificate : AggregateRoot<CertificateId>
         Status = CertificateStatus.Failed;
         LastError = error;
         Raise(new CertificateFailedEvent(Id, Hostname.Value, error));
+    }
+
+    public void ScheduleRenewalRetry(DateTimeOffset retryAfter)
+    {
+        if (Status != CertificateStatus.Failed)
+        {
+            throw new InvalidOperationException(
+                $"Solo se puede programar retry para un cert Failed. Estado actual: {Status}.");
+        }
+
+        RenewAfter = retryAfter;
+    }
+
+    public void MarkExpired()
+    {
+        if (Status != CertificateStatus.Issued && Status != CertificateStatus.Failed)
+        {
+            throw new InvalidOperationException(
+                $"Solo se puede expirar un cert Issued/Failed. Estado actual: {Status}.");
+        }
+
+        Status = CertificateStatus.Expired;
+        RenewAfter = null;
     }
 
     // EF Core requiere un ctor sin parámetros para materializar.
