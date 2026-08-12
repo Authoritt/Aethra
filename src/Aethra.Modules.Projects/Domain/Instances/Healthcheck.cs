@@ -25,46 +25,44 @@ public sealed record Healthcheck(
     int? StartPeriodSeconds = null)
 {
     /// <summary>
-    /// Período entre ejecuciones, en segundos. Tiene que ser positivo: un intervalo de cero o
-    /// negativo no describe ninguna cadencia, y el runtime lo rechaza o se comporta de forma
-    /// indefinida. Antes se persistía tal cual y el fallo aparecía al arrancar el contenedor,
-    /// lejos de donde se configuró.
+    /// ¿Es sensata esta configuración de healthcheck? Devuelve el motivo del rechazo, o <c>null</c>
+    /// si es válida.
+    ///
+    /// <para>La comprobación NO va en el constructor, y es deliberado. EF materializa este record
+    /// por su constructor posicional al leer la columna JSON: una guarda ahí haría que cualquier
+    /// instancia ya guardada con valores que antes se aceptaban —intervalo cero, timeout no
+    /// positivo, período de gracia negativo, comando vacío— reventara al LEERLA. El usuario
+    /// recibiría un 500 al listar o reconfigurar, y no podría corregir la configuración porque para
+    /// corregirla hay que poder leerla primero. Un invariante nuevo sobre datos viejos se aplica en
+    /// el borde de entrada o se migra; nunca en la materialización.</para>
     /// </summary>
-    public int IntervalSeconds { get; } = IntervalSeconds > 0
-        ? IntervalSeconds
-        : throw new ArgumentOutOfRangeException(
-            nameof(IntervalSeconds), IntervalSeconds, "El intervalo del healthcheck debe ser mayor que cero.");
-
-    /// <summary>
-    /// Fallos consecutivos antes de marcar el contenedor como no sano. Cero sería "márcalo enfermo
-    /// sin haber fallado nunca", que no es una configuración que alguien quiera de verdad.
-    /// </summary>
-    public int Retries { get; } = Retries > 0
-        ? Retries
-        : throw new ArgumentOutOfRangeException(
-            nameof(Retries), Retries, "El número de reintentos del healthcheck debe ser mayor que cero.");
-
-    /// <summary>Timeout por ejecución. <c>null</c> deja el valor por defecto del runtime; si se da, positivo.</summary>
-    public int? TimeoutSeconds { get; } = TimeoutSeconds is { } t && t <= 0
-        ? throw new ArgumentOutOfRangeException(
-            nameof(TimeoutSeconds), t, "El timeout del healthcheck debe ser mayor que cero.")
-        : TimeoutSeconds;
-
-    /// <summary>
-    /// Gracia inicial durante la cual los fallos no cuentan. Admite cero —"sin gracia" es una
-    /// elección legítima, a diferencia de un intervalo cero— pero no valores negativos.
-    /// </summary>
-    public int? StartPeriodSeconds { get; } = StartPeriodSeconds is { } s && s < 0
-        ? throw new ArgumentOutOfRangeException(
-            nameof(StartPeriodSeconds), s, "El período de gracia del healthcheck no puede ser negativo.")
-        : StartPeriodSeconds;
-
-    /// <summary>
-    /// Comando a ejecutar. Sin comando no hay healthcheck: un test vacío produce una configuración
-    /// que el runtime no puede ejecutar y que, además, deja al contenedor sin comprobación real
-    /// mientras aparenta tenerla.
-    /// </summary>
-    public IReadOnlyList<string> Test { get; } = Test is { Count: > 0 }
-        ? Test
-        : throw new ArgumentException("El healthcheck necesita al menos un elemento en Test.", nameof(Test));
+    public static string? Validate(
+        IReadOnlyList<string>? test, int intervalSeconds, int retries, int? timeoutSeconds, int? startPeriodSeconds)
+    {
+        if (test is not { Count: > 0 })
+        {
+            // Sin comando el contenedor queda sin comprobación REAL mientras aparenta tener una
+            // configurada, que es la peor de las dos formas de no tener healthcheck.
+            return "El healthcheck necesita al menos un elemento en Test.";
+        }
+        if (intervalSeconds <= 0)
+        {
+            return "El intervalo del healthcheck debe ser mayor que cero.";
+        }
+        if (retries <= 0)
+        {
+            return "El número de reintentos del healthcheck debe ser mayor que cero.";
+        }
+        if (timeoutSeconds is { } t && t <= 0)
+        {
+            return "El timeout del healthcheck debe ser mayor que cero.";
+        }
+        // El período de gracia SÍ admite cero: "sin gracia" describe un comportamiento legítimo, a
+        // diferencia de un intervalo cero, que no describe ninguna cadencia.
+        if (startPeriodSeconds is { } sp && sp < 0)
+        {
+            return "El período de gracia del healthcheck no puede ser negativo.";
+        }
+        return null;
+    }
 }

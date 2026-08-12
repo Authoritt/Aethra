@@ -140,7 +140,10 @@ internal sealed class CreateInstanceHandler(
         }
 
         var volumes = MapVolumes(request.Volumes);
-        var healthcheck = MapHealthcheck(request.Healthcheck);
+        if (!TryMapHealthcheck(request.Healthcheck, out var healthcheck, out var healthcheckError))
+        {
+            return Error.Validation("instance.invalid_healthcheck", healthcheckError!);
+        }
 
         Instance instance;
         try
@@ -246,13 +249,26 @@ internal sealed class CreateInstanceHandler(
         return [.. volumes.Select(v => new VolumeMount(v.name, v.containerPath, v.readOnly))];
     }
 
-    private static Healthcheck? MapHealthcheck(CreateInstanceHealthcheckDto? hc)
+    /// <summary>
+    /// Mapea el healthcheck del DTO, validandolo en el borde. Devuelve el motivo del rechazo en
+    /// <paramref name="error"/> si la configuracion no es sensata.
+    /// </summary>
+    private static bool TryMapHealthcheck(
+        CreateInstanceHealthcheckDto? hc, out Healthcheck? healthcheck, out string? error)
     {
+        healthcheck = null;
+        error = null;
         if (hc is null)
         {
-            return null;
+            return true;
         }
-        return new Healthcheck(hc.test, hc.intervalSeconds, hc.retries, hc.timeoutSeconds, hc.startPeriodSeconds);
+        error = Healthcheck.Validate(hc.test, hc.intervalSeconds, hc.retries, hc.timeoutSeconds, hc.startPeriodSeconds);
+        if (error is not null)
+        {
+            return false;
+        }
+        healthcheck = new Healthcheck(hc.test, hc.intervalSeconds, hc.retries, hc.timeoutSeconds, hc.startPeriodSeconds);
+        return true;
     }
 
     private static InstanceDetail Project(Instance i, string clientSlug, Template template)

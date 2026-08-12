@@ -54,12 +54,12 @@ public sealed class InstanceInputValidationTests
     [InlineData(1)]
     [InlineData(8080)]
     [InlineData(65535)]
-    public void A_host_port_inside_the_range_is_accepted(int hostPort)
-        => new PortMapping(ContainerPort(80), hostPort).HostPort.Should().Be(hostPort);
+    public void A_host_port_inside_the_range_is_valid(int hostPort)
+        => PortMapping.IsValidHostPort(hostPort).Should().BeTrue();
 
     [Fact]
     public void A_null_host_port_is_valid_and_means_not_published()
-        => new PortMapping(ContainerPort(80), null).HostPort.Should().BeNull();
+        => PortMapping.IsValidHostPort(null).Should().BeTrue();
 
     /// <summary>El cero no vale: en este dominio significaría "elige tú", que no es lo que se pide.</summary>
     [Theory]
@@ -67,49 +67,51 @@ public sealed class InstanceInputValidationTests
     [InlineData(-1)]
     [InlineData(65536)]
     [InlineData(int.MaxValue)]
-    public void A_host_port_outside_the_range_is_rejected(int hostPort)
+    public void A_host_port_outside_the_range_is_invalid(int hostPort)
+        => PortMapping.IsValidHostPort(hostPort).Should().BeFalse();
+
+    /// <summary>
+    /// La comprobación NO está en el constructor, y este test lo fija. EF materializa el record por
+    /// su constructor posicional al leer de la base: una guarda ahí haría que una fila escrita por
+    /// el código anterior —cuando estos valores se aceptaban— reventara al LEERLA, devolviendo un
+    /// 500 al listar instancias y dejando al usuario sin poder corregir la configuración, porque
+    /// para corregirla hay que poder leerla.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(70000)]
+    public void Materialising_a_legacy_row_with_an_invalid_host_port_does_not_throw(int legacyHostPort)
     {
-        var act = () => new PortMapping(ContainerPort(80), hostPort);
-        act.Should().Throw<ArgumentOutOfRangeException>();
+        var act = () => new PortMapping(ContainerPort(80), legacyHostPort);
+        act.Should().NotThrow();
     }
 
     // ---------- Healthcheck (#58) ----------
 
-    [Fact]
-    public void A_sane_healthcheck_is_accepted()
-    {
-        var hc = new Healthcheck(["CMD", "curl", "-f", "http://localhost:8080/health"], 30, 3, 5, 60);
+    private static string? ValidateHc(
+        IReadOnlyList<string>? test, int interval, int retries, int? timeout = null, int? startPeriod = null)
+        => Healthcheck.Validate(test, interval, retries, timeout, startPeriod);
 
-        hc.IntervalSeconds.Should().Be(30);
-        hc.Retries.Should().Be(3);
-        hc.TimeoutSeconds.Should().Be(5);
-        hc.StartPeriodSeconds.Should().Be(60);
-    }
+    [Fact]
+    public void A_sane_healthcheck_is_valid()
+        => ValidateHc(["CMD", "curl", "-f", "http://localhost:8080/health"], 30, 3, 5, 60).Should().BeNull();
 
     [Theory]
     [InlineData(0)]
     [InlineData(-5)]
     public void A_non_positive_interval_is_rejected(int interval)
-    {
-        var act = () => new Healthcheck(["CMD", "true"], interval, 3);
-        act.Should().Throw<ArgumentOutOfRangeException>();
-    }
+        => ValidateHc(["CMD", "true"], interval, 3).Should().NotBeNull();
 
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
     public void A_non_positive_retry_count_is_rejected(int retries)
-    {
-        var act = () => new Healthcheck(["CMD", "true"], 30, retries);
-        act.Should().Throw<ArgumentOutOfRangeException>();
-    }
+        => ValidateHc(["CMD", "true"], 30, retries).Should().NotBeNull();
 
     [Fact]
     public void A_non_positive_timeout_is_rejected()
-    {
-        var act = () => new Healthcheck(["CMD", "true"], 30, 3, TimeoutSeconds: 0);
-        act.Should().Throw<ArgumentOutOfRangeException>();
-    }
+        => ValidateHc(["CMD", "true"], 30, 3, timeout: 0).Should().NotBeNull();
 
     /// <summary>
     /// Un timeout ausente es legítimo —deja el valor por defecto del runtime—, a diferencia de uno
@@ -117,7 +119,7 @@ public sealed class InstanceInputValidationTests
     /// </summary>
     [Fact]
     public void An_absent_timeout_is_allowed()
-        => new Healthcheck(["CMD", "true"], 30, 3, TimeoutSeconds: null).TimeoutSeconds.Should().BeNull();
+        => ValidateHc(["CMD", "true"], 30, 3, timeout: null).Should().BeNull();
 
     /// <summary>
     /// El período de gracia SÍ admite cero: "sin gracia" es una elección razonable. Lo que no cabe
@@ -126,23 +128,33 @@ public sealed class InstanceInputValidationTests
     /// </summary>
     [Fact]
     public void A_zero_start_period_is_allowed()
-        => new Healthcheck(["CMD", "true"], 30, 3, StartPeriodSeconds: 0).StartPeriodSeconds.Should().Be(0);
+        => ValidateHc(["CMD", "true"], 30, 3, startPeriod: 0).Should().BeNull();
 
     [Fact]
     public void A_negative_start_period_is_rejected()
-    {
-        var act = () => new Healthcheck(["CMD", "true"], 30, 3, StartPeriodSeconds: -1);
-        act.Should().Throw<ArgumentOutOfRangeException>();
-    }
+        => ValidateHc(["CMD", "true"], 30, 3, startPeriod: -1).Should().NotBeNull();
 
     /// <summary>
     /// Sin comando no hay comprobación: el contenedor quedaría sin healthcheck real mientras
     /// aparenta tener uno configurado, que es justo el tipo de verde falso que hay que evitar.
     /// </summary>
+    [Theory]
+    [InlineData(null)]
+    public void An_empty_test_command_is_rejected(IReadOnlyList<string>? test)
+        => ValidateHc(test, 30, 3).Should().NotBeNull();
+
     [Fact]
-    public void An_empty_test_command_is_rejected()
+    public void An_empty_test_list_is_rejected()
+        => ValidateHc([], 30, 3).Should().NotBeNull();
+
+    /// <summary>
+    /// Igual que con los puertos: leer una instancia guardada con un healthcheck que hoy no
+    /// aceptaríamos no puede reventar. La invariante se aplica en la entrada, no al materializar.
+    /// </summary>
+    [Fact]
+    public void Materialising_a_legacy_healthcheck_does_not_throw()
     {
-        var act = () => new Healthcheck([], 30, 3);
-        act.Should().Throw<ArgumentException>();
+        var act = () => new Healthcheck([], 0, 0, 0, -1);
+        act.Should().NotThrow();
     }
 }

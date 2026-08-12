@@ -82,10 +82,22 @@ internal sealed class ReconfigureInstanceHandler(ProjectsDbContext db, IClock cl
         var mappedVolumes = (request.Volumes ?? [])
             .Select(v => new VolumeMount(v.name, v.containerPath, v.readOnly)).ToArray();
 
-        Healthcheck? healthcheck = request.Healthcheck is null
-            ? null
-            : new Healthcheck(request.Healthcheck.test, request.Healthcheck.intervalSeconds,
+        // Se valida en el borde, no en el constructor del record: EF materializa Healthcheck por su
+        // constructor al leer la columna JSON, y una guarda ahi haria reventar la LECTURA de las
+        // instancias ya guardadas con valores que antes se aceptaban.
+        Healthcheck? healthcheck = null;
+        if (request.Healthcheck is not null)
+        {
+            var hcError = Healthcheck.Validate(
+                request.Healthcheck.test, request.Healthcheck.intervalSeconds, request.Healthcheck.retries,
+                request.Healthcheck.timeoutSeconds, request.Healthcheck.startPeriodSeconds);
+            if (hcError is not null)
+            {
+                return Error.Validation("instance.invalid_healthcheck", hcError);
+            }
+            healthcheck = new Healthcheck(request.Healthcheck.test, request.Healthcheck.intervalSeconds,
                 request.Healthcheck.retries, request.Healthcheck.timeoutSeconds, request.Healthcheck.startPeriodSeconds);
+        }
 
         var now = clock.UtcNow;
         try

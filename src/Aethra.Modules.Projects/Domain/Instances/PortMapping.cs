@@ -33,18 +33,18 @@ public sealed record PortMapping(Port ContainerPort, int? HostPort, PortProtocol
     public const int MaxPort = 65535;
 
     /// <summary>
-    /// Puerto del host, o <c>null</c> si no se publica al host.
+    /// ¿Es válido este puerto de host? <c>null</c> significa "no se publica al host" y es válido.
     ///
-    /// <para>El <c>ContainerPort</c> ya venía validado por el tipo <see cref="Port"/>, pero el
-    /// <c>HostPort</c> es un <c>int?</c> crudo y no lo comprobaba nadie: un cero, un negativo o un
-    /// número por encima de 65535 sobrevivían a la validación de la aplicación y solo reventaban
-    /// mucho más tarde, al aprovisionar el contenedor. El fallo aparecía entonces lejos de su causa
-    /// y con la configuración ya persistida, que es la peor combinación para diagnosticarlo.</para>
+    /// <para>La comprobación NO va en el constructor, y es deliberado. EF materializa este record
+    /// por su constructor posicional al leer de la base: una guarda ahí haría que cualquier fila
+    /// escrita por el código anterior —con un cero, un negativo o un valor por encima de 65535, que
+    /// antes se aceptaban— reventara al LEERLA. El usuario recibiría un 500 al listar sus instancias
+    /// y no podría ni siquiera corregir la configuración, porque para corregirla hay que poder
+    /// leerla. Un invariante nuevo sobre datos viejos se aplica en el borde de entrada o se migra;
+    /// nunca en la materialización.</para>
     /// </summary>
-    public int? HostPort { get; } = HostPort is { } hp && (hp < MinPort || hp > MaxPort)
-        ? throw new ArgumentOutOfRangeException(
-            nameof(HostPort), hp, $"El puerto del host debe estar entre {MinPort} y {MaxPort}.")
-        : HostPort;
+    public static bool IsValidHostPort(int? hostPort)
+        => hostPort is not { } hp || (hp >= MinPort && hp <= MaxPort);
 
     /// <summary>
     /// Convierte el nombre de un protocolo al valor del enum. Devuelve <c>false</c> si no es uno de
