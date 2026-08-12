@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Aethra.Api.Bootstrap;
 using Aethra.Api.Hubs;
 using Aethra.Modules.Cloudflare;
@@ -304,6 +305,38 @@ catch (Exception ex)
 // -----------------------------------------------------------------------------
 // Pipeline HTTP
 // -----------------------------------------------------------------------------
+
+// PRIMERO DE TODO, y por un motivo que costo un incidente: Aethra vive detras del tunel de
+// Cloudflare, que TERMINA EL TLS y nos habla por http a 127.0.0.1:5080. Sin esto, el
+// `Request.Scheme` de CADA peticion que entra aqui es "http", aunque el usuario este en https.
+//
+// Eso no se queda en Aethra: este proceso ademas hace de REVERSE PROXY (MapReverseProxy). YARP
+// construye el `X-Forwarded-Proto` que manda a las apps de abajo a partir de NUESTRO esquema, asi
+// que un esquema mal resuelto aqui se propaga —o se omite— hacia todas ellas.
+//
+// Consecuencia real (2026-08-12): el login de Ekippo llevaba 4 dias devolviendo 500 en produccion.
+// Su antiforgery tiene `Cookie.SecurePolicy = Always` y lanzaba con "the current request is not an
+// SSL request". Medido contra el contenedor: sin `X-Forwarded-Proto` -> 500; con
+// `X-Forwarded-Proto: https` -> 200. Y era invisible: con credenciales malas respondia 401 normal,
+// asi que solo fallaba el camino de EXITO y el monitor —que mira /login— seguia en verde.
+//
+// Afecta a cualquier app detras del proxy que dependa del esquema: cookies Secure, redirecciones a
+// https y generacion de URLs absolutas (enlaces de correo, callbacks OAuth).
+//
+// KnownProxies/KnownIPNetworks se limpian a proposito: el salto anterior es el tunel, que no esta
+// en loopback ni en un rango fijo. Es seguro porque el unico camino publico hasta este puerto es el
+// propio tunel — el puerto 5080 escucha SOLO en 127.0.0.1 (no esta publicado en la interfaz de red),
+// asi que la cabecera no es falsificable desde fuera.
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor
+        | ForwardedHeaders.XForwardedProto
+        | ForwardedHeaders.XForwardedHost,
+};
+forwardedHeadersOptions.KnownProxies.Clear();
+forwardedHeadersOptions.KnownIPNetworks.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
+
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
