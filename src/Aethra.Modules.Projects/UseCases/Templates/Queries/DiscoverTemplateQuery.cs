@@ -49,6 +49,20 @@ internal sealed partial class DiscoverTemplateHandler(
 {
     private static readonly TimeSpan GitTimeout = TimeSpan.FromMinutes(2);
 
+    /// <summary>
+    /// Desactiva el seguimiento de redirecciones HTTP en git.
+    ///
+    /// <para>Sin esto, la validacion del destino se puede saltar entera: git trae
+    /// <c>http.followRedirects=initial</c> por defecto, asi que un endpoint publico y permitido puede
+    /// responder un 302 hacia loopback, hacia el endpoint de metadatos o hacia cualquier servicio
+    /// interno, y git sigue esa redireccion sin volver a preguntarnos. Comprobar solo el host
+    /// original deja abierta exactamente la puerta que la politica cierra.</para>
+    ///
+    /// <para>Va como <c>-c</c> por invocacion y no en la config global a proposito: el ajuste tiene
+    /// que viajar con el comando que lo necesita, no depender del estado de la maquina.</para>
+    /// </summary>
+    private static readonly string[] NoRedirects = ["-c", "http.followRedirects=false"];
+
     public async Task<Result<TemplateDiscoverResult>> Handle(
         DiscoverTemplateQuery request,
         CancellationToken cancellationToken)
@@ -89,8 +103,8 @@ internal sealed partial class DiscoverTemplateHandler(
             // uno silencioso.
             var hasBranch = !string.IsNullOrWhiteSpace(request.Branch);
             string[] cloneArgs = hasBranch
-                ? ["clone", "--depth", "1", "--branch", request.Branch!.Trim(), "--single-branch", request.GitRepoUrl, workDir]
-                : ["clone", "--depth", "1", request.GitRepoUrl, workDir];
+                ? [..NoRedirects, "clone", "--depth", "1", "--branch", request.Branch!.Trim(), "--single-branch", request.GitRepoUrl, workDir]
+                : [..NoRedirects, "clone", "--depth", "1", request.GitRepoUrl, workDir];
 
             var clone = await RunGitAsync(cloneArgs, cancellationToken).ConfigureAwait(false);
             if (clone.ExitCode != 0)

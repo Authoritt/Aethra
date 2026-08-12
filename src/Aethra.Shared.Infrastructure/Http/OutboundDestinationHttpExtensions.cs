@@ -59,6 +59,13 @@ public static class OutboundDestinationHttpExtensions
             var guard = sp.GetRequiredService<IOutboundDestinationGuard>();
             var handler = new SocketsHttpHandler
             {
+                // Sin proxy, y no por rendimiento. Con HTTP_PROXY/HTTPS_PROXY configurados, el
+                // ConnectCallback recibe el endpoint del PROXY, no el destino real: validariamos el
+                // proxy y dejariamos que el llamante le pidiera enrutar a donde quisiera, incluida la
+                // red interna. Y al reves, un proxy corporativo privado bloquearia peticiones
+                // publicas legitimas. Mientras la comprobacion viva en el socket, la unica forma de
+                // que mire el destino de verdad es conectar directamente.
+                UseProxy = false,
                 ConnectCallback = async (context, ct) =>
                 {
                     var host = context.DnsEndPoint.Host;
