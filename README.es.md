@@ -3,7 +3,7 @@
 **Una sola plataforma para desplegar, enrutar, certificar, monitorear y operar tu infraestructura.**
 
 [![CI](https://github.com/Authoritt/Aethra/actions/workflows/ci.yml/badge.svg)](https://github.com/Authoritt/Aethra/actions/workflows/ci.yml)
-[![Licencia](https://img.shields.io/badge/licencia-Apache--2.0-blue.svg)](LICENSE)
+[![Licencia](https://img.shields.io/badge/licencia-AGPL--3.0-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4.svg)](https://dotnet.microsoft.com/)
 
 > 🇬🇧 [Read this in English](README.md)
@@ -263,4 +263,7 @@ el botón **Sponsor** en GitHub.
 
 ## Licencia
 
-[Apache License 2.0](LICENSE) — Copyright 2026 Authorit.
+[GNU Affero General Public License v3.0](LICENSE) — Copyright 2026 Authorit.
+
+Úsalo, modifícalo y autohospédalo con libertad. Si publicas un Aethra modificado como servicio al
+que otros llegan por red, la AGPL te pide publicar esos cambios bajo la misma licencia.

@@ -126,5 +126,5 @@ Do not open a public issue for a vulnerability. See [SECURITY.md](SECURITY.md).
 
 ## License
 
-Aethra is [Apache-2.0](LICENSE). By contributing you agree that your contribution is licensed under the
-same terms, per section 5 of the license.
+Aethra is [AGPL-3.0](LICENSE). By contributing you agree that your contribution is licensed under the
+same terms.

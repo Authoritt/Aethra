@@ -3,7 +3,7 @@
 **One platform to deploy, route, certify, monitor and operate your infrastructure.**
 
 [![CI](https://github.com/Authoritt/Aethra/actions/workflows/ci.yml/badge.svg)](https://github.com/Authoritt/Aethra/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4.svg)](https://dotnet.microsoft.com/)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -295,4 +295,7 @@ sponsoring it keeps the work going — see the **Sponsor** button on GitHub, or
 
 ## License
 
-[Apache License 2.0](LICENSE) — Copyright 2026 Authorit.
+[GNU Affero General Public License v3.0](LICENSE) — Copyright 2026 Authorit.
+
+Use it, modify it and self-host it freely. If you run a modified Aethra as a service other people
+reach over a network, the AGPL asks you to publish those changes under the same license.
