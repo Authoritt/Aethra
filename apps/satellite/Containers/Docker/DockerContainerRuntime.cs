@@ -434,7 +434,8 @@ public sealed partial class DockerContainerRuntime : IContainerRuntime, IDisposa
             ct);
     }
 
-    public async Task<IReadOnlyList<string>> PruneImageRepoAsync(string repository, int keepLast, CancellationToken ct)
+    public async Task<IReadOnlyList<string>> PruneImageRepoAsync(
+        string repository, int keepLast, string? protectedRef, CancellationToken ct)
     {
         if (keepLast <= 0 || string.IsNullOrWhiteSpace(repository))
         {
@@ -446,10 +447,14 @@ public sealed partial class DockerContainerRuntime : IContainerRuntime, IDisposa
             .ListImagesAsync(new ImagesListParameters { All = false }, ct)
             .ConfigureAwait(false);
 
-        // Imágenes con al menos un tag de este repositorio, más recientes primero.
+        // Images with at least one tag from this repository, most recent first.
+        // The in-flight deploy's tag is kept OUT of the candidate list: a cached rebuild inherits
+        // the old layer date and, without this exclusion, retention deletes the very image the
+        // deploy is about to start (see IContainerRuntime.PruneImageRepoAsync).
         var ofRepo = all
             .Where(i => i.RepoTags is not null
-                && i.RepoTags.Any(t => t.StartsWith(prefix, StringComparison.Ordinal)))
+                && i.RepoTags.Any(t => t.StartsWith(prefix, StringComparison.Ordinal))
+                && !IsProtected(i.RepoTags, protectedRef))
             .OrderByDescending(i => i.Created)
             .ToList();
 
@@ -458,6 +463,11 @@ public sealed partial class DockerContainerRuntime : IContainerRuntime, IDisposa
         {
             foreach (var tag in image.RepoTags.Where(t => t.StartsWith(prefix, StringComparison.Ordinal)))
             {
+                if (IsSameRef(tag, protectedRef))
+                {
+                    continue;
+                }
+
                 try
                 {
                     // Force=false: si la imagen está en uso por un contenedor, Docker la rechaza
@@ -475,6 +485,20 @@ public sealed partial class DockerContainerRuntime : IContainerRuntime, IDisposa
         }
         return removed;
     }
+
+    /// <summary>Does any tag of this image match the in-flight deploy's protected ref?</summary>
+    private static bool IsProtected(IList<string>? repoTags, string? protectedRef) =>
+        !string.IsNullOrWhiteSpace(protectedRef)
+        && repoTags is not null
+        && repoTags.Any(t => IsSameRef(t, protectedRef));
+
+    /// <summary>
+    /// Compares two image refs case-insensitively. Docker normalises names to lowercase, but the
+    /// deploy's ref can arrive with whatever casing its producer used.
+    /// </summary>
+    private static bool IsSameRef(string tag, string? other) =>
+        !string.IsNullOrWhiteSpace(other)
+        && string.Equals(tag, other, StringComparison.OrdinalIgnoreCase);
 
     public async Task<string?> PruneBuildCacheAsync(int maxAgeHours, int keepStorageGb, CancellationToken ct)
     {

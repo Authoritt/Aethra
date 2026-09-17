@@ -64,7 +64,22 @@ public interface IContainerRuntime
     /// un contenedor. Best-effort e idempotente: con <paramref name="keepLast"/> &lt;= 0 no hace
     /// nada. Devuelve los refs efectivamente borrados.
     /// </summary>
-    Task<IReadOnlyList<string>> PruneImageRepoAsync(string repository, int keepLast, CancellationToken ct);
+    /// <param name="protectedRef">
+    /// Ref that is NEVER deleted, even when retention considers it old. It is the tag of the
+    /// in-flight deploy, and protecting it is not cosmetic:
+    ///
+    /// <para><b>Incident 2026-09-17.</b> Retention runs between the build and the container start,
+    /// and sorts by IMAGE CREATION DATE. When a rebuild is 100% cached (the commit touched nothing
+    /// that goes into that Dockerfile), the resulting image inherits the old layer date, so
+    /// retention classifies it as old and deletes the tag that was just built. A second later
+    /// <c>RunContainer</c> cannot find it, falls back to pulling from the public registry and dies
+    /// with "pull access denied". Yunke's API sat ~30 min with no container because of this.</para>
+    ///
+    /// <para><c>Force=false</c> does not help here: it only spares images already IN USE by a
+    /// container, and the freshly built one is not running yet.</para>
+    /// </param>
+    Task<IReadOnlyList<string>> PruneImageRepoAsync(
+        string repository, int keepLast, string? protectedRef, CancellationToken ct);
 
     /// <summary>
     /// Poda el build cache del runtime (capas intermedias de BuildKit/buildah que el flujo git-mode

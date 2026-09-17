@@ -80,7 +80,11 @@ public sealed class SatelliteCommandHandler(
                     var repo = ImageRepoOf(req.Spec.ImageRef);
                     try
                     {
-                        var removed = await runtime.PruneImageRepoAsync(repo, _imageRetentionKeep, CancellationToken.None);
+                        // The freshly built ref is protected: it is the one the deploy is about to
+                        // start, and retention would treat it as "old" when the build came back
+                        // fully cached (the image inherits the layer dates).
+                        var removed = await runtime.PruneImageRepoAsync(
+                            repo, _imageRetentionKeep, req.Spec.ImageRef, CancellationToken.None);
                         if (removed.Count > 0)
                         {
                             logger.LogInformation(

@@ -411,7 +411,8 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
         }
     }
 
-    public async Task<IReadOnlyList<string>> PruneImageRepoAsync(string repository, int keepLast, CancellationToken ct)
+    public async Task<IReadOnlyList<string>> PruneImageRepoAsync(
+        string repository, int keepLast, string? protectedRef, CancellationToken ct)
     {
         if (keepLast <= 0 || string.IsNullOrWhiteSpace(repository))
         {
@@ -435,6 +436,10 @@ public sealed partial class PodmanContainerRuntime : IContainerRuntime
                 && !p[1].EndsWith(":<none>", StringComparison.Ordinal))
             .OrderByDescending(p => p[0], StringComparer.Ordinal)
             .Select(p => p[1])
+            // The in-flight deploy's tag is never a candidate: a cached rebuild inherits the old
+            // layer date and retention would delete it right before the container starts.
+            .Where(r => string.IsNullOrWhiteSpace(protectedRef)
+                        || !string.Equals(r, protectedRef, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         var removed = new List<string>();
