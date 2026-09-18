@@ -8,7 +8,8 @@ namespace Aethra.Modules.Services.Infrastructure.Provisioning;
 
 /// <summary>
 /// Aprovisiona ACL users sobre Redis 6+. Cada binding obtiene un user con permisos limitados
-/// a su <c>ResourceName</c> como prefijo de keys (<c>~prefix:*</c>).
+/// a su <c>ResourceName</c> como prefijo de keys (<c>~prefix:*</c>) y canales
+/// pub/sub (<c>&amp;prefix:*</c>).
 /// </summary>
 public sealed partial class RedisProvisioner : IServiceProvisioner
 {
@@ -132,18 +133,18 @@ public sealed partial class RedisProvisioner : IServiceProvisioner
         }
     }
 
-    private static object[] BuildAclSetUser(string username, string password, string prefix, BindingPermissions permissions)
+    internal static object[] BuildAclSetUser(string username, string password, string prefix, BindingPermissions permissions)
     {
-        // Forma: SETUSER {user} on >{pwd} ~{prefix}:* +@all -@dangerous
+        // Forma: SETUSER {user} reset on >{pwd} ~{prefix}:* &{prefix}:* +@connection +@pubsub ...
         // ReadOnly recorta a +@read; ReadWrite añade +@write además de @read.
         var permTokens = permissions switch
         {
-            BindingPermissions.ReadOnly => new[] { "+@read", "-@write", "-@dangerous" },
-            BindingPermissions.ReadWrite => new[] { "+@read", "+@write", "-@dangerous" },
+            BindingPermissions.ReadOnly => new[] { "+@connection", "+@pubsub", "+@read", "-@write", "-@dangerous" },
+            BindingPermissions.ReadWrite => new[] { "+@connection", "+@pubsub", "+@read", "+@write", "-@dangerous" },
             _ => new[] { "+@all", "-@dangerous" },
         };
 
-        var args = new List<object>(8 + permTokens.Length)
+        var args = new List<object>(9 + permTokens.Length)
         {
             "SETUSER",
             username,
@@ -151,6 +152,7 @@ public sealed partial class RedisProvisioner : IServiceProvisioner
             "on",
             ">" + password,
             "~" + prefix + ":*",
+            "&" + prefix + ":*",
         };
         args.AddRange(permTokens);
         return [.. args];

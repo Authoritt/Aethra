@@ -49,7 +49,7 @@ internal sealed class RevokeBindingHandler(
         }
 
         var provisioner = provisioners.FirstOrDefault(p => p.SupportedType == svc.Type);
-        if (provisioner is not null && binding.ProvisionedAt is not null)
+        if (provisioner is not null && binding.ProvisionedAt is not null && !svc.IsRuntimeContainerMissing())
         {
             BindingCredentials credentials;
             try
@@ -71,6 +71,12 @@ internal sealed class RevokeBindingHandler(
                 return Error.Conflict(outcome.ErrorCode ?? "revoke_failed",
                     outcome.ErrorMessage ?? "Revocacion fallo");
             }
+        }
+        else if (binding.ProvisionedAt is not null && svc.IsRuntimeContainerMissing())
+        {
+            logger.LogWarning(
+                "Binding {Id} se revoca solo en metadata/env vars: servicio {ServiceId} apunta a contenedor inexistente",
+                binding.Id, svc.Id);
         }
 
         binding.Revoke(clock.UtcNow);
