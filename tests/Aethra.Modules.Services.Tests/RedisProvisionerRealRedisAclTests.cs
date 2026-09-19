@@ -96,6 +96,25 @@ public sealed class RedisProvisionerRealRedisAclTests : IAsyncLifetime
         await ShouldBeDeniedAsync(async () => await mux.GetSubscriber().PublishAsync(RedisChannel.Literal(outsideChannel), "hello"));
         await ShouldBeDeniedAsync(async () => await mux.GetSubscriber().SubscribeAsync(RedisChannel.Literal(outsideChannel), (_, _) => { }));
         await ShouldBeDeniedAsync(async () => await db.ExecuteAsync("FLUSHDB"));
+
+        // Lo que ningun nivel puede hacer sin @scripting: liberar su propio lock. El lease usa un
+        // compare-and-delete en Lua, igual que el cache de Microsoft. Si esto se niega, el lock
+        // adquiere y no libera — un fallo lento que no se ve hasta que la cola se para.
+        var luaRead = "return redis.call('get', KEYS[1])";
+        (await db.ScriptEvaluateAsync(luaRead, [insideKey])).Should().NotBeNull();
+
+        // Y el script NO es una puerta trasera: el ACL del llamante se aplica dentro del Lua.
+        var luaWrite = "return redis.call('set', KEYS[1], 'via-lua')";
+        if (canWrite)
+        {
+            await db.ScriptEvaluateAsync(luaWrite, [insideKey]);
+        }
+        else
+        {
+            await ShouldBeDeniedAsync(async () => await db.ScriptEvaluateAsync(luaWrite, [insideKey]));
+        }
+
+        await ShouldBeDeniedAsync(async () => await db.ScriptEvaluateAsync(luaRead, [outsideKey]));
     }
 
     public async Task InitializeAsync()
@@ -175,7 +194,11 @@ public sealed class RedisProvisionerRealRedisAclTests : IAsyncLifetime
     {
         var ex = await Record.ExceptionAsync(action);
         ex.Should().BeOfType<RedisServerException>();
-        ex!.Message.Should().Contain("NOPERM");
+        // Redis niega con DOS redacciones distintas y hay que aceptar las dos: "NOPERM ..." cuando
+        // el comando llega directo, y "ERR ACL failure in script: ..." cuando el mismo comando va
+        // dentro de un EVAL. Exigir solo la primera dejaba el caso del script sin comprobar de
+        // verdad — que es justo donde se escondia el hueco de @scripting.
+        ex!.Message.Should().Match(m => m.Contains("NOPERM") || m.Contains("ACL failure in script"));
     }
 
     private async Task<IConnectionMultiplexer> ConnectAsync(string username, string password)

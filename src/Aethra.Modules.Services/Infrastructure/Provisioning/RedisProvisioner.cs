@@ -142,10 +142,20 @@ public sealed partial class RedisProvisioner : IServiceProvisioner
     {
         // ReadOnly recorta a +@read; ReadWrite añade +@write además de @read.
         // ReadOnly usa comandos de suscripcion explicitos: +@pubsub tambien permitiria PUBLISH.
+        //
+        // `+@scripting` NO es un extra: un cliente real no funciona sin el. El patron estandar de
+        // lock distribuido libera y renueva con un compare-and-delete en Lua (`EVAL`), y el cache
+        // `Microsoft.Extensions.Caching.StackExchangeRedis` tambien ejecuta Lua en cada lectura con
+        // refresh. Sin esto el lock ADQUIERE y NO LIBERA: se queda esperando al TTL, que es un fallo
+        // lento y silencioso. Medido contra Yunke en produccion el 2026-09-19.
+        //
+        // Darselo tambien a ReadOnly es seguro y esta MEDIDO: desde Redis 7 el ACL del llamante se
+        // aplica DENTRO del script, asi que con `-@write` un `EVAL` que intente SET o DEL recibe
+        // "ACL failure in script". El script no es una puerta trasera a la escritura.
         var permTokens = permissions switch
         {
-            BindingPermissions.ReadOnly => new[] { "+@connection", "+subscribe", "+psubscribe", "+unsubscribe", "+punsubscribe", "+@read", "-@write", "-@dangerous" },
-            BindingPermissions.ReadWrite => new[] { "+@connection", "+@pubsub", "+@read", "+@write", "-@dangerous" },
+            BindingPermissions.ReadOnly => new[] { "+@connection", "+subscribe", "+psubscribe", "+unsubscribe", "+punsubscribe", "+@scripting", "+@read", "-@write", "-@dangerous" },
+            BindingPermissions.ReadWrite => new[] { "+@connection", "+@pubsub", "+@scripting", "+@read", "+@write", "-@dangerous" },
             _ => new[] { "+@all", "-@dangerous" },
         };
 
