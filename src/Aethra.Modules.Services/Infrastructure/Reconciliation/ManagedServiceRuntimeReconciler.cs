@@ -12,10 +12,13 @@ internal sealed class ManagedServiceRuntimeReconciler(
     IClock clock,
     ILogger<ManagedServiceRuntimeReconciler> logger)
 {
-    public async Task<int> ReconcileReadyServicesAsync(CancellationToken cancellationToken)
+    public async Task<int> ReconcileRuntimeServicesAsync(CancellationToken cancellationToken)
     {
         var services = await db.ManagedServices
-            .Where(s => s.Status == ManagedServiceStatus.Ready)
+            .Where(s =>
+                s.Status == ManagedServiceStatus.Ready ||
+                (s.Status == ManagedServiceStatus.Failed &&
+                 s.ErrorCode == ManagedService.RuntimeContainerMissingErrorCode))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -44,6 +47,15 @@ internal sealed class ManagedServiceRuntimeReconciler(
                     string.Equals(c.Name, service.ContainerName, StringComparison.Ordinal));
                 if (exists)
                 {
+                    if (service.IsRuntimeContainerMissing())
+                    {
+                        service.MarkProvisioned(clock.UtcNow);
+                        changed++;
+                        logger.LogInformation(
+                            "Servicio gestionado {ServiceId} ({Slug}) marcado Ready: contenedor {Container} reaparecio en VM {VmId}",
+                            service.Id, service.Slug, service.ContainerName, service.TargetVmId);
+                    }
+
                     continue;
                 }
 

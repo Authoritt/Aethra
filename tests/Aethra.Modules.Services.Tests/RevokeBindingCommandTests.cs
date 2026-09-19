@@ -18,7 +18,7 @@ public sealed class RevokeBindingCommandTests
     private static readonly DateTimeOffset Now = new(2026, 9, 18, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task Revoke_succeeds_locally_when_reconciler_marked_service_container_missing()
+    public async Task Revoke_attempts_remote_revoke_even_when_persisted_state_says_container_missing()
     {
         await using var db = NewDb();
         var service = ManagedService.Adopt("redis", "Redis", ServiceType.Redis, "7", "vm_1", "redis",
@@ -33,7 +33,7 @@ public sealed class RevokeBindingCommandTests
         db.ServiceBindings.Add(binding);
         await db.SaveChangesAsync();
 
-        var provisioner = new RecordingProvisioner(ServiceType.Redis, RevokeOutcome: new(false, "redis.acl_failed", "UnableToConnect"));
+        var provisioner = new RecordingProvisioner(ServiceType.Redis, RevokeOutcome: new(true, null, null));
         var envWriter = new RecordingEnvVarWriter();
         var handler = new RevokeBindingHandler(db, [provisioner], new StaticBindingCodec(),
             envWriter, new FixedClock(Now.AddMinutes(2)), NullLogger<RevokeBindingHandler>.Instance);
@@ -41,13 +41,13 @@ public sealed class RevokeBindingCommandTests
         var result = await handler.Handle(new RevokeBindingCommand(binding.Id.ToString()), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        provisioner.RevokeCalls.Should().Be(0);
+        provisioner.RevokeCalls.Should().Be(1);
         envWriter.RemovedSources.Should().ContainSingle($"binding:{binding.Id}");
         (await db.ServiceBindings.SingleAsync()).RevokedAt.Should().Be(Now.AddMinutes(2));
     }
 
     [Fact]
-    public async Task Revoke_still_blocks_when_service_is_ready_and_remote_revoke_fails()
+    public async Task Revoke_succeeds_locally_only_when_remote_revoke_cannot_connect()
     {
         await using var db = NewDb();
         var service = ManagedService.Adopt("redis", "Redis", ServiceType.Redis, "7", "vm_1", "redis",
@@ -60,7 +60,34 @@ public sealed class RevokeBindingCommandTests
         db.ServiceBindings.Add(binding);
         await db.SaveChangesAsync();
 
-        var provisioner = new RecordingProvisioner(ServiceType.Redis, RevokeOutcome: new(false, "redis.acl_failed", "UnableToConnect"));
+        var provisioner = new RecordingProvisioner(ServiceType.Redis, RevokeOutcome: new(false, "redis.connect_failed", "UnableToConnect"));
+        var envWriter = new RecordingEnvVarWriter();
+        var handler = new RevokeBindingHandler(db, [provisioner], new StaticBindingCodec(),
+            envWriter, new FixedClock(Now.AddMinutes(2)), NullLogger<RevokeBindingHandler>.Instance);
+
+        var result = await handler.Handle(new RevokeBindingCommand(binding.Id.ToString()), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        provisioner.RevokeCalls.Should().Be(1);
+        envWriter.RemovedSources.Should().ContainSingle($"binding:{binding.Id}");
+        (await db.ServiceBindings.SingleAsync()).RevokedAt.Should().Be(Now.AddMinutes(2));
+    }
+
+    [Fact]
+    public async Task Revoke_still_blocks_when_remote_revoke_fails_for_non_connection_reason()
+    {
+        await using var db = NewDb();
+        var service = ManagedService.Adopt("redis", "Redis", ServiceType.Redis, "7", "vm_1", "redis",
+            "redis:7-alpine", 6379, "aethra-net", [1], Now);
+        var binding = ServiceBinding.Create(service.Id, "inst_1", "app", [2],
+            BindingPermissions.ReadWrite, null, null, Now);
+        binding.MarkProvisioned(Now);
+
+        db.ManagedServices.Add(service);
+        db.ServiceBindings.Add(binding);
+        await db.SaveChangesAsync();
+
+        var provisioner = new RecordingProvisioner(ServiceType.Redis, RevokeOutcome: new(false, "redis.acl_failed", "NOPERM this user has no permissions"));
         var handler = new RevokeBindingHandler(db, [provisioner], new StaticBindingCodec(),
             new RecordingEnvVarWriter(), new FixedClock(Now.AddMinutes(2)), NullLogger<RevokeBindingHandler>.Instance);
 

@@ -26,7 +26,7 @@ public sealed class ManagedServiceRuntimeReconcilerTests
         var reconciler = new ManagedServiceRuntimeReconciler(db, new StaticSatellite([]),
             new FixedClock(Now.AddMinutes(1)), NullLogger<ManagedServiceRuntimeReconciler>.Instance);
 
-        var changed = await reconciler.ReconcileReadyServicesAsync(CancellationToken.None);
+        var changed = await reconciler.ReconcileRuntimeServicesAsync(CancellationToken.None);
 
         changed.Should().Be(1);
         var saved = await db.ManagedServices.SingleAsync();
@@ -50,10 +50,36 @@ public sealed class ManagedServiceRuntimeReconcilerTests
         var reconciler = new ManagedServiceRuntimeReconciler(db, new StaticSatellite(containers),
             new FixedClock(Now.AddMinutes(1)), NullLogger<ManagedServiceRuntimeReconciler>.Instance);
 
-        var changed = await reconciler.ReconcileReadyServicesAsync(CancellationToken.None);
+        var changed = await reconciler.ReconcileRuntimeServicesAsync(CancellationToken.None);
 
         changed.Should().Be(0);
         (await db.ManagedServices.SingleAsync()).Status.Should().Be(ManagedServiceStatus.Ready);
+    }
+
+    [Fact]
+    public async Task Restores_runtime_missing_service_to_ready_when_container_reappears()
+    {
+        await using var db = NewDb();
+        var service = ManagedService.Adopt("redis", "Redis", ServiceType.Redis, "7", "vm_1", "redis",
+            "redis:7-alpine", 6379, "aethra-net", [1], Now);
+        service.MarkRuntimeContainerMissing(Now.AddMinutes(1));
+        db.ManagedServices.Add(service);
+        await db.SaveChangesAsync();
+
+        var containers = new[]
+        {
+            new ContainerInfo("id", "redis", "redis:7-alpine", "running", [6379]),
+        };
+        var reconciler = new ManagedServiceRuntimeReconciler(db, new StaticSatellite(containers),
+            new FixedClock(Now.AddMinutes(2)), NullLogger<ManagedServiceRuntimeReconciler>.Instance);
+
+        var changed = await reconciler.ReconcileRuntimeServicesAsync(CancellationToken.None);
+
+        changed.Should().Be(1);
+        var saved = await db.ManagedServices.SingleAsync();
+        saved.Status.Should().Be(ManagedServiceStatus.Ready);
+        saved.ErrorCode.Should().BeNull();
+        saved.ErrorMessage.Should().BeNull();
     }
 
     private static ServicesDbContext NewDb()

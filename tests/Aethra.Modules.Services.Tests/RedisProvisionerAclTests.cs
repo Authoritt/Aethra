@@ -28,7 +28,8 @@ public sealed class RedisProvisionerAclTests
             .Select(x => x.ToString())
             .ToArray();
 
-        args.Should().Contain(["~app:*", "&app:*", "+@connection", "+@pubsub", "+@read", "-@write"]);
+        args.Should().Contain(["~app:*", "&app:*", "+@connection", "+subscribe", "+psubscribe", "+unsubscribe", "+punsubscribe", "+@read", "-@write"]);
+        args.Should().NotContain("+@pubsub");
         args.Should().NotContain("+@write");
     }
 

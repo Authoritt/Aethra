@@ -78,6 +78,11 @@ public sealed partial class RedisProvisioner : IServiceProvisioner
             await db.ExecuteAsync("ACL", "DELUSER", credentials.Username).ConfigureAwait(false);
             return new RevokeOutcome(true, null, null);
         }
+        catch (RedisConnectionException ex)
+        {
+            _logger.LogError(ex, "Redis revoke conexion fallo binding {Binding}", binding.Id);
+            return new RevokeOutcome(false, "redis.connect_failed", ex.Message);
+        }
         catch (RedisException ex)
         {
             _logger.LogError(ex, "Redis revoke falló binding {Binding}", binding.Id);
@@ -135,11 +140,11 @@ public sealed partial class RedisProvisioner : IServiceProvisioner
 
     internal static object[] BuildAclSetUser(string username, string password, string prefix, BindingPermissions permissions)
     {
-        // Forma: SETUSER {user} reset on >{pwd} ~{prefix}:* &{prefix}:* +@connection +@pubsub ...
         // ReadOnly recorta a +@read; ReadWrite añade +@write además de @read.
+        // ReadOnly usa comandos de suscripcion explicitos: +@pubsub tambien permitiria PUBLISH.
         var permTokens = permissions switch
         {
-            BindingPermissions.ReadOnly => new[] { "+@connection", "+@pubsub", "+@read", "-@write", "-@dangerous" },
+            BindingPermissions.ReadOnly => new[] { "+@connection", "+subscribe", "+psubscribe", "+unsubscribe", "+punsubscribe", "+@read", "-@write", "-@dangerous" },
             BindingPermissions.ReadWrite => new[] { "+@connection", "+@pubsub", "+@read", "+@write", "-@dangerous" },
             _ => new[] { "+@all", "-@dangerous" },
         };

@@ -28,7 +28,7 @@ internal sealed class ManagedServiceRuntimeReconciliationWorker(
         {
             using var scope = scopeFactory.CreateScope();
             var reconciler = scope.ServiceProvider.GetRequiredService<ManagedServiceRuntimeReconciler>();
-            await reconciler.ReconcileReadyServicesAsync(cancellationToken).ConfigureAwait(false);
+            await reconciler.ReconcileRuntimeServicesAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
