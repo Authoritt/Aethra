@@ -11,6 +11,7 @@ using Aethra.Modules.Monitoring.UseCases.Queries;
 using Aethra.Modules.Proxy.UseCases.Routes;
 using Aethra.Modules.Proxy.UseCases.Routes.Commands;
 using Aethra.Modules.Proxy.UseCases.Routes.Queries;
+using Aethra.Modules.Services.UseCases.Queries;
 using Aethra.Shared.Contracts.Containers;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Contracts.Settings;
@@ -367,9 +368,10 @@ public sealed class NativeDeployRunner(
 
         // Limpieza post-deploy de contenedores zombi/vestigiales (problema #1: split-brain). Sólo
         // tras un deploy sano: los nuevos targets ya están Up y sirviendo. Elimina cualquier
-        // {slug}-* que NO sea target del template (ej. {slug}-api-bgbak/-bak/-new/-qqi…, o un
-        // servicio retirado) — corren TODOS los hosted services contra el Postgres compartido pero
-        // sin las conexiones SignalR del PoS → reclaman docs y los expiran. Best-effort.
+        // {slug}-* que NO sea target del template NI esté registrado como servicio gestionado de la
+        // VM (ej. {slug}-api-bgbak/-bak/-new/-qqi…, o un servicio retirado) — corren TODOS los
+        // hosted services contra el Postgres compartido pero sin las conexiones SignalR del PoS →
+        // reclaman docs y los expiran. Best-effort.
         var cleaned = await CleanupStaleContainersAsync(
             instance.TargetVmId, instance.Slug, allTemplateServices, ct).ConfigureAwait(false);
         foreach (var name in cleaned)
@@ -442,17 +444,20 @@ public sealed class NativeDeployRunner(
 
     /// <summary>
     /// Problema #1 (split-brain) — elimina los contenedores <c>{slug}-*</c> de esta Instance que NO
-    /// son target de NINGÚN servicio del template. El deploy nombra sus targets de forma estable
-    /// (<c>{slug}-{service}</c>) y recrea cada uno (remove + run); pero los blue-green/renames manuales
-    /// (<c>{slug}-api-bgbak</c>, <c>-bak</c>, <c>-new</c>, sufijos <c>-qqi…</c>) o un servicio retirado
-    /// del template dejan contenedores viejos corriendo. Si los hosted services de la app desplegada
+    /// son target de NINGÚN servicio del template y NO figuran como servicio gestionado de la VM. El
+    /// deploy nombra sus targets de forma estable (<c>{slug}-{service}</c>) y recrea cada uno (remove
+    /// + run); pero los blue-green/renames manuales (<c>{slug}-api-bgbak</c>, <c>-bak</c>,
+    /// <c>-new</c>, sufijos <c>-qqi…</c>) o un servicio retirado del template dejan contenedores
+    /// viejos corriendo. Si los hosted services de la app desplegada
     /// no son leader-only y su SignalR no tiene backplane, ese duplicado corre TODOS sus jobs contra
     /// el Postgres compartido pero SIN las conexiones SignalR de los clientes → reclama trabajo que
     /// no puede completar, lo deja colgado en su estado intermedio y acaba expirándolo.
     /// Es un modo de fallo observado en producción, no teórico: el contenedor huérfano parece inocuo
     /// (no recibe tráfico del proxy) y sin embargo compite por la cola de trabajo de la app viva.
     /// Por eso la limpieza usa el set COMPLETO de servicios del template (no el subconjunto de un
-    /// deploy incremental). Best-effort e idempotente: cualquier fallo se loguea y no rompe el deploy.
+    /// deploy incremental) y el registro de servicios gestionados como señal de propiedad ajena. Si
+    /// ese registro no se puede verificar, la limpieza se omite: volver al prefijo como única señal
+    /// fue precisamente el bug de OT-069. Best-effort e idempotente.
     /// </summary>
     private async Task<IReadOnlyList<string>> CleanupStaleContainersAsync(
         string vmId, string slug, IReadOnlyList<TemplateServiceView> allServices, CancellationToken ct)
@@ -460,20 +465,25 @@ public sealed class NativeDeployRunner(
         var removed = new List<string>();
         try
         {
-            var legit = allServices
-                .Select(s => $"{slug}-{s.Name}")
-                .ToHashSet(StringComparer.Ordinal);
-            // El separador "-" evita que un slug que es prefijo de otro (p.ej. "app" vs "app2") se
-            // confunda: "app2-api" no empieza por "app-".
-            var prefix = $"{slug}-";
-
             var containers = await satellite.SendListContainersAsync(vmId, ct).ConfigureAwait(false);
-            foreach (var c in containers)
+            var managedServiceContainers = await FindManagedServiceContainerNamesAsync(vmId, ct).ConfigureAwait(false);
+            if (managedServiceContainers is null)
             {
-                if (!c.Name.StartsWith(prefix, StringComparison.Ordinal) || legit.Contains(c.Name))
-                {
-                    continue;
-                }
+                log.LogWarning(
+                    "native-deploy {Slug}: limpieza de contenedores obsoletos omitida; no se pudo verificar el registro de servicios gestionados",
+                    slug);
+                return removed;
+            }
+
+            var staleNames = ContainerCleanupRules.SelectStaleContainerNames(
+                    containers.Select(c => c.Name),
+                    slug,
+                    allServices.Select(s => s.Name),
+                    managedServiceContainers)
+                .ToHashSet(StringComparer.Ordinal);
+
+            foreach (var c in containers.Where(c => staleNames.Contains(c.Name)))
+            {
                 try
                 {
                     await satellite.SendRemoveAsync(vmId, c.Name, force: true, ct).ConfigureAwait(false);
@@ -493,6 +503,31 @@ public sealed class NativeDeployRunner(
             log.LogWarning(ex, "native-deploy {Slug}: limpieza de contenedores obsoletos falló (ignorada)", slug);
         }
         return removed;
+    }
+
+    private async Task<IReadOnlySet<string>?> FindManagedServiceContainerNamesAsync(string vmId, CancellationToken ct)
+    {
+        try
+        {
+            var result = await mediator.Send(new ListServicesQuery(), ct).ConfigureAwait(false);
+            if (!result.IsSuccess)
+            {
+                return null;
+            }
+
+            return result.Value
+                .Where(s => string.Equals(s.TargetVmId, vmId, StringComparison.Ordinal)
+                    && !string.IsNullOrWhiteSpace(s.ContainerName))
+                .Select(s => s.ContainerName.Trim())
+                .ToHashSet(StringComparer.Ordinal);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex,
+                "native-deploy: no se pudo consultar el registro de servicios gestionados para la VM {VmId}",
+                vmId);
+            return null;
+        }
     }
 
     /// <summary>
