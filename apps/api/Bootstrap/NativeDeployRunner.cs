@@ -220,11 +220,23 @@ public sealed class NativeDeployRunner(
             if (string.Equals(svc.BuildMode, "git", StringComparison.OrdinalIgnoreCase))
             {
                 image = $"aethra/{instance.Slug}-{svc.Name}:{shortSha}";
+                // OT-008 T12 — BuildArgs del template con {instance}/{domain} interpolados. Sin BuildArgs
+                // el resultado es un diccionario vacio (build identico al historico).
+                var buildArgs = BuildArgsRules.Resolve(template.BuildArgs, instance.Slug, hostname);
+                if (buildArgs.UnresolvedDomainKeys.Count > 0)
+                {
+                    var argsError = $"Build (git) del servicio '{svc.Name}' no puede resolver {{domain}} en los build args "
+                        + $"[{string.Join(", ", buildArgs.UnresolvedDomainKeys)}]: la instancia no tiene dominio.";
+                    warnings.AddRange(await FailAndRollbackAsync(
+                        deployment, instance.TargetVmId, "build_args_unresolved", argsError,
+                        replacements, specsByService, ct).ConfigureAwait(false));
+                    return Fail(argsError, hostname, warnings);
+                }
                 var buildSpec = new BuildSpec(
                     ImageRef: image,
                     BuildContextTarGz: gitCtx!.TarGz,
                     DockerfilePath: string.IsNullOrWhiteSpace(svc.DockerfilePath) ? "Dockerfile" : svc.DockerfilePath!,
-                    BuildArgs: new Dictionary<string, string>(),
+                    BuildArgs: buildArgs.Args,
                     BuildSecrets: null,
                     Mode: BuildMode.Dockerfile,
                     BuildContextDir: svc.BuildContext);

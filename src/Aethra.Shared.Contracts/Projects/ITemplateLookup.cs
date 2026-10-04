@@ -53,7 +53,10 @@ public sealed record TemplateForBuildView(
     // Nombre lógico de la credencial (PAT/deploy key) en Settings para clonar el repo si es
     // privado. null = repo público. El secreto se resuelve vía IIntegrationCredentialResolver
     // en el momento del build; nunca viaja en este read-model.
-    string? AccessTokenCredentialName = null);
+    string? AccessTokenCredentialName = null,
+    // OT-008 T12 — --build-arg del Template (valores con tokens {instance}/{domain} SIN interpolar).
+    // null/vacio = el build git no pasa args (comportamiento historico).
+    IReadOnlyList<KeyValuePair<string, string>>? BuildArgs = null);
 
 /// <summary>
 /// F13 — proyección de un servicio multi-contenedor del Template (deploy nativo).

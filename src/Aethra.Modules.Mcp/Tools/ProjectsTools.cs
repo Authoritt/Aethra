@@ -6,6 +6,7 @@ using Aethra.Modules.Projects.UseCases.Instances.Commands;
 using Aethra.Modules.Projects.UseCases.Instances.Queries;
 using Aethra.Modules.Projects.UseCases.Projects.Commands;
 using Aethra.Modules.Projects.UseCases.Templates.Commands;
+using Aethra.Modules.Projects.UseCases.Templates.Dtos;
 using Aethra.Modules.Projects.UseCases.Templates.Queries;
 using Aethra.Modules.Projects.UseCases.Projects.Queries;
 using MediatR;
@@ -224,7 +225,7 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
     [McpServerTool(Name = "aethra_create_template", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Crea un Template (definición de app desde un repo Git) dentro de un proyecto. El webhook secret se "
         + "genera en el server y por seguridad NO se devuelve por MCP — obtenelo en la UI o rotalo con "
-        + "aethra_rotate_webhook_secret. BuildArgs y credencial de token se configuran vía UI/REST si se necesitan."
+        + "aethra_rotate_webhook_secret. BuildArgs se fijan con el parametro buildArgs (objeto nombre->valor); la credencial de token vía UI/REST si se necesita."
         + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> CreateTemplateAsync(
         [Description("ID del proyecto contenedor (formato 'prj_...').")] string projectId,
@@ -239,6 +240,9 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
         [Description("Path al compose file (para buildType=Compose).")] string? composeFilePath,
         [Description("Nombre de la credencial (GitHubPat) para clonar repos privados. Opcional.")] string? accessTokenCredentialName,
         [Description("Globs que disparan rebuild al cambiar (ej. ['src/**']). Opcional.")] string[]? watchPaths,
+        [Description("--build-arg del build git como objeto {\"NOMBRE\":\"valor\"}; el valor admite {instance} (slug) y "
+            + "{domain} (host de la instancia). Ej: {\"NEXT_PUBLIC_API_URL\":\"https://api.{domain}\"}. Opcional.")]
+        Dictionary<string, string>? buildArgs,
         CancellationToken ct)
     {
         if (!caller.HasScope(McpScopes.ProjectsWrite))
@@ -258,7 +262,7 @@ public sealed class ProjectsTools(IMediator mediator, IMcpCallerContext caller)
             BuildType: buildType,
             DockerfilePath: dockerfilePath,
             ComposeFilePath: composeFilePath,
-            BuildArgs: null,
+            BuildArgs: buildArgs?.Select(kv => new TemplateBuildArgDto(kv.Key, kv.Value)).ToList(),
             WebhookSecret: null);
         var result = await mediator.Send(cmd, ct).ConfigureAwait(false);
         if (!result.IsSuccess)
