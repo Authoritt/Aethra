@@ -64,6 +64,73 @@ public sealed class DnsRecordRulesTests
         decision.Reason.Should().Contain("not a CNAME");
     }
 
+    private const string Apex = "inonetickets.lat";
+    private const string Tunnel = "55ef4a72-2acd-4b8c-a30b-9650581a21e9.cfargotunnel.com";
+
+    private static CloudflareDnsRecordInfo Rec(string type, string content, bool proxied = false) =>
+        new("rec", type, Apex, content, 1, proxied, null);
+
+    [Fact]
+    public void ClassifyHost_creates_when_apex_has_only_mx_and_txt()
+    {
+        var records = new[]
+        {
+            Rec("MX", "route1.mx.cloudflare.net"), Rec("MX", "route2.mx.cloudflare.net"),
+            Rec("MX", "route3.mx.cloudflare.net"), Rec("TXT", "v=spf1 -all"), Rec("TXT", "other")
+        };
+
+        DnsRecordRules.ClassifyHost(records, Apex, Tunnel).Action.Should().Be(DnsRecordRuleAction.Create);
+    }
+
+    [Fact]
+    public void ClassifyHost_ok_when_apex_has_mail_records_and_the_correct_proxied_cname()
+    {
+        var records = new[]
+        {
+            Rec("MX", "route1.mx.cloudflare.net"), Rec("MX", "route2.mx.cloudflare.net"),
+            Rec("MX", "route3.mx.cloudflare.net"), Rec("TXT", "v=spf1 -all"), Rec("TXT", "other"),
+            Rec("CNAME", Tunnel, proxied: true)
+        };
+
+        DnsRecordRules.ClassifyHost(records, Apex, Tunnel).Action.Should().Be(DnsRecordRuleAction.Ok);
+    }
+
+    [Fact]
+    public void ClassifyHost_conflicts_when_mx_coexists_with_an_a_record()
+    {
+        var records = new[] { Rec("MX", "route1.mx.cloudflare.net"), Rec("A", "203.0.113.10", proxied: true) };
+
+        DnsRecordRules.ClassifyHost(records, Apex, Tunnel).Action.Should().Be(DnsRecordRuleAction.Conflict);
+    }
+
+    [Fact]
+    public void ClassifyHost_conflicts_when_correct_cname_coexists_with_aaaa()
+    {
+        var records = new[] { Rec("CNAME", Tunnel, proxied: true), Rec("AAAA", "2001:db8::1", proxied: true) };
+
+        DnsRecordRules.ClassifyHost(records, Apex, Tunnel).Action.Should().Be(DnsRecordRuleAction.Conflict);
+    }
+
+    [Fact]
+    public void ClassifyHost_conflicts_when_cname_is_dns_only_even_with_mail_records()
+    {
+        var records = new[] { Rec("MX", "route1.mx.cloudflare.net"), Rec("CNAME", Tunnel, proxied: false) };
+
+        DnsRecordRules.ClassifyHost(records, Apex, Tunnel).Action.Should().Be(DnsRecordRuleAction.Conflict);
+    }
+
+    [Fact]
+    public void ClassifyHost_creates_when_only_txt_and_ignores_other_hosts()
+    {
+        var records = new[]
+        {
+            Rec("TXT", "v=spf1 -all"),
+            new CloudflareDnsRecordInfo("x", "A", "other.inonetickets.lat", "203.0.113.10", 1, true, null)
+        };
+
+        DnsRecordRules.ClassifyHost(records, Apex, Tunnel).Action.Should().Be(DnsRecordRuleAction.Create);
+    }
+
     [Fact]
     public void Classify_rejects_blank_desired_target()
     {

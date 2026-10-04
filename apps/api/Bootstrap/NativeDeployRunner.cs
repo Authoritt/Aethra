@@ -1013,19 +1013,11 @@ public sealed class NativeDeployRunner(
                 return $"auto-dns {hostname}: no se pudieron listar records: [{existing.Error.Code}] {existing.Error.Message}";
             }
 
-            var existingRecord = existing.Value
-                .FirstOrDefault(r => string.Equals(r.Name, hostname, StringComparison.OrdinalIgnoreCase));
-            var decision = DnsRecordRules.Classify(
-                existingRecord is null
-                    ? null
-                    : new CloudflareDnsRecordInfo(
-                        existingRecord.Id,
-                        existingRecord.Type,
-                        existingRecord.Name,
-                        existingRecord.Content,
-                        existingRecord.Ttl,
-                        existingRecord.Proxied,
-                        existingRecord.Comment),
+            // T14: la regla decide con TODOS los registros del host (solo cuentan CNAME/A/AAAA; MX/TXT se ignoran).
+            var decision = DnsRecordRules.ClassifyHost(
+                existing.Value.Select(r => new CloudflareDnsRecordInfo(
+                    r.Id, r.Type, r.Name, r.Content, r.Ttl, r.Proxied, r.Comment)),
+                hostname,
                 desiredTarget);
             if (decision.Action == DnsRecordRuleAction.Ok)
             {
