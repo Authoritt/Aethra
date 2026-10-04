@@ -9,6 +9,7 @@ public sealed record CloudflareTunnelDto(
     string AethraService,
     string FallbackService,
     bool FallbackNoTlsVerify,
+    string Mode,
     string? TargetVmId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,

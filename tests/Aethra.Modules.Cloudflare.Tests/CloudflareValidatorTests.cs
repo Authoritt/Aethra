@@ -1,4 +1,5 @@
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
+using Aethra.Modules.Cloudflare.Domain;
 using Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands;
 using Aethra.Modules.Cloudflare.UseCases.Zones.Commands;
 using FluentAssertions;
@@ -84,8 +85,9 @@ public sealed class CloudflareValidatorTests
     // ---------- RegisterTunnel ----------
 
     private static RegisterTunnelCommand NewTunnel(
-        string accountId = Hex32, string tunnelId = Uuid36, string name = "authorit-apps", string apiToken = "tokentoken")
-        => new(accountId, tunnelId, name, apiToken, null, null, false);
+        string accountId = Hex32, string tunnelId = Uuid36, string name = "authorit-apps", string apiToken = "tokentoken",
+        string? targetVmId = null, TunnelMode? mode = null)
+        => new(accountId, tunnelId, name, apiToken, null, null, false, targetVmId, mode);
 
     [Fact]
     public void RegisterTunnel_accepts_a_valid_command()
@@ -102,4 +104,12 @@ public sealed class CloudflareValidatorTests
     [Fact]
     public void RegisterTunnel_rejects_short_token()
         => new RegisterTunnelValidator().Validate(NewTunnel(apiToken: "short")).IsValid.Should().BeFalse();
+
+    [Fact]
+    public void RegisterTunnel_accepts_direct_when_target_vm_is_present()
+        => new RegisterTunnelValidator().Validate(NewTunnel(targetVmId: "vm_bogota", mode: TunnelMode.Direct)).IsValid.Should().BeTrue();
+
+    [Fact]
+    public void RegisterTunnel_rejects_direct_without_target_vm()
+        => new RegisterTunnelValidator().Validate(NewTunnel(mode: TunnelMode.Direct)).IsValid.Should().BeFalse();
 }

@@ -37,7 +37,19 @@ internal sealed class CloudflareTunnelConfiguration : IEntityTypeConfiguration<C
         builder.Property(t => t.AethraService).HasColumnName("aethra_service").HasMaxLength(256).IsRequired();
         builder.Property(t => t.FallbackService).HasColumnName("fallback_service").HasMaxLength(256).IsRequired();
         builder.Property(t => t.FallbackNoTlsVerify).HasColumnName("fallback_no_tls_verify").IsRequired();
+        builder.Property(t => t.Mode)
+            .HasColumnName("mode")
+            .HasConversion(
+                v => ToStorage(v),
+                v => FromStorage(v))
+            .HasMaxLength(32)
+            .HasDefaultValue(TunnelMode.CentralProxy)
+            .IsRequired();
         builder.Property(t => t.TargetVmId).HasColumnName("target_vm_id").HasMaxLength(64);
+        builder.HasIndex(t => t.TargetVmId)
+            .IsUnique()
+            .HasFilter("mode = 'direct'")
+            .HasDatabaseName("ux_tunnels_direct_target_vm_id");
 
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(t => t.UpdatedAt).HasColumnName("updated_at").IsRequired();
@@ -48,4 +60,20 @@ internal sealed class CloudflareTunnelConfiguration : IEntityTypeConfiguration<C
 
     private static CloudflareTunnelId ParseId(string s)
         => AethraId.TryParse(s, out var parsed) ? new CloudflareTunnelId(parsed.Value) : default;
+
+    private static string ToStorage(TunnelMode mode)
+        => mode switch
+        {
+            TunnelMode.CentralProxy => "central_proxy",
+            TunnelMode.Direct => "direct",
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Modo de tunel no soportado."),
+        };
+
+    private static TunnelMode FromStorage(string mode)
+        => mode switch
+        {
+            "central_proxy" => TunnelMode.CentralProxy,
+            "direct" => TunnelMode.Direct,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Modo de tunel no soportado."),
+        };
 }

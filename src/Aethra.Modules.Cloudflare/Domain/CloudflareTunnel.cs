@@ -34,6 +34,8 @@ public sealed class CloudflareTunnel : AggregateRoot<CloudflareTunnelId>
 
     public bool FallbackNoTlsVerify { get; private set; }
 
+    public TunnelMode Mode { get; private set; }
+
     /// <summary>VM (satélite) donde corre el connector de este túnel. El connector DEBE co-ubicarse con
     /// los servicios upstream (localhost). Null = no asignada (deploy de connector requiere fijarla).</summary>
     public string? TargetVmId { get; private set; }
@@ -44,7 +46,8 @@ public sealed class CloudflareTunnel : AggregateRoot<CloudflareTunnelId>
 
     private CloudflareTunnel(
         CloudflareTunnelId id, string tunnelId, string name, string accountId, byte[] apiTokenCipher,
-        string aethraService, string fallbackService, bool fallbackNoTlsVerify, DateTimeOffset now) : base(id)
+        string aethraService, string fallbackService, bool fallbackNoTlsVerify,
+        TunnelMode mode, string? targetVmId, DateTimeOffset now) : base(id)
     {
         TunnelId = tunnelId;
         Name = name;
@@ -53,13 +56,16 @@ public sealed class CloudflareTunnel : AggregateRoot<CloudflareTunnelId>
         AethraService = aethraService;
         FallbackService = fallbackService;
         FallbackNoTlsVerify = fallbackNoTlsVerify;
+        Mode = mode;
+        TargetVmId = targetVmId;
         CreatedAt = now;
         UpdatedAt = now;
     }
 
     public static CloudflareTunnel Create(
         string tunnelId, string name, string accountId, byte[] apiTokenCipher,
-        string? aethraService, string? fallbackService, bool fallbackNoTlsVerify, DateTimeOffset now)
+        string? aethraService, string? fallbackService, bool fallbackNoTlsVerify, DateTimeOffset now,
+        TunnelMode mode = TunnelMode.CentralProxy, string? targetVmId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tunnelId);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -69,12 +75,24 @@ public sealed class CloudflareTunnel : AggregateRoot<CloudflareTunnelId>
         {
             throw new ArgumentException("apiTokenCipher no puede estar vacío.", nameof(apiTokenCipher));
         }
+        if (!Enum.IsDefined(mode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "Modo de tunel no soportado.");
+        }
+
+        var normalizedTargetVmId = NormalizeTargetVmId(targetVmId);
+        if (mode == TunnelMode.Direct && normalizedTargetVmId is null)
+        {
+            throw new ArgumentException("targetVmId es obligatorio para tuneles Direct.", nameof(targetVmId));
+        }
 
         return new CloudflareTunnel(
             CloudflareTunnelId.New(), tunnelId.Trim(), name.Trim(), accountId.Trim(), apiTokenCipher,
             string.IsNullOrWhiteSpace(aethraService) ? "http://localhost:5080" : aethraService.Trim(),
-            string.IsNullOrWhiteSpace(fallbackService) ? "https://localhost:443" : fallbackService.Trim(),
-            fallbackNoTlsVerify, now);
+            mode == TunnelMode.Direct
+                ? "http_status:404"
+                : string.IsNullOrWhiteSpace(fallbackService) ? "https://localhost:443" : fallbackService.Trim(),
+            fallbackNoTlsVerify, mode, normalizedTargetVmId, now);
     }
 
     public void UpdateToken(byte[] newCipher, DateTimeOffset now)
@@ -98,7 +116,29 @@ public sealed class CloudflareTunnel : AggregateRoot<CloudflareTunnelId>
 
     public void SetTargetVm(string? vmId, DateTimeOffset now)
     {
-        TargetVmId = string.IsNullOrWhiteSpace(vmId) ? null : vmId.Trim();
+        var normalized = NormalizeTargetVmId(vmId);
+        if (Mode == TunnelMode.Direct && normalized is null)
+        {
+            throw new ArgumentException("targetVmId es obligatorio para tuneles Direct.", nameof(vmId));
+        }
+
+        TargetVmId = normalized;
+        UpdatedAt = now;
+    }
+
+    public void SetMode(TunnelMode mode, DateTimeOffset now)
+    {
+        if (!Enum.IsDefined(mode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "Modo de tunel no soportado.");
+        }
+        if (mode == TunnelMode.Direct)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(TargetVmId);
+            FallbackService = "http_status:404";
+        }
+
+        Mode = mode;
         UpdatedAt = now;
     }
 
@@ -118,4 +158,7 @@ public sealed class CloudflareTunnel : AggregateRoot<CloudflareTunnelId>
         AethraService = string.Empty;
         FallbackService = string.Empty;
     }
+
+    private static string? NormalizeTargetVmId(string? vmId)
+        => string.IsNullOrWhiteSpace(vmId) ? null : vmId.Trim();
 }

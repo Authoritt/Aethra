@@ -65,6 +65,14 @@ namespace Aethra.Modules.Cloudflare.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_synced_at");
 
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("central_proxy")
+                        .HasColumnName("mode");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -91,6 +99,11 @@ namespace Aethra.Modules.Cloudflare.Infrastructure.Migrations
                     b.HasIndex("TunnelId")
                         .IsUnique()
                         .HasDatabaseName("ux_tunnels_external_tunnel_id");
+
+                    b.HasIndex("TargetVmId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tunnels_direct_target_vm_id")
+                        .HasFilter("mode = 'direct'");
 
                     b.ToTable("tunnels", "cloudflare");
                 });

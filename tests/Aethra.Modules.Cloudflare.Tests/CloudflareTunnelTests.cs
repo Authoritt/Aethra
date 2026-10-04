@@ -24,6 +24,7 @@ public sealed class CloudflareTunnelTests
         tunnel.AccountId.Should().Be("acct-9");
         tunnel.AethraService.Should().Be("http://localhost:5080");
         tunnel.FallbackService.Should().Be("https://localhost:443");
+        tunnel.Mode.Should().Be(TunnelMode.CentralProxy);
     }
 
     [Fact]
@@ -44,6 +45,28 @@ public sealed class CloudflareTunnelTests
         var tunnel = CloudflareTunnel.Create("tun", "n", "acct", Token, null, "", false, Now);
 
         tunnel.FallbackService.Should().Be("https://localhost:443");
+    }
+
+    [Fact]
+    public void Create_direct_requires_target_vm_and_uses_404_fallback()
+    {
+        var tunnel = CloudflareTunnel.Create(
+            "tun", "n", "acct", Token, null, "https://localhost:443", true, Now,
+            TunnelMode.Direct, "  vm_bogota ");
+
+        tunnel.Mode.Should().Be(TunnelMode.Direct);
+        tunnel.TargetVmId.Should().Be("vm_bogota");
+        tunnel.FallbackService.Should().Be("http_status:404");
+    }
+
+    [Fact]
+    public void Create_direct_rejects_blank_target_vm()
+    {
+        var act = () => CloudflareTunnel.Create(
+            "tun", "n", "acct", Token, null, null, false, Now,
+            TunnelMode.Direct, " ");
+
+        act.Should().Throw<ArgumentException>();
     }
 
     [Theory]
@@ -87,6 +110,21 @@ public sealed class CloudflareTunnelTests
 
         tunnel.SetTargetVm("   ", Now);
         tunnel.TargetVmId.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetMode_direct_requires_existing_target_and_forces_404_fallback()
+    {
+        var tunnel = CloudflareTunnel.Create("tun", "n", "acct", Token, null, "https://localhost:443", false, Now);
+
+        var missingTarget = () => tunnel.SetMode(TunnelMode.Direct, Now);
+        missingTarget.Should().Throw<ArgumentException>();
+
+        tunnel.SetTargetVm("vm_bogota", Now);
+        tunnel.SetMode(TunnelMode.Direct, Now);
+
+        tunnel.Mode.Should().Be(TunnelMode.Direct);
+        tunnel.FallbackService.Should().Be("http_status:404");
     }
 
     [Fact]

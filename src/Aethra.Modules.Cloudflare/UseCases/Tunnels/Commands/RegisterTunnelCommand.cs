@@ -25,7 +25,8 @@ public sealed record RegisterTunnelCommand(
     string? AethraService,
     string? FallbackService,
     bool FallbackNoTlsVerify,
-    string? TargetVmId = null) : ICommand<CloudflareTunnelDto>;
+    string? TargetVmId = null,
+    TunnelMode? Mode = null) : ICommand<CloudflareTunnelDto>;
 
 public sealed class RegisterTunnelValidator : AbstractValidator<RegisterTunnelCommand>
 {
@@ -37,6 +38,12 @@ public sealed class RegisterTunnelValidator : AbstractValidator<RegisterTunnelCo
             .WithMessage("El tunnel_id debe ser un UUID.");
         RuleFor(c => c.Name).NotEmpty().MaximumLength(128);
         RuleFor(c => c.ApiToken).NotEmpty().MinimumLength(8);
+        RuleFor(c => c.Mode).IsInEnum();
+        RuleFor(c => c.TargetVmId).MaximumLength(64);
+        RuleFor(c => c.TargetVmId)
+            .NotEmpty()
+            .When(c => (c.Mode ?? TunnelMode.CentralProxy) == TunnelMode.Direct)
+            .WithMessage("target_vm_id es obligatorio cuando mode=direct.");
     }
 }
 
@@ -50,6 +57,17 @@ internal sealed class RegisterTunnelHandler(
     {
         var accountId = request.AccountId.Trim();
         var tunnelId = request.TunnelId.Trim();
+        var mode = request.Mode ?? TunnelMode.CentralProxy;
+        if (!Enum.IsDefined(mode))
+        {
+            return Error.Validation("cloudflare.tunnel_mode_invalid", "Modo de tunel no soportado.");
+        }
+        if (mode == TunnelMode.Direct && string.IsNullOrWhiteSpace(request.TargetVmId))
+        {
+            return Error.Validation(
+                "cloudflare.direct_target_vm_required",
+                "target_vm_id es obligatorio cuando mode=direct.");
+        }
 
         // Verifica el token contra el API real (lee la config remota actual).
         IReadOnlyList<TunnelIngressRule> ingress;
@@ -74,6 +92,7 @@ internal sealed class RegisterTunnelHandler(
             existing.UpdateToken(cipher, now);
             existing.UpdateServices(request.AethraService, request.FallbackService, request.FallbackNoTlsVerify, now);
             if (!string.IsNullOrWhiteSpace(request.TargetVmId)) { existing.SetTargetVm(request.TargetVmId, now); }
+            existing.SetMode(mode, now);
             existing.MarkSynced(now);
             tunnel = existing;
         }
@@ -81,8 +100,8 @@ internal sealed class RegisterTunnelHandler(
         {
             tunnel = CloudflareTunnel.Create(
                 tunnelId, request.Name, accountId, cipher,
-                request.AethraService, request.FallbackService, request.FallbackNoTlsVerify, now);
-            tunnel.SetTargetVm(request.TargetVmId, now);
+                request.AethraService, request.FallbackService, request.FallbackNoTlsVerify, now,
+                mode, request.TargetVmId);
             tunnel.MarkSynced(now);
             db.Tunnels.Add(tunnel);
         }
@@ -95,5 +114,13 @@ internal sealed class RegisterTunnelHandler(
 
     internal static CloudflareTunnelDto ToDto(CloudflareTunnel t, IReadOnlyList<TunnelIngressRuleDto> ingress)
         => new(t.Id.ToString(), t.TunnelId, t.Name, t.AccountId, t.AethraService, t.FallbackService,
-            t.FallbackNoTlsVerify, t.TargetVmId, t.CreatedAt, t.UpdatedAt, t.LastSyncedAt, ingress);
+            t.FallbackNoTlsVerify, ToDtoMode(t.Mode), t.TargetVmId, t.CreatedAt, t.UpdatedAt, t.LastSyncedAt, ingress);
+
+    private static string ToDtoMode(TunnelMode mode)
+        => mode switch
+        {
+            TunnelMode.CentralProxy => "central_proxy",
+            TunnelMode.Direct => "direct",
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Modo de tunel no soportado."),
+        };
 }
