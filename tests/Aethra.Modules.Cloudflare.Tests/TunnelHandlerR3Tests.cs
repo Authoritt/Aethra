@@ -345,6 +345,47 @@ public sealed class TunnelHandlerR3Tests
     }
 
     [Fact]
+    public async Task GetTunnelForVm_with_include_ingress_false_does_not_call_cloudflare_api()
+    {
+        await using var db = NewDb();
+        AddTunnel(db, "direct-tun", TunnelMode.Direct, Now, "vm-bogota");
+        await db.SaveChangesAsync();
+
+        var api = new FakeCloudflareApi();
+
+        var result = await SendGetTunnelForVmAsync(
+            db,
+            api,
+            new GetTunnelForVmQuery("vm-bogota", IncludeIngress: false));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.TunnelId.Should().Be("direct-tun");
+        result.Value.Ingress.Should().BeEmpty();
+        api.GetCalls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetCentralProxyTunnel_with_include_ingress_false_returns_target_vm_without_cloudflare_api()
+    {
+        await using var db = NewDb();
+        AddTunnel(db, "central-tun", TunnelMode.CentralProxy, Now, "vm_ET39W0FFRCCQS60DY90B516MPR");
+        await db.SaveChangesAsync();
+
+        var api = new FakeCloudflareApi();
+
+        var result = await SendGetCentralProxyTunnelAsync(
+            db,
+            api,
+            new GetCentralProxyTunnelQuery(IncludeIngress: false));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.TunnelId.Should().Be("central-tun");
+        result.Value.TargetVmId.Should().Be("vm_ET39W0FFRCCQS60DY90B516MPR");
+        result.Value.Ingress.Should().BeEmpty();
+        api.GetCalls.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task GetTunnelForVm_ignores_production_central_proxy_tunnel_targeting_principal()
     {
         await using var db = NewDb();
@@ -445,6 +486,15 @@ public sealed class TunnelHandlerR3Tests
         GetTunnelForVmQuery query)
         => InvokeQueryAsync<CloudflareTunnelDto?>(
             "Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries.GetTunnelForVmHandler",
+            [db, api, new PlainTextTokenCodec()],
+            query);
+
+    private static Task<Result<CloudflareTunnelDto?>> SendGetCentralProxyTunnelAsync(
+        CloudflareDbContext db,
+        FakeCloudflareApi api,
+        GetCentralProxyTunnelQuery query)
+        => InvokeQueryAsync<CloudflareTunnelDto?>(
+            "Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries.GetCentralProxyTunnelHandler",
             [db, api, new PlainTextTokenCodec()],
             query);
 

@@ -17,6 +17,19 @@ public sealed class MonitorSlugRulesTests
             .Should().Be("api");
 
     [Fact]
+    public void Decide_usa_conteo_de_hosts_deseados_para_slug_inicial()
+    {
+        var decision = MonitorSlugRules.Decide(
+            "yunke",
+            "api.yunke.dev",
+            hostCount: 2,
+            desiredUrl: "https://api.yunke.dev/",
+            existingUrlForInitialSlug: null);
+
+        decision.Should().Be(new MonitorSlugDecision("api", "api", ShouldRetry: false));
+    }
+
+    [Fact]
     public void Slug_tomado_por_un_monitor_del_mismo_host_no_cambia()
     {
         var decision = MonitorSlugRules.Decide(

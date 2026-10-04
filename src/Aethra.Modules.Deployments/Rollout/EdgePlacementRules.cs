@@ -5,6 +5,7 @@ public enum EdgePlacementKind
     Central = 0,
     Direct = 1,
     Ambiguous = 2,
+    Failed = 3,
 }
 
 public sealed record EdgeTunnelCandidate(string TunnelId, string TargetVmId);
@@ -12,7 +13,8 @@ public sealed record EdgeTunnelCandidate(string TunnelId, string TargetVmId);
 public sealed record EdgePlacementDecision(
     EdgePlacementKind Kind,
     EdgeTunnelCandidate? Tunnel,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    string? Error = null);
 
 public sealed record DirectRouteCandidate(
     string ServiceName,
@@ -33,7 +35,8 @@ public static class EdgePlacementRules
 
     public static EdgePlacementDecision Resolve(
         string? instanceVmId,
-        IEnumerable<EdgeTunnelCandidate> directTunnels)
+        IEnumerable<EdgeTunnelCandidate> directTunnels,
+        string? centralProxyVmId = null)
     {
         ArgumentNullException.ThrowIfNull(directTunnels);
 
@@ -47,15 +50,34 @@ public static class EdgePlacementRules
             .Where(t => string.Equals(t.TargetVmId?.Trim(), vmId, StringComparison.Ordinal))
             .ToList();
 
-        return matches.Count switch
+        if (matches.Count == 1)
         {
-            0 => new EdgePlacementDecision(EdgePlacementKind.Central, null, [MissingDirectTunnelWarning]),
-            1 => new EdgePlacementDecision(EdgePlacementKind.Direct, matches[0], []),
-            _ => new EdgePlacementDecision(
+            return new EdgePlacementDecision(EdgePlacementKind.Direct, matches[0], []);
+        }
+        if (matches.Count > 1)
+        {
+            return new EdgePlacementDecision(
                 EdgePlacementKind.Ambiguous,
                 null,
-                [$"hay {matches.Count} túneles Direct para la VM '{vmId}'"]),
-        };
+                [$"hay {matches.Count} túneles Direct para la VM '{vmId}'"]);
+        }
+        // Sin túnel central registrado, o con una fila previa a F13.11 sin TargetVmId, no se SABE que la VM
+        // sea otra: fallar aquí tumbaría todos los deploys que hoy funcionan (R1/R2). Solo se falla con
+        // evidencia de que la VM no es la del proxy central; sin ella, el camino de hoy más el aviso.
+        if (string.IsNullOrWhiteSpace(centralProxyVmId))
+        {
+            return new EdgePlacementDecision(EdgePlacementKind.Central, null, [MissingDirectTunnelWarning]);
+        }
+        if (string.Equals(centralProxyVmId.Trim(), vmId, StringComparison.Ordinal))
+        {
+            return new EdgePlacementDecision(EdgePlacementKind.Central, null, []);
+        }
+
+        return new EdgePlacementDecision(
+            EdgePlacementKind.Failed,
+            null,
+            [MissingDirectTunnelWarning],
+            $"La VM '{vmId}' no es la VM del túnel CentralProxy ('{centralProxyVmId.Trim()}') y no tiene túnel Direct.");
     }
 
     public static DirectRouteValidationResult ValidateDirect(IEnumerable<DirectRouteCandidate> services)

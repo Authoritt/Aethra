@@ -7,14 +7,45 @@ namespace Aethra.Modules.Deployments.Tests;
 public sealed class EdgePlacementRulesTests
 {
     [Fact]
-    public void Estado_actual_sin_tunel_direct_resuelve_central_con_warning()
+    public void Vm_del_tunel_central_real_sigue_en_central_sin_fallo()
     {
-        var decision = EdgePlacementRules.Resolve("vm_principal", []);
+        var decision = EdgePlacementRules.Resolve(
+            "vm_ET39W0FFRCCQS60DY90B516MPR",
+            [],
+            centralProxyVmId: "vm_ET39W0FFRCCQS60DY90B516MPR");
 
         decision.Kind.Should().Be(EdgePlacementKind.Central);
         decision.Tunnel.Should().BeNull();
-        decision.Warnings.Should().ContainSingle()
-            .Which.Should().Be(EdgePlacementRules.MissingDirectTunnelWarning);
+        decision.Error.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Vm_central_desconocida_no_tumba_el_deploy_de_hoy(string? centralProxyVmId)
+    {
+        // Sin túnel central registrado o con fila sin TargetVmId (anterior a F13.11): hoy se despliega.
+        var decision = EdgePlacementRules.Resolve(
+            "vm_ET39W0FFRCCQS60DY90B516MPR",
+            [],
+            centralProxyVmId);
+
+        decision.Kind.Should().Be(EdgePlacementKind.Central);
+        decision.Error.Should().BeNull();
+        decision.Warnings.Should().Contain(EdgePlacementRules.MissingDirectTunnelWarning);
+    }
+
+    [Fact]
+    public void Vm_que_no_es_central_y_no_tiene_direct_falla_antes_de_contenedores()
+    {
+        var decision = EdgePlacementRules.Resolve(
+            "vm_bogota",
+            [],
+            centralProxyVmId: "vm_ET39W0FFRCCQS60DY90B516MPR");
+
+        decision.Kind.Should().Be(EdgePlacementKind.Failed);
+        decision.Tunnel.Should().BeNull();
+        decision.Error.Should().Contain("no tiene túnel Direct");
     }
 
     [Fact]

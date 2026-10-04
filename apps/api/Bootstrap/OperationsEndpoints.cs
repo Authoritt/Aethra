@@ -644,6 +644,16 @@ public static class OperationsEndpoints
             return Results.Ok(new PublicAccessReconcileResultDto(appEnvironmentId, dryRun, false, actions, state));
         }
 
+        var infraResolution = await ResolvePublicAccessInfraForInstance(instance, publicInfra, mediator, ct).ConfigureAwait(false);
+        publicInfra = infraResolution.Infra;
+        state = BuildPublicAccessState(instance, snapshot, routesByHost, publicInfra);
+        if (infraResolution.BlockedAction is not null)
+        {
+            actions.Add(infraResolution.BlockedAction);
+            return Results.Ok(new PublicAccessReconcileResultDto(appEnvironmentId, dryRun, false, actions, state));
+        }
+        var backendUrl = BuildBackendUrl(instance);
+
         var dnsRecord = FindDnsRecord(desiredHostname, publicInfra);
         var zone = FindZoneForHostname(desiredHostname, publicInfra);
         if (zone is null)
@@ -729,16 +739,34 @@ public static class OperationsEndpoints
                 "cloudflare.tunnel_missing",
                 "Registra o promueve un tunnel remoto antes de asegurar ingress."));
         }
-        else if (!HasTunnelIngress(desiredHostname, publicInfra))
+        else if (IsDirectTunnel(publicInfra.Tunnel) && backendUrl is null)
+        {
+            actions.Add(new PublicAccessReconcileActionDto(
+                "configure_direct_backend",
+                "blocked",
+                "La instancia tiene túnel Direct, pero no tiene puerto primario para construir el backend del ingress.",
+                publicInfra.Tunnel.Id,
+                "app_environment.primary_port_missing",
+                "Configura al menos un puerto del contenedor antes de asegurar ingress Direct."));
+        }
+        else if (!HasTunnelIngress(
+            desiredHostname,
+            publicInfra,
+            IsDirectTunnel(publicInfra.Tunnel) ? backendUrl : null))
         {
             await ApplyAction(
                 actions,
                 dryRun,
                 "ensure_tunnel_ingress",
-                $"Asegurar ingress del tunnel para {desiredHostname}.",
+                IsDirectTunnel(publicInfra.Tunnel)
+                    ? $"Asegurar ingress Direct del tunnel {publicInfra.Tunnel.TunnelId} para {desiredHostname} -> {backendUrl}."
+                    : $"Asegurar ingress del tunnel para {desiredHostname}.",
                 async () =>
                 {
-                    var result = await mediator.Send(new EnsureTunnelHostnameCommand(desiredHostname), ct).ConfigureAwait(false);
+                    var result = await mediator.Send(new EnsureTunnelHostnameCommand(
+                        desiredHostname,
+                        IsDirectTunnel(publicInfra.Tunnel) ? publicInfra.Tunnel!.TunnelId : null,
+                        IsDirectTunnel(publicInfra.Tunnel) ? backendUrl : null), ct).ConfigureAwait(false);
                     return result.IsSuccess
                         ? new AppliedResource(publicInfra.Tunnel.Id, null, null)
                         : new AppliedResource(null, result.Error.Code, result.Error.Message);
@@ -755,7 +783,6 @@ public static class OperationsEndpoints
                 null));
         }
 
-        var backendUrl = BuildBackendUrl(instance);
         var existingRoutes = routesByHost.GetValueOrDefault(desiredHostname) ?? [];
         var mainRoute = existingRoutes.FirstOrDefault(r => r.pathPrefix == "/") ?? existingRoutes.FirstOrDefault();
         if (backendUrl is null)
@@ -887,6 +914,7 @@ public static class OperationsEndpoints
             var refreshedRoutesByHost = await LoadRoutesByHost(proxyDb, ct);
             var refreshedPublicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
             var refreshedInstance = refreshedSnapshot.Instances.First(i => string.Equals(i.id, appEnvironmentId, StringComparison.Ordinal));
+            refreshedPublicInfra = (await ResolvePublicAccessInfraForInstance(refreshedInstance, refreshedPublicInfra, mediator, ct).ConfigureAwait(false)).Infra;
             refreshedState = BuildPublicAccessState(refreshedInstance, refreshedSnapshot, refreshedRoutesByHost, refreshedPublicInfra);
         }
 
@@ -1764,6 +1792,42 @@ public static class OperationsEndpoints
         return new PublicAccessInfraSnapshot(tunnelCname, zones, dnsRecords, tunnel);
     }
 
+    private static async Task<(PublicAccessInfraSnapshot Infra, PublicAccessReconcileActionDto? BlockedAction)>
+        ResolvePublicAccessInfraForInstance(
+            InstanceRow instance,
+            PublicAccessInfraSnapshot centralInfra,
+            IMediator mediator,
+            CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(instance.targetVmId))
+        {
+            return (centralInfra, null);
+        }
+
+        var directResult = await mediator.Send(new GetTunnelForVmQuery(instance.targetVmId), ct)
+            .ConfigureAwait(false);
+        if (directResult.IsFailure)
+        {
+            return (centralInfra, new PublicAccessReconcileActionDto(
+                "resolve_tunnel",
+                "blocked",
+                $"No se pudo resolver el túnel Direct para la VM {instance.targetVmId}.",
+                null,
+                directResult.Error.Code,
+                directResult.Error.Message));
+        }
+        if (directResult.Value is null)
+        {
+            return (centralInfra, null);
+        }
+
+        return (centralInfra with
+        {
+            TunnelCname = TunnelCnameFor(directResult.Value.TunnelId),
+            Tunnel = directResult.Value,
+        }, null);
+    }
+
     private static DnsRecordRow? FindDnsRecord(string hostname, PublicAccessInfraSnapshot infra)
         => infra.DnsRecords
             .Where(r => string.Equals(r.name, hostname, StringComparison.OrdinalIgnoreCase))
@@ -1778,8 +1842,16 @@ public static class OperationsEndpoints
             .OrderByDescending(z => z.Name.Length)
             .FirstOrDefault();
 
-    private static bool HasTunnelIngress(string hostname, PublicAccessInfraSnapshot infra)
-        => infra.Tunnel?.Ingress.Any(r => string.Equals(r.Hostname, hostname, StringComparison.OrdinalIgnoreCase)) == true;
+    private static bool HasTunnelIngress(string hostname, PublicAccessInfraSnapshot infra, string? service = null)
+        => infra.Tunnel?.Ingress.Any(r =>
+            string.Equals(r.Hostname, hostname, StringComparison.OrdinalIgnoreCase)
+            && (service is null || string.Equals(r.Service, service, StringComparison.Ordinal))) == true;
+
+    private static bool IsDirectTunnel(CloudflareTunnelDto? tunnel)
+        => string.Equals(tunnel?.Mode, "direct", StringComparison.OrdinalIgnoreCase);
+
+    private static string TunnelCnameFor(string tunnelId)
+        => $"{tunnelId}.cfargotunnel.com";
 
     private static (string ReconciliationPolicy, string EdgeTlsPolicy) ResolvePublicAccessPolicy(string environment)
         => environment.Equals("production", StringComparison.OrdinalIgnoreCase)
@@ -1820,7 +1892,8 @@ public static class OperationsEndpoints
         var zone = desiredHostname is null ? null : FindZoneForHostname(desiredHostname, publicInfra);
         var dnsTargetConfigured = string.IsNullOrWhiteSpace(publicInfra.TunnelCname)
             || string.Equals(dnsRecord?.content, publicInfra.TunnelCname, StringComparison.OrdinalIgnoreCase);
-        var tunnelConfigured = desiredHostname is not null && HasTunnelIngress(desiredHostname, publicInfra);
+        var expectedIngressService = IsDirectTunnel(publicInfra.Tunnel) ? BuildBackendUrl(instance) : null;
+        var tunnelConfigured = desiredHostname is not null && HasTunnelIngress(desiredHostname, publicInfra, expectedIngressService);
         var issues = new List<string>();
 
         if (desiredHostname is null)

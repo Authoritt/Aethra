@@ -114,18 +114,15 @@ public sealed class NativeDeployRunner(
         // sirviendo y solo refrescamos contenedores (se omiten rutas/monitor).
         var hostname = hostnameOverride ?? instance.CustomDomain ?? instance.AutoHostname;
 
-        var (directTunnel, edgeLookupError) = await ResolveDirectTunnelCandidateAsync(instance.TargetVmId, ct)
+        var (edgePlacement, edgeLookupError) = await ResolveEdgePlacementAsync(instance.TargetVmId, ct)
             .ConfigureAwait(false);
         if (edgeLookupError is not null)
         {
             return Fail(edgeLookupError, hostname);
         }
-        var edgePlacement = EdgePlacementRules.Resolve(
-            instance.TargetVmId,
-            directTunnel is null ? [] : [directTunnel]);
-        if (edgePlacement.Kind == EdgePlacementKind.Ambiguous)
+        if (IsPlacementFailure(edgePlacement, out var placementError))
         {
-            return Fail(string.Join("; ", edgePlacement.Warnings), hostname);
+            return Fail(placementError, hostname);
         }
         var edgeRouting = edgePlacement.Kind == EdgePlacementKind.Direct
             ? new EdgeRoutingContext(edgePlacement.Kind, edgePlacement.Tunnel!.TunnelId)
@@ -626,19 +623,16 @@ public sealed class NativeDeployRunner(
         {
             return;
         }
-        var (directTunnel, edgeLookupError) = await ResolveDirectTunnelCandidateAsync(instance.TargetVmId, ct)
+        var (edgePlacement, edgeLookupError) = await ResolveEdgePlacementAsync(instance.TargetVmId, ct)
             .ConfigureAwait(false);
         if (edgeLookupError is not null)
         {
             log.LogError("reconcile-routing {Inst}: {Error}", instance.Slug, edgeLookupError);
             return;
         }
-        var edgePlacement = EdgePlacementRules.Resolve(
-            instance.TargetVmId,
-            directTunnel is null ? [] : [directTunnel]);
-        if (edgePlacement.Kind == EdgePlacementKind.Ambiguous)
+        if (IsPlacementFailure(edgePlacement, out var placementError))
         {
-            log.LogError("reconcile-routing {Inst}: {Error}", instance.Slug, string.Join("; ", edgePlacement.Warnings));
+            log.LogError("reconcile-routing {Inst}: {Error}", instance.Slug, placementError);
             return;
         }
         var edgeRouting = edgePlacement.Kind == EdgePlacementKind.Direct
@@ -833,10 +827,11 @@ public sealed class NativeDeployRunner(
         }
 
         // 4) Monitor por cada host tocado (slug propio cuando hay varios hosts).
+        var desiredHostCount = desired.Select(d => d.Host).Distinct(StringComparer.OrdinalIgnoreCase).Count();
         foreach (var host in hostsTouched)
         {
             var monitorUrl = $"https://{host}/";
-            var slugDecision = MonitorSlugRules.Decide(slug, host, hostsTouched.Count, monitorUrl, null);
+            var slugDecision = MonitorSlugRules.Decide(slug, host, desiredHostCount, monitorUrl, null);
             var monSlug = slugDecision.InitialSlug;
             var mon = await CreateMonitorAsync(monSlug, host, monitorUrl, instanceId, projectId, ct).ConfigureAwait(false);
             // OT-006 #53 — antes el resultado ni se asignaba: un monitor que no se crea dejaba la
@@ -850,7 +845,7 @@ public sealed class NativeDeployRunner(
                 && string.Equals(mon.Error.Code, DeploySideEffectRules.MonitorSlugTakenCode, StringComparison.Ordinal))
             {
                 existingMonitorUrl = await FindExistingMonitorUrlAsync(monSlug, ct).ConfigureAwait(false);
-                slugDecision = MonitorSlugRules.Decide(slug, host, hostsTouched.Count, monitorUrl, existingMonitorUrl);
+                slugDecision = MonitorSlugRules.Decide(slug, host, desiredHostCount, monitorUrl, existingMonitorUrl);
                 if (slugDecision.ShouldRetry)
                 {
                     monSlug = slugDecision.DesiredSlug;
@@ -1046,6 +1041,55 @@ public sealed class NativeDeployRunner(
         }
     }
 
+    private async Task<(EdgePlacementDecision Decision, string? Error)> ResolveEdgePlacementAsync(
+        string? targetVmId,
+        CancellationToken ct)
+    {
+        try
+        {
+            var central = await mediator.Send(new GetCentralProxyTunnelQuery(IncludeIngress: false), ct)
+                .ConfigureAwait(false);
+            if (central.IsFailure)
+            {
+                return (new EdgePlacementDecision(EdgePlacementKind.Failed, null, []),
+                    $"No se pudo resolver túnel CentralProxy: [{central.Error.Code}] {central.Error.Message}");
+            }
+
+            var (directTunnel, directError) = await ResolveDirectTunnelCandidateAsync(targetVmId, ct)
+                .ConfigureAwait(false);
+            if (directError is not null)
+            {
+                return (new EdgePlacementDecision(EdgePlacementKind.Failed, null, []), directError);
+            }
+
+            return (EdgePlacementRules.Resolve(
+                targetVmId,
+                directTunnel is null ? [] : [directTunnel],
+                central.Value?.TargetVmId), null);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return (new EdgePlacementDecision(EdgePlacementKind.Failed, null, []),
+                $"No se pudo resolver la colocación edge: {ex.Message}");
+        }
+    }
+
+    private static bool IsPlacementFailure(EdgePlacementDecision decision, out string error)
+    {
+        if (decision.Kind is EdgePlacementKind.Failed or EdgePlacementKind.Ambiguous)
+        {
+            error = decision.Error ?? string.Join("; ", decision.Warnings);
+            if (string.IsNullOrWhiteSpace(error))
+            {
+                error = "No se pudo resolver la colocación edge.";
+            }
+            return true;
+        }
+
+        error = string.Empty;
+        return false;
+    }
+
     private async Task<(EdgeTunnelCandidate? Candidate, string? Error)> ResolveDirectTunnelCandidateAsync(
         string? targetVmId,
         CancellationToken ct)
@@ -1055,7 +1099,7 @@ public sealed class NativeDeployRunner(
             return (null, null);
         }
 
-        var result = await mediator.Send(new GetTunnelForVmQuery(targetVmId), ct).ConfigureAwait(false);
+        var result = await mediator.Send(new GetTunnelForVmQuery(targetVmId, IncludeIngress: false), ct).ConfigureAwait(false);
         if (result.IsFailure)
         {
             return (null, $"No se pudo resolver túnel Direct para la VM '{targetVmId}': [{result.Error.Code}] {result.Error.Message}");

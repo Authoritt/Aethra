@@ -8,8 +8,18 @@ using Aethra.Shared.Kernel.Results;
 
 namespace Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries;
 
-/// <summary>Devuelve el tunel Direct registrado para una VM satelite, si existe.</summary>
-public sealed record GetTunnelForVmQuery(string TargetVmId) : IQuery<CloudflareTunnelDto?>;
+/// <summary>
+/// Devuelve el tunel Direct registrado para una VM satelite, si existe.
+/// El runner usa <see cref="IncludeIngress"/> en <c>false</c> para resolver colocacion solo desde BD,
+/// sin llamar al API de Cloudflare antes de tocar contenedores.
+/// </summary>
+public sealed record GetTunnelForVmQuery(string TargetVmId, bool IncludeIngress = true) : IQuery<CloudflareTunnelDto?>;
+
+/// <summary>
+/// Devuelve el tunel CentralProxy historico. Con <see cref="IncludeIngress"/> en <c>false</c> es una
+/// consulta ligera de metadata (incluye TargetVmId) y no llama al API de Cloudflare.
+/// </summary>
+public sealed record GetCentralProxyTunnelQuery(bool IncludeIngress = true) : IQuery<CloudflareTunnelDto?>;
 
 internal sealed class GetTunnelForVmHandler(
     CloudflareDbContext db, ICloudflareApiClient api, ICloudflareTokenCodec codec)
@@ -31,15 +41,53 @@ internal sealed class GetTunnelForVmHandler(
         }
 
         var ingress = new List<TunnelIngressRuleDto>();
-        try
+        if (request.IncludeIngress)
         {
-            var rules = await api.GetTunnelIngressAsync(
-                tunnel.AccountId, tunnel.TunnelId, token, cancellationToken).ConfigureAwait(false);
-            ingress = rules.Select(r => new TunnelIngressRuleDto(r.Hostname, r.Service, r.NoTlsVerify)).ToList();
+            try
+            {
+                var rules = await api.GetTunnelIngressAsync(
+                    tunnel.AccountId, tunnel.TunnelId, token, cancellationToken).ConfigureAwait(false);
+                ingress = rules.Select(r => new TunnelIngressRuleDto(r.Hostname, r.Service, r.NoTlsVerify)).ToList();
+            }
+            catch (CloudflareApiException)
+            {
+                // El token podria haberse revocado; devolvemos el tunel sin ingress (la UI lo marca).
+            }
         }
-        catch (CloudflareApiException)
+
+        return Result<CloudflareTunnelDto?>.Success(RegisterTunnelHandler.ToDto(tunnel, ingress));
+    }
+}
+
+internal sealed class GetCentralProxyTunnelHandler(
+    CloudflareDbContext db, ICloudflareApiClient api, ICloudflareTokenCodec codec)
+    : IQueryHandler<GetCentralProxyTunnelQuery, CloudflareTunnelDto?>
+{
+    public async Task<Result<CloudflareTunnelDto?>> Handle(
+        GetCentralProxyTunnelQuery request,
+        CancellationToken cancellationToken)
+    {
+        var (tunnel, token) = await TunnelIngressSupport
+            .LoadAsync(db, codec, cancellationToken)
+            .ConfigureAwait(false);
+        if (tunnel is null)
         {
-            // El token podria haberse revocado; devolvemos el tunel sin ingress (la UI lo marca).
+            return Result<CloudflareTunnelDto?>.Success(null);
+        }
+
+        var ingress = new List<TunnelIngressRuleDto>();
+        if (request.IncludeIngress)
+        {
+            try
+            {
+                var rules = await api.GetTunnelIngressAsync(
+                    tunnel.AccountId, tunnel.TunnelId, token, cancellationToken).ConfigureAwait(false);
+                ingress = rules.Select(r => new TunnelIngressRuleDto(r.Hostname, r.Service, r.NoTlsVerify)).ToList();
+            }
+            catch (CloudflareApiException)
+            {
+                // El token podria haberse revocado; devolvemos el tunel sin ingress (la UI lo marca).
+            }
         }
 
         return Result<CloudflareTunnelDto?>.Success(RegisterTunnelHandler.ToDto(tunnel, ingress));
