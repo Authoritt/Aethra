@@ -33,7 +33,10 @@ public sealed record InstanceRemovedIntegrationEvent(
     string? CustomDomain,
     DateTimeOffset RemovedAt,
     string? TargetVmId = null,
-    IReadOnlyList<string>? ContainerNames = null) : IntegrationEvent;
+    IReadOnlyList<string>? ContainerNames = null,
+    // OT-009 — hosts fijados por servicio EN esta instancia (overrides). Son exclusivos de la
+    // instancia, así que su DNS y sus rutas se limpian con ella. null en eventos viejos = ninguno.
+    IReadOnlyList<string>? ServiceHostnames = null) : IntegrationEvent;
 
 /// <summary>
 /// Se publica cuando el operador define o cambia el dominio custom de una <c>Instance</c>.
@@ -55,3 +58,16 @@ public sealed record CustomDomainRemovedIntegrationEvent(
     string InstanceId,
     string Hostname,
     DateTimeOffset RemovedAt) : IntegrationEvent;
+
+/// <summary>
+/// OT-009 — se publica cuando el operador fija, cambia o quita el hostname público de UN servicio
+/// en una <c>Instance</c> (override del <c>svc.Hostname</c> del template). El host reconcilia el
+/// routing nativo de la instancia (rutas, ingress, DNS, monitor) igual que con el dominio custom.
+/// <paramref name="Hostname"/> null = override quitado (vuelve al host del template).
+/// </summary>
+public sealed record InstanceServiceHostnameChangedIntegrationEvent(
+    string InstanceId,
+    string ServiceName,
+    string? Hostname,
+    string? PreviousHostname,
+    DateTimeOffset ChangedAt) : IntegrationEvent;

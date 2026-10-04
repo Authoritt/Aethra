@@ -83,7 +83,8 @@ internal sealed class DeleteClientHandler(
                     RemovedAt: clock.UtcNow,
                     TargetVmId: inst.TargetVmId,
                     ContainerNames: DeleteInstanceHandler.ResolveContainerNames(
-                        inst.Slug, inst.ContainerName, template)), cancellationToken).ConfigureAwait(false);
+                        inst.Slug, inst.ContainerName, template),
+                    ServiceHostnames: DeleteInstanceHandler.ServiceHostnamesOf(inst)), cancellationToken).ConfigureAwait(false);
             }
 
             await DeleteScopedRowsAsync(scopeIds, cancellationToken).ConfigureAwait(false);

@@ -1,6 +1,7 @@
 using Aethra.Modules.Cloudflare.Infrastructure;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
 using Aethra.Shared.Contracts.Projects;
+using Aethra.Shared.Contracts.Proxy;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,8 @@ namespace Aethra.Modules.Cloudflare.Infrastructure.Handlers;
 internal sealed class InstanceRemovedHandler(
     CloudflareDbContext db,
     IMediator mediator,
+    IRouteHostLookup routeHosts,
+    IHostnameUsageLookup hostnameUsage,
     ILogger<InstanceRemovedHandler> logger)
     : INotificationHandler<InstanceRemovedIntegrationEvent>
 {
@@ -28,6 +31,29 @@ internal sealed class InstanceRemovedHandler(
             .Select(h => h!.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        // OT-009 (G2) — los hosts de override se borran SOLO si nadie más los usa: ni otra instancia
+        // (CustomDomain/AutoHostname/override) ni una ruta del proxy de otro dueño (o sin dueño). Un
+        // override que coincidiera con un host de producción no puede llevarse su DNS. Las rutas de
+        // ESTA instancia no cuentan (Proxy puede no haberlas borrado aún: orden de handlers libre).
+        foreach (var overrideHost in (notification.ServiceHostnames ?? [])
+            .Where(h => !string.IsNullOrWhiteSpace(h))
+            .Select(h => h.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (hostnames.Contains(overrideHost, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (await IsUsedByOthersAsync(overrideHost, notification.InstanceId, cancellationToken).ConfigureAwait(false))
+            {
+                logger.LogWarning(
+                    "InstanceRemoved {Id}: DNS '{Host}' NO se borra: otra instancia o ruta aún lo usa",
+                    notification.InstanceId, overrideHost);
+                continue;
+            }
+            hostnames.Add(overrideHost);
+        }
         if (hostnames.Count == 0)
         {
             return;
@@ -57,5 +83,16 @@ internal sealed class InstanceRemovedHandler(
                     notification.InstanceId, host, result.Error.Code);
             }
         }
+    }
+
+    private async Task<bool> IsUsedByOthersAsync(string host, string instanceId, CancellationToken ct)
+    {
+        var instances = await hostnameUsage.FindInstancesUsingHostnameAsync(host, instanceId, ct).ConfigureAwait(false);
+        if (instances.Count > 0)
+        {
+            return true;
+        }
+        var routes = await routeHosts.FindByHostnameAsync(host, ct).ConfigureAwait(false);
+        return routes.Any(r => !string.Equals(r.OperationalOwnerId, instanceId, StringComparison.Ordinal));
     }
 }

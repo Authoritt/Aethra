@@ -195,6 +195,33 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
             ct).ConfigureAwait(false);
     }
 
+    [McpServerTool(Name = "aethra_set_service_hostname", Destructive = true, Idempotent = true, OpenWorld = false)]
+    [Description("Fija (o quita) el hostname público de UN servicio del template en una Instance (OT-009). Gana sobre el"
+        + " hostname del template ('api.{domain}'): p.ej. staging con api → 'pruebas-api.inonetickets.lat'. hostname null/vacío"
+        + " quita el override (vuelve al del template). DESTRUCTIVO: reconcilia en background y borra las rutas (e ingress Direct) del host anterior. Rechaza un host que ya use otra instancia o ruta; {domain} de"
+        + " BuildArgs/Env NO cambia. [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
+    public async Task<object> SetServiceHostnameAsync(
+        [Description("ID de la Instance (formato 'ins_...').")] string instanceId,
+        [Description("Nombre del servicio tal como lo declara el template (ej. 'api', 'org', 'admin').")] string serviceName,
+        [Description("FQDN del servicio en esta instancia (ej. 'pruebas-api.inonetickets.lat'), o null/vacío para quitarlo.")]
+        string? hostname,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.ProjectsWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.ProjectsWrite);
+        }
+        var value = string.IsNullOrWhiteSpace(hostname) ? null : hostname.Trim();
+        var r = await mediator.Send(new SetServiceHostnameCommand(instanceId, serviceName, value), ct).ConfigureAwait(false);
+        if (!r.IsSuccess)
+        {
+            return McpResponses.FromError(r.Error);
+        }
+        return await InstanciaTrasEscribir(instanceId,
+            i => new { instance_id = i.id, service_hostnames = i.serviceHostnames ?? [], state_confirmed = true },
+            ct).ConfigureAwait(false);
+    }
+
     [McpServerTool(Name = "aethra_delete_instance", Destructive = true, Idempotent = true, OpenWorld = false)]
     [Description("Borra una Instance (también las no-ephemeral con force=true). Emite los integration events para que " +
         "Proxy/Containers/Cloudflare limpien en cascada. No detiene contenedores directamente.")]

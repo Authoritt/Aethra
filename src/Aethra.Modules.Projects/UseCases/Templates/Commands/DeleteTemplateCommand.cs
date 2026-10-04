@@ -54,7 +54,8 @@ internal sealed class DeleteTemplateHandler(
                 RemovedAt: clock.UtcNow,
                 TargetVmId: inst.TargetVmId,
                 ContainerNames: DeleteInstanceHandler.ResolveContainerNames(
-                    inst.Slug, inst.ContainerName, template)), cancellationToken).ConfigureAwait(false);
+                    inst.Slug, inst.ContainerName, template),
+                ServiceHostnames: DeleteInstanceHandler.ServiceHostnamesOf(inst)), cancellationToken).ConfigureAwait(false);
         }
 
         var scopeIds = new List<string> { templateId.ToString() };

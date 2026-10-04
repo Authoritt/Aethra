@@ -572,6 +572,32 @@ namespace Aethra.Modules.Projects.Infrastructure.Migrations
                                 .HasForeignKey("InstanceId");
                         });
 
+                    b.OwnsMany("Aethra.Modules.Projects.Domain.Instances.ServiceHostnameOverride", "ServiceHostnames", b1 =>
+                        {
+                            b1.Property<string>("InstanceId")
+                                .HasMaxLength(64)
+                                .HasColumnType("character varying(64)")
+                                .HasColumnName("instance_id");
+
+                            b1.Property<string>("ServiceName")
+                                .HasMaxLength(128)
+                                .HasColumnType("character varying(128)")
+                                .HasColumnName("service_name");
+
+                            b1.Property<string>("Hostname")
+                                .IsRequired()
+                                .HasMaxLength(253)
+                                .HasColumnType("character varying(253)")
+                                .HasColumnName("hostname");
+
+                            b1.HasKey("InstanceId", "ServiceName");
+
+                            b1.ToTable("instance_service_hostnames", "projects");
+
+                            b1.WithOwner()
+                                .HasForeignKey("InstanceId");
+                        });
+
                     b.OwnsMany("Aethra.Modules.Projects.Domain.Instances.VolumeMount", "Volumes", b1 =>
                         {
                             b1.Property<string>("InstanceId")
@@ -605,6 +631,8 @@ namespace Aethra.Modules.Projects.Infrastructure.Migrations
                     b.Navigation("Healthcheck");
 
                     b.Navigation("Ports");
+
+                    b.Navigation("ServiceHostnames");
 
                     b.Navigation("Volumes");
                 });

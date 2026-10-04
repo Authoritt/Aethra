@@ -113,6 +113,8 @@ public sealed class NativeDeployRunner(
         // contenedores tienen nombre estable {slug}-{service}, así que las rutas existentes siguen
         // sirviendo y solo refrescamos contenedores (se omiten rutas/monitor).
         var hostname = hostnameOverride ?? instance.CustomDomain ?? instance.AutoHostname;
+        // OT-009 — hostname por servicio fijado en ESTA instancia (gana sobre svc.Hostname del template).
+        var serviceHostOverrides = instance.ServiceHostnames;
 
         var (edgePlacement, edgeLookupError) = await ResolveEdgePlacementAsync(instance.TargetVmId, ct)
             .ConfigureAwait(false);
@@ -131,7 +133,7 @@ public sealed class NativeDeployRunner(
         if (edgePlacement.Kind == EdgePlacementKind.Direct)
         {
             var directValidation = EdgePlacementRules.ValidateDirect(
-                services.Select(s => ToDirectRouteCandidate(s, hostname)));
+                services.Select(s => ToDirectRouteCandidate(s, hostname, serviceHostOverrides)));
             if (!directValidation.IsValid)
             {
                 return Fail("Direct inválido: " + string.Join("; ", directValidation.Errors), hostname);
@@ -382,11 +384,18 @@ public sealed class NativeDeployRunner(
         await deploymentsDb.SaveChangesAsync(ct).ConfigureAwait(false);
 
         var routes = new List<string>();
-        var anyServiceHost = services.Any(s => !string.IsNullOrWhiteSpace(s.Hostname));
+        foreach (var unmatched in ServiceHostRules.UnmatchedOverrides(allTemplateServices, serviceHostOverrides))
+        {
+            var w = $"hostname fijado para el servicio '{unmatched}', que el template ya no define: no se aplica.";
+            warnings.Add(w);
+            deployment.AppendLog(DeploymentLogLevel.Warn, "swapping", w, clock.UtcNow);
+        }
+        var anyServiceHost = services.Any(s => ServiceHostRules.HasOwnHost(s, serviceHostOverrides));
         if (!string.IsNullOrWhiteSpace(hostname) || anyServiceHost)
         {
             var routing = await ReconcileRoutingAsync(
-                instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, edgeRouting, ct).ConfigureAwait(false);
+                instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, serviceHostOverrides,
+                edgeRouting, ct).ConfigureAwait(false);
             routes = [.. routing.Routes];
             foreach (var w in routing.Warnings)
             {
@@ -631,7 +640,8 @@ public sealed class NativeDeployRunner(
             return; // solo aplica a instancias nativas multi-servicio
         }
         var hostname = instance.CustomDomain ?? instance.AutoHostname;
-        var anyServiceHost = services.Any(s => !string.IsNullOrWhiteSpace(s.Hostname));
+        var serviceHostOverrides = instance.ServiceHostnames; // OT-009
+        var anyServiceHost = services.Any(s => ServiceHostRules.HasOwnHost(s, serviceHostOverrides));
         if (string.IsNullOrWhiteSpace(hostname) && !anyServiceHost)
         {
             return;
@@ -655,7 +665,7 @@ public sealed class NativeDeployRunner(
         if (edgePlacement.Kind == EdgePlacementKind.Direct)
         {
             var directValidation = EdgePlacementRules.ValidateDirect(
-                services.Select(s => ToDirectRouteCandidate(s, hostname)));
+                services.Select(s => ToDirectRouteCandidate(s, hostname, serviceHostOverrides)));
             if (!directValidation.IsValid)
             {
                 log.LogError("reconcile-routing {Inst}: Direct inválido: {Errors}",
@@ -664,7 +674,8 @@ public sealed class NativeDeployRunner(
             }
         }
         var routing = await ReconcileRoutingAsync(
-            instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, edgeRouting, ct).ConfigureAwait(false);
+            instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, serviceHostOverrides,
+            edgeRouting, ct).ConfigureAwait(false);
         foreach (var w in routing.Warnings)
         {
             log.LogWarning("reconcile-routing {Inst}: {Warning}", instance.Slug, w);
@@ -702,7 +713,8 @@ public sealed class NativeDeployRunner(
     /// </summary>
     private async Task<RoutingOutcome> ReconcileRoutingAsync(
         string slug, string instanceId, string projectId,
-        IReadOnlyList<TemplateServiceView> services, string? instanceHostname, EdgeRoutingContext? edgeRouting, CancellationToken ct)
+        IReadOnlyList<TemplateServiceView> services, string? instanceHostname,
+        IReadOnlyDictionary<string, string>? serviceHostOverrides, EdgeRoutingContext? edgeRouting, CancellationToken ct)
     {
         var routes = new List<string>();
         var warnings = new List<string>();
@@ -716,19 +728,14 @@ public sealed class NativeDeployRunner(
         // 1) Asegurar rutas: cada servicio bajo su Hostname propio (multi-host) o el de la Instance.
         // Un servicio con Hostname propio pero sin PathPrefixes asume "/" (quiere ruta). Sin host
         // ni prefix → servicio interno, sin ruta pública.
-        foreach (var svc in services)
+        // OT-009 — el host de cada servicio sale del ÚNICO punto de resolución (override de la
+        // instancia ?? svc.Hostname interpolado ?? host de la instancia). Rutas, ingress, DNS (paso 2)
+        // y monitores (paso 4) consumen ESTE host, nunca lo recalculan.
+        foreach (var endpoint in ServiceHostRules.PlanPublicEndpoints(services, instanceHostname, serviceHostOverrides))
         {
-            var hostResolution = ServiceHostRules.Resolve(svc.Hostname, instanceHostname);
-            var host = hostResolution.Host;
-            if (string.IsNullOrWhiteSpace(host))
-            {
-                continue;
-            }
-            var prefixes = ResolvePublicPrefixes(svc);
-            if (prefixes.Count == 0)
-            {
-                continue;
-            }
+            var svc = endpoint.Service;
+            var host = endpoint.Host;
+            var prefixes = endpoint.PathPrefixes;
             if (!isDirect && !hostsTouched.Contains(host, StringComparer.OrdinalIgnoreCase))
             {
                 hostsTouched.Add(host);
@@ -1129,21 +1136,20 @@ public sealed class NativeDeployRunner(
         return (new EdgeTunnelCandidate(result.Value.TunnelId, result.Value.TargetVmId ?? targetVmId), null);
     }
 
-    private static DirectRouteCandidate ToDirectRouteCandidate(TemplateServiceView service, string? instanceHostname)
+    private static DirectRouteCandidate ToDirectRouteCandidate(
+        TemplateServiceView service,
+        string? instanceHostname,
+        IReadOnlyDictionary<string, string>? serviceHostOverrides)
     {
-        var host = ServiceHostRules.Resolve(service.Hostname, instanceHostname);
-        var prefixes = ResolvePublicPrefixes(service);
+        var host = ServiceHostRules.ResolveEffective(
+            service.Name, service.Hostname, instanceHostname, serviceHostOverrides);
+        var prefixes = ServiceHostRules.PublicPrefixes(service, serviceHostOverrides);
         return new DirectRouteCandidate(
             service.Name,
             RequiresPublicRoute: prefixes.Count > 0,
             host.Host,
             prefixes);
     }
-
-    private static IReadOnlyList<string> ResolvePublicPrefixes(TemplateServiceView service)
-        => service.PathPrefixes.Count > 0
-            ? service.PathPrefixes
-            : (!string.IsNullOrWhiteSpace(service.Hostname) ? ["/"] : service.PathPrefixes);
 
     private static void MarkDirectHostRouted(
         string host,

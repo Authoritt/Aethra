@@ -1045,6 +1045,16 @@ export interface InstanceDetail extends InstanceSummary {
   updatedAt: string;
   /** F12.3 — expira (para safety net del cleanup background). */
   expiresAt?: string | null;
+  /**
+   * OT-009 — hostname por servicio fijado en esta instancia (gana sobre el del template).
+   * Se edita por API/MCP: PUT|DELETE /api/instances/{id}/service-hostnames/{service}.
+   */
+  serviceHostnames?: InstanceServiceHostname[] | null;
+}
+
+export interface InstanceServiceHostname {
+  serviceName: string;
+  hostname: string;
 }
 
 export interface CreateInstanceRequest {

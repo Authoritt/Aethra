@@ -89,6 +89,9 @@ internal sealed class GetInstanceByIdHandler(ProjectsDbContext db)
             effectiveTrackedRef: effectiveRef,
             isEphemeral: i.IsEphemeral,
             expiresAt: i.ExpiresAt,
-            createdByUserId: i.CreatedByUserId);
+            createdByUserId: i.CreatedByUserId,
+            serviceHostnames: [.. i.ServiceHostnames
+                .OrderBy(o => o.ServiceName, StringComparer.Ordinal)
+                .Select(o => new InstanceServiceHostnameDto(o.ServiceName, o.Hostname))]);
     }
 }

@@ -59,4 +59,7 @@ public sealed record InstanceForDeployView(
     int? PrimaryContainerPort,
     string? TrackedRef = null,
     bool IsEphemeral = false,
-    string? CreatedByUserId = null);
+    string? CreatedByUserId = null,
+    // OT-009 — hostname público por servicio fijado EN ESTA instancia (clave = nombre del servicio,
+    // case-insensitive). Gana sobre svc.Hostname del template. null/vacío = comportamiento histórico.
+    IReadOnlyDictionary<string, string>? ServiceHostnames = null);

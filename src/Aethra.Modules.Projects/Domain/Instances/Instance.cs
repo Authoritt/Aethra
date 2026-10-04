@@ -49,6 +49,10 @@ public sealed class Instance : AggregateRoot<InstanceId>
     private readonly List<VolumeMount> _volumes = [];
     public IReadOnlyList<VolumeMount> Volumes => _volumes.AsReadOnly();
 
+    // OT-009 — hostname por servicio fijado en esta instancia (override del template).
+    private readonly List<ServiceHostnameOverride> _serviceHostnames = [];
+    public IReadOnlyList<ServiceHostnameOverride> ServiceHostnames => _serviceHostnames.AsReadOnly();
+
     public Healthcheck? Healthcheck { get; private set; }
 
     public bool AutoDeployOnNewBuild { get; private set; }
@@ -307,6 +311,49 @@ public sealed class Instance : AggregateRoot<InstanceId>
         }
         AutoHostname = autoHostname.Trim().ToLowerInvariant();
         UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// OT-009 — fija, cambia o quita (<paramref name="hostname"/> null/whitespace) el hostname público
+    /// de un servicio en esta instancia. La validación de FQDN y de que el servicio exista en el
+    /// template la hace el handler (el aggregate no conoce el template). La clave del servicio es
+    /// case-insensitive. Devuelve <c>true</c> si cambió algo; <paramref name="previous"/> = host anterior.
+    /// </summary>
+    public bool SetServiceHostname(string serviceName, string? hostname, DateTimeOffset now, out string? previous)
+    {
+        if (string.IsNullOrWhiteSpace(serviceName))
+        {
+            throw new ArgumentException("ServiceName requerido.", nameof(serviceName));
+        }
+        var name = serviceName.Trim();
+        var normalized = string.IsNullOrWhiteSpace(hostname) ? null : hostname.Trim().ToLowerInvariant();
+        var existing = _serviceHostnames.FirstOrDefault(
+            o => string.Equals(o.ServiceName, name, StringComparison.OrdinalIgnoreCase));
+        previous = existing?.Hostname;
+
+        if (normalized is null)
+        {
+            if (existing is null)
+            {
+                return false;
+            }
+            _serviceHostnames.Remove(existing);
+        }
+        else if (existing is null)
+        {
+            _serviceHostnames.Add(new ServiceHostnameOverride(name, normalized));
+        }
+        else if (string.Equals(existing.Hostname, normalized, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        else
+        {
+            existing.ChangeHostname(normalized);
+        }
+
+        UpdatedAt = now;
+        return true;
     }
 
     private static IEnumerable<VolumeMount> PrefixVolumes(

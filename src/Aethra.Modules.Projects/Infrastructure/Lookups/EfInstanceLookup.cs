@@ -158,6 +158,23 @@ internal sealed class EfInstanceLookup(ProjectsDbContext db) : IInstanceLookup
             PrimaryContainerPort: primaryPort,
             TrackedRef: i.TrackedRef,
             IsEphemeral: i.IsEphemeral,
-            CreatedByUserId: i.CreatedByUserId);
+            CreatedByUserId: i.CreatedByUserId,
+            ServiceHostnames: ToServiceHostnameMap(i.ServiceHostnames));
+    }
+
+    /// <summary>OT-009 — overrides de host por servicio; null si no hay (= camino histórico).</summary>
+    internal static IReadOnlyDictionary<string, string>? ToServiceHostnameMap(
+        IReadOnlyList<ServiceHostnameOverride> overrides)
+    {
+        if (overrides.Count == 0)
+        {
+            return null;
+        }
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var o in overrides)
+        {
+            map[o.ServiceName] = o.Hostname;
+        }
+        return map;
     }
 }

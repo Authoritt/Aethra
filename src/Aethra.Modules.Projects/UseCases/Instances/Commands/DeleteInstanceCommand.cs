@@ -60,12 +60,22 @@ internal sealed class DeleteInstanceHandler(
             CustomDomain: instance.CustomDomain,
             RemovedAt: clock.UtcNow,
             TargetVmId: instance.TargetVmId,
-            ContainerNames: containerNames), cancellationToken).ConfigureAwait(false);
+            ContainerNames: containerNames,
+            ServiceHostnames: ServiceHostnamesOf(instance)), cancellationToken).ConfigureAwait(false);
 
         db.Instances.Remove(instance);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return Result.Success();
     }
+
+    /// <summary>
+    /// OT-009 — hosts fijados por servicio en la instancia (overrides): viajan en el evento de
+    /// borrado para que Cloudflare quite su DNS y Proxy sus rutas. null si no hay.
+    /// </summary>
+    internal static IReadOnlyList<string>? ServiceHostnamesOf(Instance instance)
+        => instance.ServiceHostnames.Count == 0
+            ? null
+            : [.. instance.ServiceHostnames.Select(o => o.Hostname).Distinct(StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>
     /// Nombres de los contenedores desplegados de una Instance: <c>{slug}-{servicio}</c> por cada

@@ -15,7 +15,7 @@ namespace Aethra.Modules.Projects.Infrastructure.Configurations;
 /// Mapeo EF Core del aggregate <see cref="Instance"/>. Schema: <c>projects</c>.
 ///
 /// Las colecciones (<c>Ports</c>, <c>Volumes</c>) se persisten como tablas hijas con FK
-/// <c>instance_id</c>; el <c>Healthcheck</c> se persiste como owned columns en la misma fila
+/// <c>instance_id</c> (igual <c>ServiceHostnames</c>, OT-009); el <c>Healthcheck</c> se persiste como owned columns en la misma fila
 /// porque siempre es 1:1 y nunca se consulta por separado. La FK al Project queda implícita
 /// (se navega via Template.ProjectId) — no se persiste columna directa.
 /// </summary>
@@ -147,6 +147,29 @@ internal sealed class InstanceConfiguration : IEntityTypeConfiguration<Instance>
         });
 
         builder.Metadata.FindNavigation(nameof(Instance.Volumes))!
+            .SetPropertyAccessMode(PropertyAccessMode.Field);
+
+        // OT-009 — hostname por servicio fijado en la instancia. Tabla hija nueva: las instancias
+        // existentes no tienen filas aquí ⇒ comportamiento idéntico al histórico. Cascade con la
+        // instancia (owned).
+        builder.OwnsMany(i => i.ServiceHostnames, s =>
+        {
+            s.ToTable("instance_service_hostnames");
+            s.WithOwner().HasForeignKey("InstanceId");
+            s.HasKey("InstanceId", nameof(ServiceHostnameOverride.ServiceName));
+
+            s.Property<InstanceId>("InstanceId")
+                .HasColumnName("instance_id")
+                .HasConversion(new ValueConverter<InstanceId, string>(
+                    id => id.ToString(),
+                    v => ParseInstanceId(v)))
+                .HasMaxLength(64);
+
+            s.Property(x => x.ServiceName).HasColumnName("service_name").HasMaxLength(128).IsRequired();
+            s.Property(x => x.Hostname).HasColumnName("hostname").HasMaxLength(253).IsRequired();
+        });
+
+        builder.Metadata.FindNavigation(nameof(Instance.ServiceHostnames))!
             .SetPropertyAccessMode(PropertyAccessMode.Field);
 
         // Healthcheck es opcional (Instance.Healthcheck es nullable). EF mantiene las columnas

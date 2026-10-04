@@ -24,6 +24,10 @@ internal sealed class InstanceRemovedHandler(
     {
         ArgumentNullException.ThrowIfNull(notification);
 
+        // OT-009 (G2) — los hosts de override NO entran aquí: el match por hostname ignora al dueño, y un
+        // override que coincida con el host de otra instancia le borraría sus rutas. Las rutas de
+        // override de esta instancia caen por el match de OperationalOwnerId (el runner las crea con
+        // dueño = la instancia).
         var hostnames = new[] { notification.CustomDomain, notification.AutoHostname }
             .Where(h => !string.IsNullOrWhiteSpace(h))
             .Select(h => h!.Trim())

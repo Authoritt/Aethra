@@ -224,7 +224,8 @@ internal sealed class EfPreviewInstanceCoordinator(
             InstanceId: removedId,
             AutoHostname: instance.AutoHostname,
             CustomDomain: instance.CustomDomain,
-            RemovedAt: clock.UtcNow), ct).ConfigureAwait(false);
+            RemovedAt: clock.UtcNow,
+            ServiceHostnames: Aethra.Modules.Projects.UseCases.Instances.Commands.DeleteInstanceHandler.ServiceHostnamesOf(instance)), ct).ConfigureAwait(false);
 
         db.Instances.Remove(instance);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);

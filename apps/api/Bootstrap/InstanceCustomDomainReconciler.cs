@@ -11,7 +11,9 @@ namespace Aethra.Api.Bootstrap;
 /// Instance hacia su hostname deseado actual (<c>CustomDomain ?? AutoHostname</c>): crea las rutas
 /// del host nuevo, borra las de la URL anterior, refresca CNAME + monitor — dejando todo limpio.
 ///
-/// Ambos eventos disparan la MISMA reconciliación (idempotente): recalcula el host deseado desde el
+/// OT-009: también el cambio de hostname de un servicio en la instancia.
+///
+/// Los eventos disparan la MISMA reconciliación (idempotente): recalcula el host deseado desde el
 /// estado actual de la Instance, así que no importa el orden Removed/Requested del batch del outbox.
 /// Corre en background con scope propio (no bloquea el commit que emitió el evento).
 /// </summary>
@@ -19,13 +21,20 @@ internal sealed class InstanceCustomDomainReconciler(
     IServiceScopeFactory scopeFactory,
     ILogger<InstanceCustomDomainReconciler> logger)
     : INotificationHandler<CustomDomainRequestedIntegrationEvent>,
-      INotificationHandler<CustomDomainRemovedIntegrationEvent>
+      INotificationHandler<CustomDomainRemovedIntegrationEvent>,
+      INotificationHandler<InstanceServiceHostnameChangedIntegrationEvent>
 {
     public Task Handle(CustomDomainRequestedIntegrationEvent notification, CancellationToken cancellationToken)
         => ReconcileInBackground(notification.InstanceId, "custom-domain-set");
 
     public Task Handle(CustomDomainRemovedIntegrationEvent notification, CancellationToken cancellationToken)
         => ReconcileInBackground(notification.InstanceId, "custom-domain-removed");
+
+    // OT-009 — fijar/cambiar/quitar el hostname de un servicio en la instancia es "personalizar la
+    // URL" de ese servicio: misma reconciliación idempotente (crea las rutas del host nuevo, borra las
+    // obsoletas del viejo y su regla de ingress Direct, asegura CNAME y monitor).
+    public Task Handle(InstanceServiceHostnameChangedIntegrationEvent notification, CancellationToken cancellationToken)
+        => ReconcileInBackground(notification.InstanceId, $"service-hostname:{notification.ServiceName}");
 
     private Task ReconcileInBackground(string instanceId, string reason)
     {

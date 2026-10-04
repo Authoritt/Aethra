@@ -32,6 +32,8 @@ public static class ProxyModule
         services.AddSingleton<DatabaseProxyConfigProvider>();
         services.AddSingleton<IProxyConfigProvider>(sp => sp.GetRequiredService<DatabaseProxyConfigProvider>());
         services.AddSingleton<IProxyConfigService, ProxyConfigService>();
+        // OT-009 (G2) — rutas por hostname con su dueño, para Projects y Cloudflare.
+        services.AddScoped<Aethra.Shared.Contracts.Proxy.IRouteHostLookup, Infrastructure.Lookups.EfRouteHostLookup>();
 
         // TLS: Certes + Let's Encrypt + HTTP-01 + CertRenewalWorker.
         services.AddAethraTls<ProxyDbContext>(configuration);

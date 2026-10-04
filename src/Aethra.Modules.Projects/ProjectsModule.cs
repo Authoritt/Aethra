@@ -43,6 +43,8 @@ public static class ProjectsModule
 
         services.AddScoped<ITemplateLookup, EfTemplateLookup>();
         services.AddScoped<IInstanceLookup, EfInstanceLookup>();
+        // OT-009 (G2) — quién usa un hostname (para no borrar el DNS de un host ajeno).
+        services.AddScoped<IHostnameUsageLookup, EfHostnameUsageLookup>();
         services.AddScoped<ITenantContext, EfTenantContext>();
         services.AddScoped<IEnvVarWriter, EfEnvVarWriter>();
         // F12.3 — Coordinator de preview deployments (PR webhook → Instance ephemeral).

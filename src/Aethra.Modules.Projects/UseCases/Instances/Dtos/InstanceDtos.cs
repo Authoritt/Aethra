@@ -49,7 +49,12 @@ public sealed record InstanceDetail(
     string? effectiveTrackedRef = null,
     bool isEphemeral = false,
     DateTimeOffset? expiresAt = null,
-    string? createdByUserId = null);
+    string? createdByUserId = null,
+    // OT-009 — hostname por servicio fijado en esta instancia (override del template).
+    IReadOnlyList<InstanceServiceHostnameDto>? serviceHostnames = null);
+
+/// <summary>OT-009 — override de hostname de un servicio en una instancia.</summary>
+public sealed record InstanceServiceHostnameDto(string serviceName, string hostname);
 
 public sealed record InstancePortDto(int containerPort, int? hostPort, string protocol);
 

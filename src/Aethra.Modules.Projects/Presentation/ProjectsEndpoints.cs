@@ -348,6 +348,36 @@ public static class ProjectsEndpoints
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("SetInstanceCustomDomain");
 
+        // OT-009 — hostname público de UN servicio en esta instancia (override del svc.Hostname del
+        // template). PUT fija/cambia; DELETE lo quita (vuelve al host del template). Reconcilia el
+        // routing en background, igual que el dominio custom.
+        app.MapPut("/api/instances/{id}/service-hostnames/{service}", async (
+            string id,
+            string service,
+            [FromBody] SetServiceHostnameRequest body,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(body?.Hostname))
+            {
+                return MapError(Error.Validation(
+                    "instance.service_hostname.hostname_required",
+                    "Falta hostname. Para quitar el override usa DELETE."));
+            }
+            var r = await m.Send(new SetServiceHostnameCommand(id, service, body.Hostname), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("SetInstanceServiceHostname");
+
+        app.MapDelete("/api/instances/{id}/service-hostnames/{service}", async (
+            string id,
+            string service,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            var r = await m.Send(new SetServiceHostnameCommand(id, service, null), ct);
+            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+        }).WithTags("Instances").RequireAuthorization(ScopeProjectsWrite).WithName("RemoveInstanceServiceHostname");
+
         // F12.3 — setear/limpiar el TrackedRef de una Instance (override de la cascada del Template).
         app.MapPatch("/api/instances/{id}/tracked-ref", async (
             string id,
@@ -623,6 +653,9 @@ public static class ProjectsEndpoints
         string? TrackedRef = null);
 
     public sealed record SetCustomDomainRequest(string? CustomDomain);
+
+    /// <summary>OT-009 — Body de <c>PUT /api/instances/{id}/service-hostnames/{service}</c>.</summary>
+    public sealed record SetServiceHostnameRequest(string? Hostname);
 
     /// <summary>F11.2 — Body de <c>POST /api/templates/discover</c>.</summary>
     public sealed record DiscoverTemplateRequest(string GitRepoUrl, string? Branch);
