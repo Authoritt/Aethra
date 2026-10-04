@@ -147,7 +147,7 @@ public sealed class PostgresBackupEngine(
     {
         var admin = codec.Decode(service.AdminCredentialsCipher);
         var tag = Guid.NewGuid().ToString("N");
-        var cmd = BackupExecutionRules.BuildDumpCommand(tag, admin.Username, admin.Password, admin.Username);
+        var cmd = BackupExecutionRules.BuildDumpCommand(tag, admin.Username, admin.Username);
         var res = await rpc.SendExecAsync(
             service.TargetVmId, service.ContainerName, cmd, RemoteDumpTimeoutSeconds, ct).ConfigureAwait(false);
         var bytes = BackupExecutionRules.DecodeDumpOutput(res.ExitCode, res.TimedOut, res.Stdout, res.Stderr);
@@ -182,7 +182,7 @@ public sealed class PostgresBackupEngine(
 
             var apply = await rpc.SendExecAsync(
                 service.TargetVmId, service.ContainerName,
-                BackupExecutionRules.BuildRestoreApplyCommand(tag, admin.Username, admin.Password, admin.Username),
+                BackupExecutionRules.BuildRestoreApplyCommand(tag, admin.Username, admin.Username),
                 RemoteDumpTimeoutSeconds, ct).ConfigureAwait(false);
             if (apply.ExitCode != 0 || apply.TimedOut)
             {

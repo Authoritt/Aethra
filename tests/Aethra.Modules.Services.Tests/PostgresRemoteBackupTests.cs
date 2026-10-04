@@ -20,6 +20,7 @@ public sealed class PostgresRemoteBackupTests
 {
     private const string Central = "vm_central";
     private const string Bogota = "vm_bogota";
+    private const string Password = "pw-Zq9!x'y";
 
     // ---- regla pura -------------------------------------------------------------------------------
 
@@ -48,7 +49,7 @@ public sealed class PostgresRemoteBackupTests
     [Fact]
     public void DecodeDumpOutput_rejects_failure_timeout_nonbase64_and_nongzip()
     {
-        var gz = Gzip("x");
+        var gz = Gzip(BackupExecutionRules.RemoteDumpHeader + "\nx\n");
         var ok = Convert.ToBase64String(gz);
         BackupExecutionRules.DecodeDumpOutput(0, false, ok + "\n", "").Should().Equal(gz);
         ((Action)(() => BackupExecutionRules.DecodeDumpOutput(1, false, "", "boom"))).Should().Throw<InvalidOperationException>().WithMessage("*exit 1*boom*");
@@ -77,12 +78,63 @@ public sealed class PostgresRemoteBackupTests
     }
 
     [Fact]
-    public void DumpCommand_guards_size_before_emitting_and_quotes_password()
+    public void DumpCommand_guards_size_before_emitting_and_has_no_password()
     {
-        var cmd = BackupExecutionRules.BuildDumpCommand("t", "u", "p'w", "db");
-        cmd.Should().Contain("PGPASSWORD='p'\\''w'");
+        var cmd = BackupExecutionRules.BuildDumpCommand("t", "u", "db");
         cmd.Should().Contain("-gt " + BackupExecutionRules.MaxCompressedDumpBytes);
-        cmd.Should().Contain("pg_dump -U 'u' -d 'db'");
+        cmd.Should().Contain("pg_dump -w -U 'u' -d 'db'");
+        cmd.Should().NotContain("PGPASSWORD").And.NotContain("-h ");   // socket local, sin password
+        cmd.Should().Contain("| gzip -c > \"$f.gz\"").And.NotContain("$f.sql");   // D2: directo al .gz
+        cmd.Should().Contain("base64 -w 0").And.NotContain("| tr");              // D4
+    }
+
+    [Fact]
+    public void RestoreApplyCommand_streams_without_sql_file_and_validates_gzip_first()
+    {
+        var cmd = BackupExecutionRules.BuildRestoreApplyCommand("t", "u", "db");
+        cmd.Should().Contain("gunzip -t").And.Contain("gunzip -c | psql -w -U 'u' -d 'db'");
+        cmd.Should().NotContain("$f.sql").And.NotContain("PGPASSWORD");
+    }
+
+    [Fact]
+    public void DecodeDumpOutput_rejects_truncated_gzip_and_incomplete_but_valid_base64()
+    {
+        var full = Gzip(BackupExecutionRules.RemoteDumpHeader + "\n" + RandomText(200_000) + "\n");
+        BackupExecutionRules.DecodeDumpOutput(0, false, Convert.ToBase64String(full), "").Should().Equal(full);
+
+        var noTrailer = full[..^8];                  // sin CRC+tamano: magia y cabecera intactas
+        var half = full[..(full.Length / 2)];        // base64 decodificable pero dump incompleto
+        foreach (var cut in new[] { noTrailer, half })
+        {
+            ((Action)(() => BackupExecutionRules.DecodeDumpOutput(0, false, Convert.ToBase64String(cut), "")))
+                .Should().Throw<InvalidOperationException>().WithMessage("*incompleta o corrupta*");
+        }
+    }
+
+    [Fact]
+    public void DecodeDumpOutput_rejects_valid_gzip_without_remote_header()
+        => ((Action)(() => BackupExecutionRules.DecodeDumpOutput(0, false, Convert.ToBase64String(Gzip("SELECT 1;\n")), "")))
+            .Should().Throw<InvalidOperationException>().WithMessage("*remote v1*");
+
+    [Fact]
+    public void DecodeDumpOutput_reports_pg_dump_failure_marker()
+        => ((Action)(() => BackupExecutionRules.DecodeDumpOutput(4, false, "", "aethra-dump-failed")))
+            .Should().Throw<InvalidOperationException>().WithMessage("*pg_dump*error*");
+
+    [Fact]
+    public async Task Password_never_appears_in_any_generated_command_dump_restore_apply_cleanup()
+    {
+        var dumpRpc = new FakeRpc(_ => new ExecResult(0, Convert.ToBase64String(
+            Gzip(BackupExecutionRules.RemoteDumpHeader + "\nSELECT 1;\n")), "", false));
+        await NewEngine(dumpRpc, Central).CreateBackupAsync(NewService(Bogota), CancellationToken.None);
+
+        var restoreRpc = new FakeRpc(_ => new ExecResult(0, "", "", false));
+        var backup = Gzip(BackupExecutionRules.RemoteDumpHeader + "\n" + RandomText(300_000) + "\n");
+        await NewEngine(restoreRpc, Central).RestoreBackupAsync(NewService(Bogota), backup, CancellationToken.None);
+
+        var all = dumpRpc.Calls.Concat(restoreRpc.Calls).Select(c => c.Command).ToList();
+        all.Count.Should().BeGreaterThan(3);   // dump + trozos + apply + cleanup
+        all.Should().OnlyContain(c => !c.Contains(Password) && !c.Contains("PGPASSWORD") && !c.Contains(" -W"));
     }
 
     // ---- cableado del engine (fallan si se revierte el branch local/remoto) ------------------------
@@ -100,7 +152,7 @@ public sealed class PostgresRemoteBackupTests
         rpc.Calls.Should().ContainSingle();
         rpc.Calls[0].VmId.Should().Be(Bogota);
         rpc.Calls[0].Container.Should().Be("pg-iot-prod");
-        rpc.Calls[0].Command.Should().Contain("pg_dump").And.Contain("PGPASSWORD='secret'");
+        rpc.Calls[0].Command.Should().Contain("pg_dump");
     }
 
     [Fact]
@@ -222,7 +274,7 @@ public sealed class PostgresRemoteBackupTests
     private sealed class StaticCodec : IAdminCredentialsCodec
     {
         public byte[] Encode(AdminCredentials credentials) => [1];
-        public AdminCredentials Decode(byte[] cipher) => new("admin", "secret");
+        public AdminCredentials Decode(byte[] cipher) => new("admin", Password);
     }
 
     private sealed class StaticHost : IManagedServiceHostResolver

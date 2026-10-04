@@ -67,27 +67,41 @@ public static class BackupExecutionRules
 
     public static string ShellQuote(string value) => "'" + value.Replace("'", "'\\''") + "'";
 
-    public static string BuildDumpCommand(string tag, string username, string password, string database)
-        => "set -e; f=/tmp/aethra-bk-" + tag + "; trap 'rm -f \"$f.sql\" \"$f.gz\"' EXIT; "
-           + "export PGPASSWORD=" + ShellQuote(password) + "; "
+    /// <summary>
+    /// Fallo de una etapa del pipeline del dump (pg_dump). El <c>sh</c> de la imagen puede ser dash (sin
+    /// <c>pipefail</c>) o busybox, así que el estado de pg_dump se registra en un fichero marcador en vez de
+    /// depender del código de salida de la tubería.
+    /// </summary>
+    public const string DumpFailedMarker = "aethra-dump-failed";
+
+    /// <summary>Activa pipefail solo si el sh lo soporta (dash no); el resto de la lógica no depende de él.</summary>
+    private const string TryPipefail = "(set -o pipefail) 2>/dev/null && set -o pipefail; ";
+
+    // SEGURIDAD (G2 B1): NINGÚN comando lleva la contraseña (ni PGPASSWORD ni -W): el argv de `sh -c` es visible
+    // en `ps` del contenedor y del host y en `docker events`. Se conecta SIN -h, por el socket unix local, donde
+    // la imagen oficial `postgres` usa `local all all trust` (las plantillas no tocan pg_hba). `-w` impide el
+    // prompt: si un pg_hba exigiera contraseña en local, pg_dump/psql FALLAN explícitamente en vez de colgarse.
+    public static string BuildDumpCommand(string tag, string username, string database)
+        => "set -e; " + TryPipefail + "f=/tmp/aethra-bk-" + tag + "; trap 'rm -f \"$f.gz\" \"$f.rc\"' EXIT; rm -f \"$f.rc\"; "
            + "{ echo " + ShellQuote(RemoteDumpHeader) + "; "
-           + "pg_dump -U " + ShellQuote(username) + " -d " + ShellQuote(database)
-           + " --clean --if-exists --no-owner --no-privileges; } > \"$f.sql\"; "
-           + "gzip -c \"$f.sql\" > \"$f.gz\"; "
+           + "pg_dump -w -U " + ShellQuote(username) + " -d " + ShellQuote(database)
+           + " --clean --if-exists --no-owner --no-privileges || echo 1 > \"$f.rc\"; } | gzip -c > \"$f.gz\"; "
+           + "if [ -e \"$f.rc\" ]; then echo \"" + DumpFailedMarker + "\" >&2; exit 4; fi; "
            + "sz=$(wc -c < \"$f.gz\"); "
            + "if [ \"$sz\" -gt " + MaxCompressedDumpBytes + " ]; then echo \"" + TooLargeMarker + ":$sz\" >&2; exit 3; fi; "
-           + "base64 \"$f.gz\" | tr -d '\\n'";
+           + "base64 -w 0 \"$f.gz\"";
 
     public static string BuildRestoreAppendCommand(string tag, string base64Chunk, bool first)
         => "f=/tmp/aethra-rs-" + tag + "; printf %s " + ShellQuote(base64Chunk)
            + (first ? " > " : " >> ") + "\"$f.b64\"";
 
-    public static string BuildRestoreApplyCommand(string tag, string username, string password, string database)
-        => "set -e; f=/tmp/aethra-rs-" + tag + "; trap 'rm -f \"$f.b64\" \"$f.sql\"' EXIT; "
-           + "base64 -d \"$f.b64\" | gunzip -c > \"$f.sql\"; "
-           + "export PGPASSWORD=" + ShellQuote(password) + "; "
-           + "psql -U " + ShellQuote(username) + " -d " + ShellQuote(database)
-           + " -v ON_ERROR_STOP=1 --single-transaction -q -f \"$f.sql\"";
+    // Sin .sql intermedio: primero `gunzip -t` valida el gzip ENTERO (un gzip truncado/corrupto no debe llegar a
+    // psql: --single-transaction haría COMMIT de un script cortado al EOF) y luego se canaliza a psql.
+    public static string BuildRestoreApplyCommand(string tag, string username, string database)
+        => "set -e; " + TryPipefail + "f=/tmp/aethra-rs-" + tag + "; trap 'rm -f \"$f.b64\"' EXIT; "
+           + "base64 -d \"$f.b64\" | gunzip -t; "
+           + "base64 -d \"$f.b64\" | gunzip -c | psql -w -U " + ShellQuote(username) + " -d " + ShellQuote(database)
+           + " -v ON_ERROR_STOP=1 --single-transaction -q";
 
     public static string BuildRestoreCleanupCommand(string tag)
         => "rm -f /tmp/aethra-rs-" + tag + ".b64 /tmp/aethra-rs-" + tag + ".sql";
@@ -107,6 +121,11 @@ public static class BackupExecutionRules
             throw new InvalidOperationException(
                 $"pg_dump remoto: el dump comprimido supera {MaxCompressedDumpBytes} bytes (tope por el mensaje "
                 + "SignalR de 64 MiB y satellite:// de 60 MB). Backup NO creado; no se trunca.");
+        }
+        if (exitCode == 4 && (stderr ?? string.Empty).Contains(DumpFailedMarker, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"pg_dump remoto falló (pg_dump terminó con error): {Truncate(stderr, 500)}");
         }
         if (exitCode != 0)
         {
@@ -131,6 +150,16 @@ public static class BackupExecutionRules
         {
             throw new InvalidOperationException("pg_dump remoto: la salida no es un gzip.");
         }
+        // G2 D3: no basta la cabecera mágica; un base64 truncado pero decodificable pasaría. Se descomprime
+        // ENTERO (el trailer CRC/tamaño del gzip lo valida .NET) y se exige la cabecera del formato remoto.
+        try
+        {
+            EnsureRestorableRemote(bytes);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException("pg_dump remoto: salida incompleta o corrupta. " + ex.Message, ex);
+        }
         return bytes;
     }
 
@@ -144,16 +173,30 @@ public static class BackupExecutionRules
                 $"Restore remoto: el backup ({backup.Length} bytes) supera el tope de {MaxCompressedDumpBytes}.");
         }
         string? first;
+        bool truncated;
         try
         {
             using var ms = new MemoryStream(backup);
             using var gz = new GZipStream(ms, CompressionMode.Decompress);
             using var reader = new StreamReader(gz, new UTF8Encoding(false));
             first = reader.ReadLine();
+            // .NET NO lanza ante un gzip truncado (devuelve EOF sin más): se descomprime de nuevo contando bytes y
+            // se contrasta con ISIZE (últimos 4 bytes del gzip, tamaño mod 2^32). Un corte casi nunca lo cumple.
+            ms.Position = 0;
+            using var gz2 = new GZipStream(ms, CompressionMode.Decompress);
+            var buffer = new byte[81920];
+            long total = 0;
+            int n;
+            while ((n = gz2.Read(buffer, 0, buffer.Length)) > 0) { total += n; }
+            truncated = backup.Length < 18 || (uint)total != BitConverter.ToUInt32(backup, backup.Length - 4);
         }
-        catch (InvalidDataException ex)
+        catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException)
         {
             throw new InvalidOperationException("Restore remoto: el backup no es un gzip válido.", ex);
+        }
+        if (truncated)
+        {
+            throw new InvalidOperationException("Restore remoto: el backup está truncado o corrupto (tamaño del gzip no coincide).");
         }
         if (!string.Equals(first, RemoteDumpHeader, StringComparison.Ordinal))
         {
