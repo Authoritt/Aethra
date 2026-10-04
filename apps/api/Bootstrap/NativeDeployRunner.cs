@@ -1,13 +1,18 @@
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
+using Aethra.Modules.Cloudflare.UseCases.DnsRecords;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Queries;
 using Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands;
+using Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries;
 using Aethra.Modules.Cloudflare.UseCases.Zones.Queries;
+using Aethra.Modules.Cloudflare.Infrastructure.Cloudflare;
 using Aethra.Modules.Deployments.Domain.Deployment;
 using Aethra.Modules.Deployments.Infrastructure;
 using Aethra.Modules.Deployments.Infrastructure.Build;
 using Aethra.Modules.Deployments.Rollout;
 using Aethra.Modules.Monitoring.UseCases.Commands;
+using Aethra.Modules.Monitoring.UseCases.Dtos;
 using Aethra.Modules.Monitoring.UseCases.Queries;
+using Aethra.Modules.Projects.UseCases.Instances.Queries;
 using Aethra.Modules.Proxy.UseCases.Routes;
 using Aethra.Modules.Proxy.UseCases.Routes.Commands;
 using Aethra.Modules.Proxy.UseCases.Routes.Queries;
@@ -15,6 +20,7 @@ using Aethra.Modules.Services.UseCases.Queries;
 using Aethra.Shared.Contracts.Containers;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Contracts.Settings;
+using Aethra.Shared.Kernel.Results;
 using Aethra.Shared.Kernel.Time;
 using MediatR;
 using Microsoft.Extensions.Configuration;
@@ -108,6 +114,32 @@ public sealed class NativeDeployRunner(
         // sirviendo y solo refrescamos contenedores (se omiten rutas/monitor).
         var hostname = hostnameOverride ?? instance.CustomDomain ?? instance.AutoHostname;
 
+        var (directTunnel, edgeLookupError) = await ResolveDirectTunnelCandidateAsync(instance.TargetVmId, ct)
+            .ConfigureAwait(false);
+        if (edgeLookupError is not null)
+        {
+            return Fail(edgeLookupError, hostname);
+        }
+        var edgePlacement = EdgePlacementRules.Resolve(
+            instance.TargetVmId,
+            directTunnel is null ? [] : [directTunnel]);
+        if (edgePlacement.Kind == EdgePlacementKind.Ambiguous)
+        {
+            return Fail(string.Join("; ", edgePlacement.Warnings), hostname);
+        }
+        var edgeRouting = edgePlacement.Kind == EdgePlacementKind.Direct
+            ? new EdgeRoutingContext(edgePlacement.Kind, edgePlacement.Tunnel!.TunnelId)
+            : null;
+        if (edgePlacement.Kind == EdgePlacementKind.Direct)
+        {
+            var directValidation = EdgePlacementRules.ValidateDirect(
+                services.Select(s => ToDirectRouteCandidate(s, hostname)));
+            if (!directValidation.IsValid)
+            {
+                return Fail("Direct inválido: " + string.Join("; ", directValidation.Errors), hostname);
+            }
+        }
+
         var deployment = Deployment.Queue(
             buildId: $"native:{Guid.NewGuid():N}"[..39],
             instanceId: instance.InstanceId,
@@ -178,10 +210,12 @@ public sealed class NativeDeployRunner(
         foreach (var svc in services)
         {
             var containerName = $"{instance.Slug}-{svc.Name}";
-            var env = new Dictionary<string, string>(baseEnv);
-            foreach (var kv in svc.Env)
+            var envMerge = EnvPrecedenceRules.Merge(baseEnv, svc.Env, instance.Slug);
+            foreach (var key in envMerge.OverriddenKeys)
             {
-                env[kv.Key] = kv.Value.Replace("{instance}", instance.Slug, StringComparison.Ordinal);
+                var warning = $"env '{key}' del servicio '{svc.Name}' pisa un valor heredado.";
+                warnings.Add(warning);
+                deployment.AppendLog(DeploymentLogLevel.Warn, "starting", warning, clock.UtcNow);
             }
 
             string image;
@@ -234,7 +268,7 @@ public sealed class NativeDeployRunner(
             var spec = new RunSpec(
                 ContainerName: containerName,
                 ImageRef: image,
-                Env: env,
+                Env: envMerge.Env,
                 Ports: [new PortBinding(
                     svc.Port,
                     svc.HostPort,
@@ -342,7 +376,7 @@ public sealed class NativeDeployRunner(
         if (!string.IsNullOrWhiteSpace(hostname) || anyServiceHost)
         {
             var routing = await ReconcileRoutingAsync(
-                instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, ct).ConfigureAwait(false);
+                instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, edgeRouting, ct).ConfigureAwait(false);
             routes = [.. routing.Routes];
             foreach (var w in routing.Warnings)
             {
@@ -373,7 +407,7 @@ public sealed class NativeDeployRunner(
         // hosted services contra el Postgres compartido pero sin las conexiones SignalR del PoS →
         // reclaman docs y los expiran. Best-effort.
         var cleaned = await CleanupStaleContainersAsync(
-            instance.TargetVmId, instance.Slug, allTemplateServices, ct).ConfigureAwait(false);
+            instance.TargetVmId, instance.InstanceId, instance.Slug, allTemplateServices, ct).ConfigureAwait(false);
         foreach (var name in cleaned)
         {
             deployment.AppendLog(DeploymentLogLevel.Info, "swapping",
@@ -460,7 +494,7 @@ public sealed class NativeDeployRunner(
     /// fue precisamente el bug de OT-069. Best-effort e idempotente.
     /// </summary>
     private async Task<IReadOnlyList<string>> CleanupStaleContainersAsync(
-        string vmId, string slug, IReadOnlyList<TemplateServiceView> allServices, CancellationToken ct)
+        string vmId, string instanceId, string slug, IReadOnlyList<TemplateServiceView> allServices, CancellationToken ct)
     {
         var removed = new List<string>();
         try
@@ -474,12 +508,22 @@ public sealed class NativeDeployRunner(
                     slug);
                 return removed;
             }
+            var otherInstanceSlugsOnVm = await FindOtherInstanceSlugsOnVmAsync(vmId, instanceId, ct)
+                .ConfigureAwait(false);
+            if (otherInstanceSlugsOnVm is null)
+            {
+                log.LogWarning(
+                    "native-deploy {Slug}: limpieza de contenedores obsoletos omitida; no se pudieron verificar los slugs de otras instancias en la VM",
+                    slug);
+                return removed;
+            }
 
             var staleNames = ContainerCleanupRules.SelectStaleContainerNames(
                     containers.Select(c => c.Name),
                     slug,
                     allServices.Select(s => s.Name),
-                    managedServiceContainers)
+                    managedServiceContainers,
+                    otherInstanceSlugsOnVm)
                 .ToHashSet(StringComparer.Ordinal);
 
             foreach (var c in containers.Where(c => staleNames.Contains(c.Name)))
@@ -530,6 +574,33 @@ public sealed class NativeDeployRunner(
         }
     }
 
+    private async Task<IReadOnlySet<string>?> FindOtherInstanceSlugsOnVmAsync(
+        string vmId, string instanceId, CancellationToken ct)
+    {
+        try
+        {
+            var result = await mediator.Send(new ListInstancesQuery(), ct).ConfigureAwait(false);
+            if (!result.IsSuccess)
+            {
+                return null;
+            }
+
+            return result.Value
+                .Where(i => string.Equals(i.targetVmId, vmId, StringComparison.Ordinal)
+                    && !string.Equals(i.id, instanceId, StringComparison.Ordinal)
+                    && !string.IsNullOrWhiteSpace(i.slug))
+                .Select(i => i.slug.Trim())
+                .ToHashSet(StringComparer.Ordinal);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex,
+                "native-deploy: no se pudieron consultar otras instancias de la VM {VmId}",
+                vmId);
+            return null;
+        }
+    }
+
     /// <summary>
     /// F13.8 — reconcilia SOLO el routing de una Instance nativa hacia su hostname deseado actual
     /// (<c>CustomDomain ?? AutoHostname</c>): crea rutas del host nuevo, borra las rutas viejas que
@@ -555,8 +626,37 @@ public sealed class NativeDeployRunner(
         {
             return;
         }
+        var (directTunnel, edgeLookupError) = await ResolveDirectTunnelCandidateAsync(instance.TargetVmId, ct)
+            .ConfigureAwait(false);
+        if (edgeLookupError is not null)
+        {
+            log.LogError("reconcile-routing {Inst}: {Error}", instance.Slug, edgeLookupError);
+            return;
+        }
+        var edgePlacement = EdgePlacementRules.Resolve(
+            instance.TargetVmId,
+            directTunnel is null ? [] : [directTunnel]);
+        if (edgePlacement.Kind == EdgePlacementKind.Ambiguous)
+        {
+            log.LogError("reconcile-routing {Inst}: {Error}", instance.Slug, string.Join("; ", edgePlacement.Warnings));
+            return;
+        }
+        var edgeRouting = edgePlacement.Kind == EdgePlacementKind.Direct
+            ? new EdgeRoutingContext(edgePlacement.Kind, edgePlacement.Tunnel!.TunnelId)
+            : null;
+        if (edgePlacement.Kind == EdgePlacementKind.Direct)
+        {
+            var directValidation = EdgePlacementRules.ValidateDirect(
+                services.Select(s => ToDirectRouteCandidate(s, hostname)));
+            if (!directValidation.IsValid)
+            {
+                log.LogError("reconcile-routing {Inst}: Direct inválido: {Errors}",
+                    instance.Slug, string.Join("; ", directValidation.Errors));
+                return;
+            }
+        }
         var routing = await ReconcileRoutingAsync(
-            instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, ct).ConfigureAwait(false);
+            instance.Slug, instance.InstanceId, instance.ProjectId, services, hostname, edgeRouting, ct).ConfigureAwait(false);
         foreach (var w in routing.Warnings)
         {
             log.LogWarning("reconcile-routing {Inst}: {Warning}", instance.Slug, w);
@@ -581,6 +681,11 @@ public sealed class NativeDeployRunner(
         IReadOnlyList<string> Warnings,
         string? Error);
 
+    private sealed record EdgeRoutingContext(EdgePlacementKind Kind, string TunnelId)
+    {
+        public bool IsDirect => Kind == EdgePlacementKind.Direct;
+    }
+
     /// <summary>
     /// Asegura las rutas del <paramref name="instanceHostname"/> deseado (una por servicio×pathPrefix →
     /// <c>{slug}-{svc}:{port}</c>), BORRA las rutas que apuntan a contenedores de esta Instance pero
@@ -589,7 +694,7 @@ public sealed class NativeDeployRunner(
     /// </summary>
     private async Task<RoutingOutcome> ReconcileRoutingAsync(
         string slug, string instanceId, string projectId,
-        IReadOnlyList<TemplateServiceView> services, string? instanceHostname, CancellationToken ct)
+        IReadOnlyList<TemplateServiceView> services, string? instanceHostname, EdgeRoutingContext? edgeRouting, CancellationToken ct)
     {
         var routes = new List<string>();
         var warnings = new List<string>();
@@ -597,25 +702,26 @@ public sealed class NativeDeployRunner(
         // Set deseado de (host, pathPrefix) para limpiar SOLO rutas mías realmente obsoletas.
         var desired = new HashSet<(string Host, string Prefix)>();
         var hostsTouched = new List<string>();
+        var directBackendsByHost = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var isDirect = edgeRouting?.IsDirect == true;
 
         // 1) Asegurar rutas: cada servicio bajo su Hostname propio (multi-host) o el de la Instance.
         // Un servicio con Hostname propio pero sin PathPrefixes asume "/" (quiere ruta). Sin host
         // ni prefix → servicio interno, sin ruta pública.
         foreach (var svc in services)
         {
-            var host = !string.IsNullOrWhiteSpace(svc.Hostname) ? svc.Hostname! : instanceHostname;
+            var hostResolution = ServiceHostRules.Resolve(svc.Hostname, instanceHostname);
+            var host = hostResolution.Host;
             if (string.IsNullOrWhiteSpace(host))
             {
                 continue;
             }
-            IReadOnlyList<string> prefixes = svc.PathPrefixes.Count > 0
-                ? svc.PathPrefixes
-                : (!string.IsNullOrWhiteSpace(svc.Hostname) ? new[] { "/" } : svc.PathPrefixes);
+            var prefixes = ResolvePublicPrefixes(svc);
             if (prefixes.Count == 0)
             {
                 continue;
             }
-            if (!hostsTouched.Contains(host, StringComparer.OrdinalIgnoreCase))
+            if (!isDirect && !hostsTouched.Contains(host, StringComparer.OrdinalIgnoreCase))
             {
                 hostsTouched.Add(host);
             }
@@ -643,10 +749,18 @@ public sealed class NativeDeployRunner(
                 if (outcome == SideEffectOutcome.Created)
                 {
                     routes.Add($"{host}{prefix} → {backend}");
+                    if (isDirect)
+                    {
+                        MarkDirectHostRouted(host, backend, hostsTouched, directBackendsByHost);
+                    }
                 }
                 else if (outcome == SideEffectOutcome.AlreadyExists)
                 {
                     routes.Add($"{host}{prefix} (ya existía)");
+                    if (isDirect)
+                    {
+                        MarkDirectHostRouted(host, backend, hostsTouched, directBackendsByHost);
+                    }
                 }
                 else
                 {
@@ -665,7 +779,16 @@ public sealed class NativeDeployRunner(
         // 2) CNAME + tunnel ingress por cada host tocado (best-effort, idempotente).
         foreach (var host in hostsTouched)
         {
-            await EnsureDnsRecordAsync(host, ct).ConfigureAwait(false);
+            var directBackend = isDirect && directBackendsByHost.TryGetValue(host, out var backend)
+                ? backend
+                : null;
+            var dnsError = await EnsureDnsRecordAsync(host, edgeRouting, directBackend, ct).ConfigureAwait(false);
+            if (dnsError is not null)
+            {
+                routes.Add($"{host} DNS/ingress FALLÓ");
+                error ??= dnsError;
+                log.LogError("reconcile-routing {Slug}: {Error}", slug, dnsError);
+            }
         }
 
         // 3) Limpiar SOLO rutas mías ({slug}-{svc}: + Origin propio) que NO estén en el set deseado
@@ -689,9 +812,21 @@ public sealed class NativeDeployRunner(
                 {
                     if (RouteOwnershipRules.IsObsoleteOwnRoute(rt, myBackends, desired))
                     {
-                        await mediator.Send(new DeleteRouteCommand(rt.Id), ct).ConfigureAwait(false);
+                        var deleted = await mediator.Send(new DeleteRouteCommand(rt.Id), ct).ConfigureAwait(false);
                         routes.Add($"− {rt.Hostname}{rt.PathPrefix} (obsoleta, borrada)");
                         log.LogInformation("reconcile-routing {Slug}: ruta obsoleta borrada {Host}{Path}", slug, rt.Hostname, rt.PathPrefix);
+                        if (deleted.IsSuccess && isDirect && !desired.Any(d => string.Equals(d.Host, rt.Hostname, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            var removed = await mediator.Send(new RemoveTunnelHostnameCommand(rt.Hostname, edgeRouting!.TunnelId), ct)
+                                .ConfigureAwait(false);
+                            if (!removed.IsSuccess)
+                            {
+                                var msg = $"ingress obsoleto {rt.Hostname} NO se pudo quitar del túnel {edgeRouting.TunnelId}: "
+                                    + $"[{removed.Error.Code}] {removed.Error.Message}";
+                                error ??= msg;
+                                log.LogError("reconcile-routing {Slug}: {Error}", slug, msg);
+                            }
+                        }
                     }
                 }
             }
@@ -700,13 +835,10 @@ public sealed class NativeDeployRunner(
         // 4) Monitor por cada host tocado (slug propio cuando hay varios hosts).
         foreach (var host in hostsTouched)
         {
-            var monSlug = hostsTouched.Count > 1 ? host.Split('.')[0] : slug;
             var monitorUrl = $"https://{host}/";
-            var mon = await mediator.Send(new CreateMonitorCommand(
-                Slug: monSlug, Name: host, Url: monitorUrl,
-                HttpMethod: "GET", ExpectedStatusCodes: [200, 301, 302, 307, 308],
-                IntervalSec: 120, TimeoutMs: 15000, Headers: null, BodyTemplate: null,
-                InstanceId: instanceId, ProjectId: projectId), ct).ConfigureAwait(false);
+            var slugDecision = MonitorSlugRules.Decide(slug, host, hostsTouched.Count, monitorUrl, null);
+            var monSlug = slugDecision.InitialSlug;
+            var mon = await CreateMonitorAsync(monSlug, host, monitorUrl, instanceId, projectId, ct).ConfigureAwait(false);
             // OT-006 #53 — antes el resultado ni se asignaba: un monitor que no se crea dejaba la
             // app sin vigilancia y era invisible. Los dos conflictos benignos son el caso normal del
             // redeploy; cualquier otro error sale como aviso del deploy y al log del Deployment.
@@ -718,6 +850,18 @@ public sealed class NativeDeployRunner(
                 && string.Equals(mon.Error.Code, DeploySideEffectRules.MonitorSlugTakenCode, StringComparison.Ordinal))
             {
                 existingMonitorUrl = await FindExistingMonitorUrlAsync(monSlug, ct).ConfigureAwait(false);
+                slugDecision = MonitorSlugRules.Decide(slug, host, hostsTouched.Count, monitorUrl, existingMonitorUrl);
+                if (slugDecision.ShouldRetry)
+                {
+                    monSlug = slugDecision.DesiredSlug;
+                    mon = await CreateMonitorAsync(monSlug, host, monitorUrl, instanceId, projectId, ct).ConfigureAwait(false);
+                    existingMonitorUrl = null;
+                    if (!mon.IsSuccess
+                        && string.Equals(mon.Error.Code, DeploySideEffectRules.MonitorSlugTakenCode, StringComparison.Ordinal))
+                    {
+                        existingMonitorUrl = await FindExistingMonitorUrlAsync(monSlug, ct).ConfigureAwait(false);
+                    }
+                }
             }
             if (DeploySideEffectRules.ClassifyMonitor(
                     mon.IsSuccess, mon.IsSuccess ? null : mon.Error.Code, monitorUrl, existingMonitorUrl)
@@ -734,20 +878,35 @@ public sealed class NativeDeployRunner(
     }
 
     /// <summary>
-    /// F13.5 — crea el DNS record (CNAME proxied → túnel CF) del hostname si hay <c>NativeDeploy:TunnelCname</c>
-    /// configurado y una zona registrada que lo cubra. Best-effort: cualquier fallo se loguea y se ignora
-    /// (el deploy no depende de esto; el ingress de cloudflared sigue siendo manual).
+    /// F13.5/F13.9 — en Central conserva el comportamiento histórico best-effort. En Direct, ingress
+    /// y DNS son parte del routing: cualquier fallo vuelve como error para que el deploy no sea falso verde.
     /// </summary>
-    private async Task EnsureDnsRecordAsync(string hostname, CancellationToken ct)
+    private async Task<string?> EnsureDnsRecordAsync(
+        string hostname,
+        EdgeRoutingContext? edgeRouting,
+        string? directService,
+        CancellationToken ct)
     {
-        // F13.9 — si hay un Tunnel gestionado remoto, asegura la regla de ingress del host (cero blip).
-        // No-op si no hay túnel registrado. Best-effort: no rompe el deploy.
+        var isDirect = edgeRouting?.IsDirect == true;
+
         try
         {
-            var ing = await mediator.Send(new EnsureTunnelHostnameCommand(hostname), ct).ConfigureAwait(false);
+            if (isDirect && string.IsNullOrWhiteSpace(directService))
+            {
+                return $"tunnel-ingress {hostname}: Direct requiere service backend.";
+            }
+
+            var ing = await mediator.Send(new EnsureTunnelHostnameCommand(
+                hostname,
+                isDirect ? edgeRouting!.TunnelId : null,
+                isDirect ? directService : null), ct).ConfigureAwait(false);
             if (ing.IsSuccess)
             {
                 log.LogInformation("tunnel-ingress {Host}: regla asegurada (o ya existía).", hostname);
+            }
+            else if (isDirect)
+            {
+                return $"tunnel-ingress {hostname}: [{ing.Error.Code}] {ing.Error.Message}";
             }
             else
             {
@@ -756,12 +915,21 @@ public sealed class NativeDeployRunner(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            if (isDirect)
+            {
+                return $"tunnel-ingress {hostname}: {ex.Message}";
+            }
             log.LogWarning(ex, "tunnel-ingress {Host}: error (ignorado).", hostname);
+        }
+
+        if (isDirect)
+        {
+            return await EnsureDirectDnsRecordAsync(hostname, edgeRouting!.TunnelId, ct).ConfigureAwait(false);
         }
 
         if (string.IsNullOrWhiteSpace(_tunnelCname))
         {
-            return;
+            return null;
         }
         try
         {
@@ -769,7 +937,7 @@ public sealed class NativeDeployRunner(
             if (zones.IsFailure)
             {
                 log.LogDebug("auto-dns {Host}: no se pudieron listar zonas: {Err}", hostname, zones.Error.Message);
-                return;
+                return null;
             }
             // Zona cuyo Name es sufijo del hostname (longest-match), ej. "example.com".
             var zone = zones.Value
@@ -780,7 +948,7 @@ public sealed class NativeDeployRunner(
             if (zone is null)
             {
                 log.LogInformation("auto-dns {Host}: ninguna zona CF registrada lo cubre; omitido.", hostname);
-                return;
+                return null;
             }
 
             var existing = await mediator.Send(new ListDnsRecordsQuery(zone.Id), ct).ConfigureAwait(false);
@@ -788,7 +956,7 @@ public sealed class NativeDeployRunner(
                 && existing.Value.Any(r => string.Equals(r.Name, hostname, StringComparison.OrdinalIgnoreCase)))
             {
                 log.LogDebug("auto-dns {Host}: ya existe un record; omitido.", hostname);
-                return;
+                return null;
             }
 
             var created = await mediator.Send(new CreateDnsRecordCommand(
@@ -807,6 +975,147 @@ public sealed class NativeDeployRunner(
         {
             log.LogWarning(ex, "auto-dns {Host}: error inesperado (ignorado).", hostname);
         }
+        return null;
+    }
+
+    private async Task<string?> EnsureDirectDnsRecordAsync(string hostname, string tunnelId, CancellationToken ct)
+    {
+        var desiredTarget = TunnelCnameFor(tunnelId);
+        try
+        {
+            var zones = await mediator.Send(new ListZonesQuery(), ct).ConfigureAwait(false);
+            if (zones.IsFailure)
+            {
+                return $"auto-dns {hostname}: no se pudieron listar zonas: [{zones.Error.Code}] {zones.Error.Message}";
+            }
+            var zone = zones.Value
+                .Where(z => hostname.Equals(z.Name, StringComparison.OrdinalIgnoreCase)
+                    || hostname.EndsWith("." + z.Name, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(z => z.Name.Length)
+                .FirstOrDefault();
+            if (zone is null)
+            {
+                return $"auto-dns {hostname}: ninguna zona Cloudflare registrada cubre el hostname.";
+            }
+
+            var existing = await mediator.Send(new ListDnsRecordsQuery(zone.Id), ct).ConfigureAwait(false);
+            if (existing.IsFailure)
+            {
+                return $"auto-dns {hostname}: no se pudieron listar records: [{existing.Error.Code}] {existing.Error.Message}";
+            }
+
+            var existingRecord = existing.Value
+                .FirstOrDefault(r => string.Equals(r.Name, hostname, StringComparison.OrdinalIgnoreCase));
+            var decision = DnsRecordRules.Classify(
+                existingRecord is null
+                    ? null
+                    : new CloudflareDnsRecordInfo(
+                        existingRecord.Id,
+                        existingRecord.Type,
+                        existingRecord.Name,
+                        existingRecord.Content,
+                        existingRecord.Ttl,
+                        existingRecord.Proxied,
+                        existingRecord.Comment),
+                desiredTarget);
+            if (decision.Action == DnsRecordRuleAction.Ok)
+            {
+                log.LogDebug("auto-dns {Host}: CNAME ya apunta a {Target}.", hostname, decision.DesiredTarget);
+                return null;
+            }
+            if (decision.Action == DnsRecordRuleAction.Conflict)
+            {
+                return $"auto-dns {hostname}: record existente en conflicto ({decision.Reason}) "
+                    + $"actual='{decision.ExistingTarget}', deseado='{decision.DesiredTarget}'.";
+            }
+
+            var created = await mediator.Send(new CreateDnsRecordCommand(
+                ZoneId: zone.Id, Type: "CNAME", Name: hostname, Content: decision.DesiredTarget,
+                Ttl: 1, Proxied: true, Comment: "aethra native-deploy direct-dns"), ct).ConfigureAwait(false);
+            if (created.IsSuccess)
+            {
+                log.LogInformation("auto-dns {Host}: CNAME → {Target} creado.", hostname, decision.DesiredTarget);
+                return null;
+            }
+
+            return $"auto-dns {hostname}: no se pudo crear el CNAME: [{created.Error.Code}] {created.Error.Message}";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return $"auto-dns {hostname}: error inesperado: {ex.Message}";
+        }
+    }
+
+    private async Task<(EdgeTunnelCandidate? Candidate, string? Error)> ResolveDirectTunnelCandidateAsync(
+        string? targetVmId,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(targetVmId))
+        {
+            return (null, null);
+        }
+
+        var result = await mediator.Send(new GetTunnelForVmQuery(targetVmId), ct).ConfigureAwait(false);
+        if (result.IsFailure)
+        {
+            return (null, $"No se pudo resolver túnel Direct para la VM '{targetVmId}': [{result.Error.Code}] {result.Error.Message}");
+        }
+        if (result.Value is null)
+        {
+            return (null, null);
+        }
+
+        return (new EdgeTunnelCandidate(result.Value.TunnelId, result.Value.TargetVmId ?? targetVmId), null);
+    }
+
+    private static DirectRouteCandidate ToDirectRouteCandidate(TemplateServiceView service, string? instanceHostname)
+    {
+        var host = ServiceHostRules.Resolve(service.Hostname, instanceHostname);
+        var prefixes = ResolvePublicPrefixes(service);
+        return new DirectRouteCandidate(
+            service.Name,
+            RequiresPublicRoute: prefixes.Count > 0,
+            host.Host,
+            prefixes);
+    }
+
+    private static IReadOnlyList<string> ResolvePublicPrefixes(TemplateServiceView service)
+        => service.PathPrefixes.Count > 0
+            ? service.PathPrefixes
+            : (!string.IsNullOrWhiteSpace(service.Hostname) ? ["/"] : service.PathPrefixes);
+
+    private static void MarkDirectHostRouted(
+        string host,
+        string backend,
+        List<string> hostsTouched,
+        Dictionary<string, string> directBackendsByHost)
+    {
+        if (!hostsTouched.Contains(host, StringComparer.OrdinalIgnoreCase))
+        {
+            hostsTouched.Add(host);
+        }
+        directBackendsByHost[host] = backend;
+    }
+
+    private Task<Result<MonitorDetailDto>> CreateMonitorAsync(
+        string slug,
+        string host,
+        string monitorUrl,
+        string instanceId,
+        string projectId,
+        CancellationToken ct)
+        => mediator.Send(new CreateMonitorCommand(
+            Slug: slug, Name: host, Url: monitorUrl,
+            HttpMethod: "GET", ExpectedStatusCodes: [200, 301, 302, 307, 308],
+            IntervalSec: 120, TimeoutMs: 15000, Headers: null, BodyTemplate: null,
+            InstanceId: instanceId, ProjectId: projectId), ct);
+
+    private static string TunnelCnameFor(string tunnelId)
+    {
+        var normalized = tunnelId.Trim().TrimEnd('.');
+        return normalized.EndsWith(".cfargotunnel.com", StringComparison.OrdinalIgnoreCase)
+            ? normalized
+            : $"{normalized}.cfargotunnel.com";
     }
 
     /// <summary>
