@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using Aethra.Modules.Services.Domain;
 using Aethra.Modules.Services.Infrastructure.Provisioning;
+using Aethra.Shared.Contracts.Containers;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
@@ -24,12 +25,24 @@ namespace Aethra.Modules.Services.Infrastructure.Backup;
 public sealed class PostgresBackupEngine(
     IAdminCredentialsCodec codec,
     IManagedServiceHostResolver hostResolver,
+    ISatelliteRpcClient rpc,
+    ICentralVmIdProvider centralVm,
     ILogger<PostgresBackupEngine> logger) : IBackupEngine
 {
+    private const int RemoteDumpTimeoutSeconds = 900;
+    private const int RemoteChunkTimeoutSeconds = 60;
+
     public ServiceType Type => ServiceType.Postgres;
 
     public async Task<byte[]> CreateBackupAsync(ManagedService service, CancellationToken ct)
     {
+        // OT-008 T10: servicio en una VM distinta de la del central -> dump DENTRO del contenedor por la
+        // RPC de exec del satelite. En la VM del central (o si no se conoce) el camino es el de siempre.
+        if (BackupExecutionRules.RunsOnRemoteSatellite(service.TargetVmId, centralVm.GetCentralVmId()))
+        {
+            return await CreateRemoteBackupAsync(service, ct).ConfigureAwait(false);
+        }
+
         var admin = codec.Decode(service.AdminCredentialsCipher);
         var host = await hostResolver.ResolveAsync(service, ct).ConfigureAwait(false);
         var connString = BuildConnString(host, service.InternalPort, admin, database: admin.Username);
@@ -92,6 +105,12 @@ public sealed class PostgresBackupEngine(
     public async Task RestoreBackupAsync(ManagedService service, byte[] backupContent, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(backupContent);
+        if (BackupExecutionRules.RunsOnRemoteSatellite(service.TargetVmId, centralVm.GetCentralVmId()))
+        {
+            await RestoreRemoteBackupAsync(service, backupContent, ct).ConfigureAwait(false);
+            return;
+        }
+
         var admin = codec.Decode(service.AdminCredentialsCipher);
         var host = await hostResolver.ResolveAsync(service, ct).ConfigureAwait(false);
         var connString = BuildConnString(host, service.InternalPort, admin, database: admin.Username);
@@ -122,6 +141,70 @@ public sealed class PostgresBackupEngine(
             }
         }
         logger.LogInformation("PostgresBackupEngine: restore OK para {Slug}", service.Slug);
+    }
+
+    private async Task<byte[]> CreateRemoteBackupAsync(ManagedService service, CancellationToken ct)
+    {
+        var admin = codec.Decode(service.AdminCredentialsCipher);
+        var tag = Guid.NewGuid().ToString("N");
+        var cmd = BackupExecutionRules.BuildDumpCommand(tag, admin.Username, admin.Password, admin.Username);
+        var res = await rpc.SendExecAsync(
+            service.TargetVmId, service.ContainerName, cmd, RemoteDumpTimeoutSeconds, ct).ConfigureAwait(false);
+        var bytes = BackupExecutionRules.DecodeDumpOutput(res.ExitCode, res.TimedOut, res.Stdout, res.Stderr);
+        logger.LogInformation(
+            "PostgresBackupEngine: dump remoto de {Slug} en VM {Vm}: {Bytes} bytes (gzip)",
+            service.Slug, service.TargetVmId, bytes.Length);
+        return bytes;
+    }
+
+    private async Task RestoreRemoteBackupAsync(ManagedService service, byte[] backup, CancellationToken ct)
+    {
+        BackupExecutionRules.EnsureRestorableRemote(backup);
+        var admin = codec.Decode(service.AdminCredentialsCipher);
+        var tag = Guid.NewGuid().ToString("N");
+        var b64 = Convert.ToBase64String(backup);
+        try
+        {
+            var first = true;
+            foreach (var chunk in BackupExecutionRules.SplitBase64(b64))
+            {
+                var up = await rpc.SendExecAsync(
+                    service.TargetVmId, service.ContainerName,
+                    BackupExecutionRules.BuildRestoreAppendCommand(tag, chunk, first),
+                    RemoteChunkTimeoutSeconds, ct).ConfigureAwait(false);
+                if (up.ExitCode != 0 || up.TimedOut)
+                {
+                    throw new InvalidOperationException(
+                        $"Restore remoto: fallo la subida del backup al contenedor (exit {up.ExitCode}): {up.Stderr}");
+                }
+                first = false;
+            }
+
+            var apply = await rpc.SendExecAsync(
+                service.TargetVmId, service.ContainerName,
+                BackupExecutionRules.BuildRestoreApplyCommand(tag, admin.Username, admin.Password, admin.Username),
+                RemoteDumpTimeoutSeconds, ct).ConfigureAwait(false);
+            if (apply.ExitCode != 0 || apply.TimedOut)
+            {
+                throw new InvalidOperationException(
+                    $"Restore remoto: psql fallo (exit {apply.ExitCode}, timeout={apply.TimedOut}): {apply.Stderr}");
+            }
+        }
+        finally
+        {
+            try
+            {
+                await rpc.SendExecAsync(
+                    service.TargetVmId, service.ContainerName,
+                    BackupExecutionRules.BuildRestoreCleanupCommand(tag), RemoteChunkTimeoutSeconds,
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "PostgresBackupEngine: no se pudo limpiar /tmp del restore remoto de {Slug}", service.Slug);
+            }
+        }
+        logger.LogInformation("PostgresBackupEngine: restore remoto OK para {Slug}", service.Slug);
     }
 
     private static string BuildConnString(string host, int port, AdminCredentials admin, string database)

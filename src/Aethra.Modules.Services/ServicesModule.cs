@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
 namespace Aethra.Modules.Services;
@@ -42,6 +43,8 @@ public static class ServicesModule
         services.AddSingleton<IBindingEnvVarMapper, DefaultBindingEnvVarMapper>();
 
         // F11.3B: backups. Engines por tipo + storages por scheme + orchestrator scoped.
+        // OT-008 T10: VM del central (decide backup local vs. exec en satelite). El host puede sobreescribirla.
+        services.TryAddSingleton<ICentralVmIdProvider, ConfigurationCentralVmIdProvider>();
         services.AddScoped<IBackupEngine, PostgresBackupEngine>();
         services.AddScoped<IBackupEngine, RedisBackupEngine>();
         services.AddScoped<IBackupEngine, RabbitMqBackupEngine>();
