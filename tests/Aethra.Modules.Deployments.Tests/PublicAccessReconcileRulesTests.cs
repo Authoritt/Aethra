@@ -102,6 +102,22 @@ public sealed class PublicAccessReconcileRulesTests
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    // OT-008 H-T8-1/3 - una resolucion que lanza o devuelve bloqueo se reporta, no se descarta.
+    [Fact]
+    public void FallbackReason_reporta_el_error_cuando_la_resolucion_lanza()
+    {
+        SafeResolveRules.FallbackReason(false, "token no descifra", null).Should().Be("token no descifra");
+        SafeResolveRules.FallbackReason(false, null, null).Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void FallbackReason_reporta_el_bloqueo_y_calla_si_todo_fue_bien()
+    {
+        SafeResolveRules.FallbackReason(true, null, "ingress ilegible").Should().Be("ingress ilegible");
+        SafeResolveRules.FallbackReason(true, null, null).Should().BeNull();
+        SafeResolveRules.FallbackReason(true, null, "  ").Should().BeNull();
+    }
+
     // Guardas de CABLEADO: apps/api no tiene proyecto de tests, asi que se fija que el endpoint y el runner
     // SIGAN llamando a las reglas puras (si alguien revierte la llamada, estos tests fallan).
     [Theory]
@@ -109,6 +125,14 @@ public sealed class PublicAccessReconcileRulesTests
     [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "SafeResolveRules.TryResolveAsync(")]
     [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "FailIfIngressUnreadable: strictIngress")]
     [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "strictIngress: true")]
+    // H-T8-1: la verificacion es no estricta, protegida y reporta el motivo; H-T8-2: refresco no estricto.
+    [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "() => ResolvePublicAccessInfraForVm(instance.targetVmId, publicInfra, mediator, ct, strictIngress: false)")]
+    [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "() => ResolvePublicAccessInfraForVm(refreshedInstance.targetVmId, refreshedPublicInfra, mediator, ct, strictIngress: false)")]
+    [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "\"Tunnel resolution\"")]
+    // H-T8-3: el fallo por VM se registra; H-T8-5: rama explicita + default que lanza.
+    [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "logger.LogWarning(\"Vista de infra publica: VM")]
+    [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "case TunnelIngressStep.AlreadyPresent:")]
+    [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "throw new UnreachableException(")]
     [InlineData("apps/api/Bootstrap/NativeDeployRunner.cs", "MonitorSlugRules.DesiredHostCount(desired.Select(")]
     [InlineData("apps/api/Bootstrap/NativeDeployRunner.cs", "MonitorSlugRules.Decide(slug, host, desiredHostCount,")]
     public void El_endpoint_y_el_runner_llaman_a_las_reglas_puras(string relativePath, string expectedCall)
@@ -120,6 +144,6 @@ public sealed class PublicAccessReconcileRulesTests
         }
 
         dir.Should().NotBeNull("el test necesita localizar la raiz del repo");
-        File.ReadAllText(Path.Combine(dir!.FullName, relativePath)).Should().Contain(expectedCall);
+        File.ReadAllText(Path.Combine(dir!.FullName, relativePath)).Replace("\r\n", "\n").Should().Contain(expectedCall);
     }
 }

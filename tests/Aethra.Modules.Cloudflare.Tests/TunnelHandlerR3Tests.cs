@@ -15,6 +15,7 @@ using Xunit;
 
 namespace Aethra.Modules.Cloudflare.Tests;
 
+[Collection(TunnelLockCollection.Name)]
 public sealed class TunnelHandlerR3Tests
 {
     private static readonly DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);

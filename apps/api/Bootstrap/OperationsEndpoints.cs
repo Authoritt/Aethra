@@ -494,11 +494,12 @@ public static class OperationsEndpoints
         MonitoringDbContext monitoringDb,
         IMediator mediator,
         IConfiguration configuration,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var snapshot = await LoadSnapshot(projectsDb, null, monitoringDb, ct);
         var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
-        var infraByVm = await ResolveInfraByVmAsync(snapshot.Instances, publicInfra, mediator, ct).ConfigureAwait(false);
+        var infraByVm = await ResolveInfraByVmAsync(snapshot.Instances, publicInfra, mediator, loggerFactory.CreateLogger("Aethra.Operations.PublicAccess"), ct).ConfigureAwait(false);
         var routesByHost = await LoadRoutesByHost(proxyDb, ct);
         var groups = routesByHost
             .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
@@ -588,12 +589,13 @@ public static class OperationsEndpoints
         MonitoringDbContext monitoringDb,
         IMediator mediator,
         IConfiguration configuration,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var snapshot = await LoadSnapshot(projectsDb, null, monitoringDb, ct);
         var routesByHost = await LoadRoutesByHost(proxyDb, ct);
         var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
-        var infraByVm = await ResolveInfraByVmAsync(snapshot.Instances, publicInfra, mediator, ct).ConfigureAwait(false);
+        var infraByVm = await ResolveInfraByVmAsync(snapshot.Instances, publicInfra, mediator, loggerFactory.CreateLogger("Aethra.Operations.PublicAccess"), ct).ConfigureAwait(false);
 
         var instances = snapshot.Instances.AsEnumerable();
         if (!string.IsNullOrWhiteSpace(appEnvironmentId))
@@ -781,7 +783,7 @@ public static class OperationsEndpoints
                                 : new AppliedResource(null, result.Error.Code, result.Error.Message);
                         });
                     break;
-                default:
+                case TunnelIngressStep.AlreadyPresent:
                     actions.Add(new PublicAccessReconcileActionDto(
                         "tunnel",
                         "skipped",
@@ -790,6 +792,9 @@ public static class OperationsEndpoints
                         null,
                         null));
                     break;
+                default:
+                    // H-T8-5 - un paso nuevo del enum sin rama aqui debe fallar fuerte, no caer en «skipped».
+                    throw new UnreachableException($"TunnelIngressStep sin tratar: {tunnelStep}.");
             }
         }
 
@@ -924,7 +929,13 @@ public static class OperationsEndpoints
             var refreshedRoutesByHost = await LoadRoutesByHost(proxyDb, ct);
             var refreshedPublicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
             var refreshedInstance = refreshedSnapshot.Instances.First(i => string.Equals(i.id, appEnvironmentId, StringComparison.Ordinal));
-            refreshedPublicInfra = (await ResolvePublicAccessInfraForInstance(refreshedInstance, refreshedPublicInfra, mediator, ct).ConfigureAwait(false)).Infra;
+            // H-T8-2 - refresco de lectura tras el reconcile: no estricto (un ingress ilegible no debe tumbar la respuesta ya aplicada).
+            var refreshedResolution = await SafeResolveRules.TryResolveAsync(
+                () => ResolvePublicAccessInfraForVm(refreshedInstance.targetVmId, refreshedPublicInfra, mediator, ct, strictIngress: false), ct).ConfigureAwait(false);
+            if (refreshedResolution.Succeeded && refreshedResolution.Value.BlockedAction is null)
+            {
+                refreshedPublicInfra = refreshedResolution.Value.Infra;
+            }
             refreshedState = BuildPublicAccessState(refreshedInstance, refreshedSnapshot, refreshedRoutesByHost, refreshedPublicInfra);
         }
 
@@ -951,9 +962,30 @@ public static class OperationsEndpoints
         var routesByHost = await LoadRoutesByHost(proxyDb, ct);
         var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
         // OT-008 N4 - vista de solo lectura: la infra es la de la VM de la instancia (Direct o central).
-        publicInfra = (await ResolvePublicAccessInfraForInstance(instance, publicInfra, mediator, ct).ConfigureAwait(false)).Infra;
+        // H-T8-1 - no estricta y protegida: si la VM no se resuelve cae a la infra central y el motivo se reporta como check.
+        var viewResolution = await SafeResolveRules.TryResolveAsync(
+            () => ResolvePublicAccessInfraForVm(instance.targetVmId, publicInfra, mediator, ct, strictIngress: false), ct).ConfigureAwait(false);
+        var viewFallbackReason = SafeResolveRules.FallbackReason(
+            viewResolution.Succeeded, viewResolution.Error, viewResolution.Succeeded ? viewResolution.Value.BlockedAction?.Message : null);
+        if (viewFallbackReason is null && viewResolution.Succeeded)
+        {
+            publicInfra = viewResolution.Value.Infra;
+        }
+
         var state = BuildPublicAccessState(instance, snapshot, routesByHost, publicInfra);
         var checks = new List<PublicAccessVerificationCheckDto>();
+        if (viewFallbackReason is not null)
+        {
+            checks.Add(new PublicAccessVerificationCheckDto(
+                "resolve_tunnel",
+                "blocked",
+                "Tunnel resolution",
+                instance.targetVmId,
+                null,
+                null,
+                null,
+                viewFallbackReason));
+        }
 
         if (string.IsNullOrWhiteSpace(state.DesiredHostname) || string.IsNullOrWhiteSpace(state.DesiredUrl))
         {
@@ -1421,6 +1453,7 @@ public static class OperationsEndpoints
         VmsDbContext vmsDb,
         IMediator mediator,
         IConfiguration configuration,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var snapshot = await LoadSnapshot(projectsDb, deploymentsDb, monitoringDb, ct);
@@ -1586,7 +1619,7 @@ public static class OperationsEndpoints
 
         var routesByHost = await LoadRoutesByHost(proxyDb, ct);
         var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
-        var infraByVm = await ResolveInfraByVmAsync(snapshot.Instances, publicInfra, mediator, ct).ConfigureAwait(false);
+        var infraByVm = await ResolveInfraByVmAsync(snapshot.Instances, publicInfra, mediator, loggerFactory.CreateLogger("Aethra.Operations.PublicAccess"), ct).ConfigureAwait(false);
         foreach (var (hostname, routes) in routesByHost)
         {
             var endpoint = BuildPublicEndpoint(hostname, routes, snapshot, publicInfra, infraByVm);
@@ -1864,6 +1897,7 @@ public static class OperationsEndpoints
         IEnumerable<InstanceRow> instances,
         PublicAccessInfraSnapshot centralInfra,
         IMediator mediator,
+        ILogger logger,
         CancellationToken ct)
     {
         var byVm = new Dictionary<string, PublicAccessInfraSnapshot>(StringComparer.Ordinal);
@@ -1876,6 +1910,13 @@ public static class OperationsEndpoints
             // la cancelacion real se propaga (SafeResolveRules).
             var safe = await SafeResolveRules.TryResolveAsync(
                 () => ResolvePublicAccessInfraForVm(vmId, centralInfra, mediator, ct), ct).ConfigureAwait(false);
+            var fallbackReason = SafeResolveRules.FallbackReason(
+                safe.Succeeded, safe.Error, safe.Succeeded ? safe.Value.BlockedAction?.Message : null);
+            if (fallbackReason is not null)
+            {
+                logger.LogWarning("Vista de infra publica: VM {VmId} cae a la infra central: {Reason}", vmId, fallbackReason);
+            }
+
             if (!safe.Succeeded)
             {
                 continue;

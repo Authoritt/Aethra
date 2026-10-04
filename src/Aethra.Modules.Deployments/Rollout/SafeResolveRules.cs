@@ -26,4 +26,19 @@ public static class SafeResolveRules
             return new SafeResolution<T>(false, default, ex.Message);
         }
     }
+
+    /// <summary>
+    /// OT-008 H-T8-1/3 — motivo por el que una vista cae a la infra central: la resolución lanzó
+    /// (<paramref name="succeeded"/> false) o devolvió un bloqueo (<paramref name="blockedMessage"/>).
+    /// null = se resolvió bien y no hay nada que avisar. Nunca se descarta en silencio.
+    /// </summary>
+    public static string? FallbackReason(bool succeeded, string? error, string? blockedMessage)
+    {
+        if (!succeeded)
+        {
+            return string.IsNullOrWhiteSpace(error) ? "resolucion fallida sin detalle" : error;
+        }
+
+        return string.IsNullOrWhiteSpace(blockedMessage) ? null : blockedMessage;
+    }
 }
