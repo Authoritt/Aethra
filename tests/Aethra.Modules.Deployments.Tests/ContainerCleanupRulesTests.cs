@@ -57,6 +57,37 @@ public sealed class ContainerCleanupRulesTests
         stale.Should().Equal("yunke-cache");
     }
 
+    [Fact]
+    public void A_container_from_another_instance_whose_slug_extends_mine_is_never_selected()
+    {
+        var stale = ContainerCleanupRules.SelectStaleContainerNames(
+            containerNames: ["iot-api", "iot-stg-api", "iot-stg-worker", "iot-worker"],
+            slug: "iot",
+            templateServiceNames: ["api"],
+            managedServiceContainerNames: [],
+            otherInstanceSlugsOnVm: ["iot-stg"]);
+
+        stale.Should().Equal("iot-worker");
+    }
+
+    [Fact]
+    public void Los_siete_slugs_actuales_no_se_protegen_entre_si_por_prefijo()
+    {
+        var slugs = new[] { "cuadre", "ekippo", "knowledge", "paradoxbox", "relaycore", "terremoto", "yunke" };
+
+        foreach (var slug in slugs)
+        {
+            var stale = ContainerCleanupRules.SelectStaleContainerNames(
+                containerNames: [$"{slug}-api", $"{slug}-worker"],
+                slug: slug,
+                templateServiceNames: ["api"],
+                managedServiceContainerNames: [],
+                otherInstanceSlugsOnVm: slugs.Where(s => !string.Equals(s, slug, StringComparison.Ordinal)));
+
+            stale.Should().Equal($"{slug}-worker");
+        }
+    }
+
     private static IReadOnlyList<string> Select(
         IReadOnlyList<string> containers,
         IReadOnlyList<string> templateServices,

@@ -16,7 +16,8 @@ public static class ContainerCleanupRules
         IEnumerable<string> containerNames,
         string slug,
         IEnumerable<string> templateServiceNames,
-        IEnumerable<string> managedServiceContainerNames)
+        IEnumerable<string> managedServiceContainerNames,
+        IEnumerable<string>? otherInstanceSlugsOnVm = null)
     {
         ArgumentNullException.ThrowIfNull(containerNames);
         ArgumentNullException.ThrowIfNull(templateServiceNames);
@@ -37,9 +38,16 @@ public static class ContainerCleanupRules
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Select(n => n.Trim())
             .ToHashSet(StringComparer.Ordinal);
+        var otherInstancePrefixes = (otherInstanceSlugsOnVm ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Where(s => !string.Equals(s, normalizedSlug, StringComparison.Ordinal))
+            .Where(s => s.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(s => $"{s}-")
+            .ToHashSet(StringComparer.Ordinal);
 
         return [.. containerNames
-            .Where(n => ShouldRemove(n, prefix, activeTemplateContainers, managedContainers))
+            .Where(n => ShouldRemove(n, prefix, activeTemplateContainers, managedContainers, otherInstancePrefixes))
             .Distinct(StringComparer.Ordinal)];
     }
 
@@ -47,7 +55,8 @@ public static class ContainerCleanupRules
         string? containerName,
         string prefix,
         HashSet<string> activeTemplateContainers,
-        HashSet<string> managedContainers)
+        HashSet<string> managedContainers,
+        HashSet<string> otherInstancePrefixes)
     {
         if (string.IsNullOrWhiteSpace(containerName))
         {
@@ -57,6 +66,7 @@ public static class ContainerCleanupRules
         var name = containerName.Trim();
         return name.StartsWith(prefix, StringComparison.Ordinal)
             && !activeTemplateContainers.Contains(name)
-            && !managedContainers.Contains(name);
+            && !managedContainers.Contains(name)
+            && !otherInstancePrefixes.Any(p => name.StartsWith(p, StringComparison.Ordinal));
     }
 }
