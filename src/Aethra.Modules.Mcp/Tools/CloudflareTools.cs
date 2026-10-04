@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using Aethra.Modules.Cloudflare.Application.Dtos;
+using Aethra.Modules.Cloudflare.Domain;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Queries;
 using Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands;
@@ -8,6 +10,7 @@ using Aethra.Modules.Mcp.Security;
 using Aethra.Modules.Mcp.UseCases;
 using Aethra.Shared.Contracts.Cloudflare;
 using Aethra.Shared.Kernel.Errors;
+using Aethra.Shared.Kernel.Results;
 using MediatR;
 using Microsoft.Extensions.Configuration;
 using ModelContextProtocol.Server;
@@ -128,13 +131,17 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
 
     [McpServerTool(Name = "aethra_get_tunnel", ReadOnly = true, OpenWorld = false)]
     [Description("Devuelve el túnel CF gestionado (sin token) + su config de ingress remota actual, o null si no hay ninguno.")]
-    public async Task<object> GetTunnelAsync(CancellationToken ct)
+    public async Task<object> GetTunnelAsync(
+        [Description("UUID del túnel. Null = túnel CentralProxy histórico.")] string? tunnelId,
+        [Description("Modo opcional: central_proxy | direct.")] string? mode,
+        [Description("VM destino para resolver un túnel Direct cuando no se pasa tunnelId.")] string? targetVmId,
+        CancellationToken ct)
     {
         if (!caller.HasScope(McpScopes.CloudflareWrite))
         {
             return McpResponses.InsufficientScope(McpScopes.CloudflareWrite);
         }
-        var r = await mediator.Send(new GetTunnelQuery(), ct).ConfigureAwait(false);
+        var r = await ResolveTunnelAsync(tunnelId, mode, targetVmId, ct).ConfigureAwait(false);
         return r.IsSuccess ? McpResponses.Ok(new { tunnel = r.Value }) : McpResponses.FromError(r.Error);
     }
 
@@ -149,14 +156,22 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
         [Description("VM (vm_...) donde corre el connector (la que tiene los servicios en localhost).")] string? targetVmId,
         [Description("Servicio Aethra (default http://localhost:5080).")] string? aethraService,
         [Description("Servicio catch-all (default https://localhost:443).")] string? fallbackService,
+        [Description("Modo opcional: central_proxy | direct. Null = central_proxy.")] string? mode,
         CancellationToken ct)
     {
         if (!caller.HasScope(McpScopes.CloudflareWrite))
         {
             return McpResponses.InsufficientScope(McpScopes.CloudflareWrite);
         }
+        var parsedMode = ParseTunnelMode(mode);
+        if (parsedMode.IsFailure)
+        {
+            return McpResponses.FromError(parsedMode.Error);
+        }
+
         var r = await mediator.Send(new RegisterTunnelCommand(
-            accountId, tunnelId, name, apiToken, aethraService, fallbackService, true, targetVmId), ct).ConfigureAwait(false);
+            accountId, tunnelId, name, apiToken, aethraService, fallbackService, true, targetVmId,
+            parsedMode.Value), ct).ConfigureAwait(false);
         return r.IsSuccess ? McpResponses.Ok(new { tunnel = r.Value }) : McpResponses.FromError(r.Error);
     }
 
@@ -178,6 +193,9 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
         + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> EnsureTunnelHostnameAsync(
         [Description("Hostname (FQDN) a enrutar al proxy de Aethra.")] string hostname,
+        [Description("UUID del túnel. Null = túnel CentralProxy histórico.")] string? tunnelId,
+        [Description("Modo opcional: central_proxy | direct.")] string? mode,
+        [Description("Servicio de ingress opcional. Null = AethraService del túnel.")] string? service,
         CancellationToken ct)
     {
         if (!caller.HasScope(McpScopes.CloudflareWrite))
@@ -185,18 +203,16 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
             return McpResponses.InsufficientScope(McpScopes.CloudflareWrite);
         }
         var normalizedHost = hostname.Trim();
-        var r = await mediator.Send(new EnsureTunnelHostnameCommand(normalizedHost), ct).ConfigureAwait(false);
+        var dnsTarget = await ResolveTunnelDnsTargetAsync(tunnelId, mode, ct).ConfigureAwait(false);
+        if (dnsTarget.IsFailure)
+        {
+            return McpResponses.FromError(dnsTarget.Error);
+        }
+
+        var r = await mediator.Send(new EnsureTunnelHostnameCommand(normalizedHost, tunnelId, service), ct).ConfigureAwait(false);
         if (r.IsFailure)
         {
             return McpResponses.FromError(r.Error);
-        }
-
-        var tunnelCname = configuration["NativeDeploy:TunnelCname"];
-        if (string.IsNullOrWhiteSpace(tunnelCname))
-        {
-            return McpResponses.FromError(Error.Conflict(
-                "cloudflare.tunnel_cname_missing",
-                "NativeDeploy:TunnelCname no esta configurado; no se puede crear el CNAME."));
         }
 
         var zones = await mediator.Send(new ListZonesQuery(), ct).ConfigureAwait(false);
@@ -223,7 +239,17 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
         }
         var existing = records.Value
             .FirstOrDefault(x => string.Equals(x.Name, normalizedHost, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null
+        var tunnelCname = dnsTarget.Value.Target;
+        if (dnsTarget.Value.Strict)
+        {
+            if (existing is not null && !ExistingCnameMatches(existing.Type, existing.Content, tunnelCname))
+            {
+                return McpResponses.FromError(Error.Conflict(
+                    "cloudflare.hostname_record_conflict",
+                    $"El record existente para '{normalizedHost}' no apunta al túnel esperado '{NormalizeDnsTarget(tunnelCname)}'."));
+            }
+        }
+        else if (existing is not null
             && !string.Equals(existing.Type, "CNAME", StringComparison.OrdinalIgnoreCase))
         {
             return McpResponses.FromError(Error.Conflict(
@@ -274,13 +300,27 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
         + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> RemoveTunnelHostnameAsync(
         [Description("Hostname (FQDN) a quitar.")] string hostname,
+        [Description("UUID del túnel. Null = túnel CentralProxy histórico.")] string? tunnelId,
+        [Description("Modo opcional: central_proxy | direct.")] string? mode,
         CancellationToken ct)
     {
         if (!caller.HasScope(McpScopes.CloudflareWrite))
         {
             return McpResponses.InsufficientScope(McpScopes.CloudflareWrite);
         }
-        var r = await mediator.Send(new RemoveTunnelHostnameCommand(hostname), ct).ConfigureAwait(false);
+        var parsedMode = ParseTunnelMode(mode);
+        if (parsedMode.IsFailure)
+        {
+            return McpResponses.FromError(parsedMode.Error);
+        }
+        if (parsedMode.Value == TunnelMode.Direct && string.IsNullOrWhiteSpace(tunnelId))
+        {
+            return McpResponses.FromError(Error.Validation(
+                "cloudflare.direct_tunnel_id_required",
+                "tunnelId es obligatorio para quitar hostnames de un túnel Direct."));
+        }
+
+        var r = await mediator.Send(new RemoveTunnelHostnameCommand(hostname, tunnelId), ct).ConfigureAwait(false);
         return r.IsSuccess ? McpResponses.Ok(new { hostname, status = "removed" }) : McpResponses.FromError(r.Error);
     }
 
@@ -289,13 +329,150 @@ public sealed class CloudflareTools(IMediator mediator, IMcpCallerContext caller
         + " [Sin dry_run: esta operacion se ejecuta de inmediato, no se puede simular.]")]
     public async Task<object> DeployTunnelConnectorAsync(
         [Description("VM (vm_...) destino. Si null, usa la TargetVmId del túnel.")] string? vmId,
+        [Description("UUID del túnel. Opcional; se usa para resolver su TargetVmId si es Direct.")] string? tunnelId,
+        [Description("Modo opcional: central_proxy | direct.")] string? mode,
         CancellationToken ct)
     {
         if (!caller.HasScope(McpScopes.CloudflareWrite))
         {
             return McpResponses.InsufficientScope(McpScopes.CloudflareWrite);
         }
-        await mediator.Publish(new TunnelConnectorDeployRequestedIntegrationEvent(vmId, "mcp"), ct).ConfigureAwait(false);
-        return McpResponses.Ok(new { status = "queued", note = "Connector desplegándose en background." });
+        var resolvedVmId = vmId;
+        if (!string.IsNullOrWhiteSpace(tunnelId) || IsDirectMode(mode))
+        {
+            var tunnel = await ResolveTunnelAsync(tunnelId, mode, vmId, ct).ConfigureAwait(false);
+            if (tunnel.IsFailure)
+            {
+                return McpResponses.FromError(tunnel.Error);
+            }
+            resolvedVmId = tunnel.Value?.TargetVmId ?? resolvedVmId;
+        }
+
+        await mediator.Publish(new TunnelConnectorDeployRequestedIntegrationEvent(resolvedVmId, "mcp"), ct).ConfigureAwait(false);
+        return McpResponses.Ok(new { status = "queued", vmId = resolvedVmId, note = "Connector desplegándose en background." });
     }
+
+    private async Task<Result<CloudflareTunnelDto?>> ResolveTunnelAsync(
+        string? tunnelId,
+        string? mode,
+        string? targetVmId,
+        CancellationToken ct)
+    {
+        var parsedMode = ParseTunnelMode(mode);
+        if (parsedMode.IsFailure)
+        {
+            return parsedMode.Error;
+        }
+
+        if (parsedMode.Value == TunnelMode.Direct && string.IsNullOrWhiteSpace(tunnelId))
+        {
+            if (string.IsNullOrWhiteSpace(targetVmId))
+            {
+                return Error.Validation(
+                    "cloudflare.direct_selector_required",
+                    "mode=direct requiere tunnelId o targetVmId.");
+            }
+
+            return await mediator.Send(new GetTunnelForVmQuery(targetVmId.Trim()), ct).ConfigureAwait(false);
+        }
+
+        var r = await mediator.Send(new GetTunnelQuery(tunnelId), ct).ConfigureAwait(false);
+        if (r.IsFailure)
+        {
+            return r.Error;
+        }
+        if (r.Value is not null && parsedMode.Value is not null && !ModeMatches(r.Value.Mode, parsedMode.Value.Value))
+        {
+            return Error.NotFound(
+                "cloudflare.tunnel_mode_mismatch",
+                $"El túnel '{r.Value.TunnelId}' no coincide con mode={mode}.");
+        }
+
+        return r;
+    }
+
+    private async Task<Result<TunnelDnsTarget>> ResolveTunnelDnsTargetAsync(string? tunnelId, string? mode, CancellationToken ct)
+    {
+        var parsedMode = ParseTunnelMode(mode);
+        if (parsedMode.IsFailure)
+        {
+            return parsedMode.Error;
+        }
+
+        if (parsedMode.Value == TunnelMode.Direct || !string.IsNullOrWhiteSpace(tunnelId))
+        {
+            if (string.IsNullOrWhiteSpace(tunnelId))
+            {
+                return Error.Validation(
+                    "cloudflare.direct_tunnel_id_required",
+                    "tunnelId es obligatorio para asegurar DNS de un túnel Direct.");
+            }
+
+            var tunnel = await mediator.Send(new GetTunnelQuery(tunnelId), ct).ConfigureAwait(false);
+            if (tunnel.IsFailure)
+            {
+                return tunnel.Error;
+            }
+            if (tunnel.Value is null)
+            {
+                return Error.NotFound("tunnel.none", "No hay túnel gestionado registrado.");
+            }
+            if (parsedMode.Value is not null && !ModeMatches(tunnel.Value.Mode, parsedMode.Value.Value))
+            {
+                return Error.NotFound(
+                    "cloudflare.tunnel_mode_mismatch",
+                    $"El túnel '{tunnel.Value.TunnelId}' no coincide con mode={mode}.");
+            }
+
+            if (string.Equals(tunnel.Value.Mode, "direct", StringComparison.OrdinalIgnoreCase))
+            {
+                return new TunnelDnsTarget($"{tunnel.Value.TunnelId}.cfargotunnel.com", Strict: true);
+            }
+        }
+
+        var tunnelCname = configuration["NativeDeploy:TunnelCname"];
+        if (string.IsNullOrWhiteSpace(tunnelCname))
+        {
+            return Error.Conflict(
+                "cloudflare.tunnel_cname_missing",
+                "NativeDeploy:TunnelCname no esta configurado; no se puede crear el CNAME.");
+        }
+
+        return new TunnelDnsTarget(tunnelCname, Strict: false);
+    }
+
+    private static Result<TunnelMode?> ParseTunnelMode(string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode))
+        {
+            return Result<TunnelMode?>.Success(null);
+        }
+
+        return mode.Trim().ToLowerInvariant().Replace("-", "_") switch
+        {
+            "centralproxy" or "central_proxy" => Result<TunnelMode?>.Success(TunnelMode.CentralProxy),
+            "direct" => Result<TunnelMode?>.Success(TunnelMode.Direct),
+            _ => Error.Validation("cloudflare.tunnel_mode_invalid", "Modo de túnel no soportado."),
+        };
+    }
+
+    private static bool IsDirectMode(string? mode)
+        => string.Equals(mode?.Trim().Replace("-", "_"), "direct", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ModeMatches(string value, TunnelMode mode)
+        => mode switch
+        {
+            TunnelMode.CentralProxy => string.Equals(value, "central_proxy", StringComparison.OrdinalIgnoreCase),
+            TunnelMode.Direct => string.Equals(value, "direct", StringComparison.OrdinalIgnoreCase),
+            _ => false,
+        };
+
+    private static bool ExistingCnameMatches(string type, string content, string desiredTarget)
+        => string.Equals(type, "CNAME", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(NormalizeDnsTarget(content), NormalizeDnsTarget(desiredTarget), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeDnsTarget(string target)
+        => target.Trim().TrimEnd('.');
+
+    private sealed record TunnelDnsTarget(string Target, bool Strict);
 }

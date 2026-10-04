@@ -78,7 +78,7 @@ public static class NativeDeployEndpoints
             CloudflareConnectorDeployer deployer,
             CancellationToken ct) =>
         {
-            var r = await deployer.DeployAsync(body?.VmId, ct);
+            var r = await deployer.DeployAsync(body?.VmId, body?.TunnelId, body?.Mode, ct);
             return r.Success
                 ? Results.Ok(new { vmId = r.VmId, container = r.ContainerName })
                 : Results.Problem(r.Error);
@@ -103,7 +103,7 @@ public static class NativeDeployEndpoints
 
     public sealed record DeployNativeRequest(string? Hostname, string? ServiceName = null);
 
-    public sealed record DeployConnectorRequest(string? VmId);
+    public sealed record DeployConnectorRequest(string? VmId, string? TunnelId = null, string? Mode = null);
 
     public sealed record SetInstanceEnvVarsRequest(IReadOnlyList<InstanceEnvVarItem>? Vars);
 

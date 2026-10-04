@@ -1,3 +1,5 @@
+using Aethra.Modules.Cloudflare.Application.Dtos;
+using Aethra.Modules.Cloudflare.Domain;
 using Aethra.Modules.Cloudflare.Infrastructure.Cloudflare;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Queries;
@@ -128,14 +130,34 @@ public static class CloudflareEndpoints
         // -----------------------------------------------------------------------------
         var tunnels = app.MapGroup("/api/cloudflare/tunnel").WithTags("Cloudflare");
 
-        tunnels.MapGet("/", async (IMediator m, CancellationToken ct) =>
-            Results.Ok((await m.Send(new GetTunnelQuery(), ct)).Value))
+        tunnels.MapGet("/", async (
+            [FromQuery] string? tunnelId,
+            [FromQuery] string? mode,
+            [FromQuery] string? targetVmId,
+            IMediator m,
+            CancellationToken ct) =>
+        {
+            var r = await ResolveTunnelAsync(m, tunnelId, mode, targetVmId, ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
+        })
             .RequireAuthorization(ScopeRead)
             .WithName("GetCloudflareTunnel");
 
-        tunnels.MapDelete("/", async (IMediator m, CancellationToken ct) =>
+        tunnels.MapDelete("/", async ([FromQuery] string? tunnelId, [FromQuery] string? mode, IMediator m, CancellationToken ct) =>
         {
-            var r = await m.Send(new DeleteTunnelCommand(), ct);
+            var parsedMode = ParseTunnelMode(mode);
+            if (parsedMode.IsFailure)
+            {
+                return MapError(parsedMode.Error);
+            }
+            if (parsedMode.Value == TunnelMode.Direct && string.IsNullOrWhiteSpace(tunnelId))
+            {
+                return MapError(Error.Validation(
+                    "cloudflare.direct_tunnel_id_required",
+                    "tunnelId es obligatorio para borrar un túnel Direct desde este endpoint."));
+            }
+
+            var r = await m.Send(new DeleteTunnelCommand(tunnelId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         })
         .RequireAuthorization(ScopeWrite)
@@ -143,9 +165,16 @@ public static class CloudflareEndpoints
 
         tunnels.MapPost("/", async ([FromBody] RegisterTunnelRequest body, IMediator m, CancellationToken ct) =>
         {
+            var mode = ParseTunnelMode(body.Mode);
+            if (mode.IsFailure)
+            {
+                return MapError(mode.Error);
+            }
+
             var r = await m.Send(new RegisterTunnelCommand(
                 body.AccountId, body.TunnelId, body.Name, body.ApiToken,
-                body.AethraService, body.FallbackService, body.FallbackNoTlsVerify ?? true, body.TargetVmId), ct);
+                body.AethraService, body.FallbackService, body.FallbackNoTlsVerify ?? true,
+                body.TargetVmId, mode.Value), ct);
             return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
         })
         .RequireAuthorization(ScopeWrite)
@@ -153,10 +182,22 @@ public static class CloudflareEndpoints
 
         tunnels.MapPost("/ingress", async ([FromBody] SetTunnelIngressRequest body, IMediator m, CancellationToken ct) =>
         {
+            var parsedMode = ParseTunnelMode(body.Mode);
+            if (parsedMode.IsFailure)
+            {
+                return MapError(parsedMode.Error);
+            }
+            if (parsedMode.Value == TunnelMode.Direct && string.IsNullOrWhiteSpace(body.TunnelId))
+            {
+                return MapError(Error.Validation(
+                    "cloudflare.direct_tunnel_id_required",
+                    "tunnelId es obligatorio para reemplazar ingress de un túnel Direct."));
+            }
+
             var rules = (body.Ingress ?? [])
                 .Select(r => new TunnelIngressRule(string.IsNullOrWhiteSpace(r.Hostname) ? null : r.Hostname, r.Service, r.NoTlsVerify ?? false))
                 .ToList();
-            var r = await m.Send(new SetTunnelIngressCommand(rules), ct);
+            var r = await m.Send(new SetTunnelIngressCommand(rules, body.TunnelId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         })
         .RequireAuthorization(ScopeWrite)
@@ -176,18 +217,16 @@ public static class CloudflareEndpoints
             IConfiguration configuration,
             CancellationToken ct) =>
         {
-            var r = await m.Send(new EnsureTunnelHostnameCommand(body.Hostname), ct);
+            var dnsTarget = await ResolveTunnelDnsTargetAsync(m, configuration, body.TunnelId, body.Mode, ct);
+            if (dnsTarget.IsFailure)
+            {
+                return MapError(dnsTarget.Error);
+            }
+
+            var r = await m.Send(new EnsureTunnelHostnameCommand(body.Hostname, body.TunnelId, body.Service), ct);
             if (r.IsFailure)
             {
                 return MapError(r.Error);
-            }
-
-            var tunnelCname = configuration["NativeDeploy:TunnelCname"];
-            if (string.IsNullOrWhiteSpace(tunnelCname))
-            {
-                return MapError(Error.Conflict(
-                    "cloudflare.tunnel_cname_missing",
-                    "NativeDeploy:TunnelCname no esta configurado; no se puede crear el CNAME."));
             }
 
             var hostname = body.Hostname.Trim();
@@ -215,7 +254,17 @@ public static class CloudflareEndpoints
             }
             var existing = records.Value
                 .FirstOrDefault(x => string.Equals(x.Name, hostname, StringComparison.OrdinalIgnoreCase));
-            if (existing is not null
+            var tunnelCname = dnsTarget.Value.Target;
+            if (dnsTarget.Value.Strict)
+            {
+                if (existing is not null && !ExistingCnameMatches(existing.Type, existing.Content, tunnelCname))
+                {
+                    return MapError(Error.Conflict(
+                        "cloudflare.hostname_record_conflict",
+                        $"El record existente para '{hostname}' no apunta al túnel esperado '{NormalizeDnsTarget(tunnelCname)}'."));
+                }
+            }
+            else if (existing is not null
                 && !string.Equals(existing.Type, "CNAME", StringComparison.OrdinalIgnoreCase))
             {
                 return MapError(Error.Conflict(
@@ -246,7 +295,19 @@ public static class CloudflareEndpoints
 
         tunnels.MapPost("/remove-hostname", async ([FromBody] TunnelHostnameRequest body, IMediator m, CancellationToken ct) =>
         {
-            var r = await m.Send(new RemoveTunnelHostnameCommand(body.Hostname), ct);
+            var parsedMode = ParseTunnelMode(body.Mode);
+            if (parsedMode.IsFailure)
+            {
+                return MapError(parsedMode.Error);
+            }
+            if (parsedMode.Value == TunnelMode.Direct && string.IsNullOrWhiteSpace(body.TunnelId))
+            {
+                return MapError(Error.Validation(
+                    "cloudflare.direct_tunnel_id_required",
+                    "tunnelId es obligatorio para quitar hostnames de un túnel Direct."));
+            }
+
+            var r = await m.Send(new RemoveTunnelHostnameCommand(body.Hostname, body.TunnelId), ct);
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         })
         .RequireAuthorization(ScopeWrite)
@@ -257,10 +318,11 @@ public static class CloudflareEndpoints
 
     public sealed record RegisterTunnelRequest(
         string AccountId, string TunnelId, string Name, string ApiToken,
-        string? AethraService, string? FallbackService, bool? FallbackNoTlsVerify, string? TargetVmId);
-    public sealed record SetTunnelIngressRequest(IReadOnlyList<TunnelIngressItem>? Ingress);
+        string? AethraService, string? FallbackService, bool? FallbackNoTlsVerify, string? TargetVmId,
+        string? Mode = null);
+    public sealed record SetTunnelIngressRequest(IReadOnlyList<TunnelIngressItem>? Ingress, string? TunnelId = null, string? Mode = null);
     public sealed record TunnelIngressItem(string? Hostname, string Service, bool? NoTlsVerify);
-    public sealed record TunnelHostnameRequest(string Hostname);
+    public sealed record TunnelHostnameRequest(string Hostname, string? TunnelId = null, string? Mode = null, string? Service = null);
 
     public sealed record RegisterZoneRequest(string ZoneId, string ApiToken);
     public sealed record RotateTokenRequest(string ApiToken);
@@ -279,6 +341,133 @@ public static class CloudflareEndpoints
 
     private static IResult ToResult<T>(Result<T> r)
         => r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
+
+    private static async Task<Result<CloudflareTunnelDto?>> ResolveTunnelAsync(
+        IMediator mediator,
+        string? tunnelId,
+        string? mode,
+        string? targetVmId,
+        CancellationToken ct)
+    {
+        var parsedMode = ParseTunnelMode(mode);
+        if (parsedMode.IsFailure)
+        {
+            return parsedMode.Error;
+        }
+
+        if (parsedMode.Value == TunnelMode.Direct && string.IsNullOrWhiteSpace(tunnelId))
+        {
+            if (string.IsNullOrWhiteSpace(targetVmId))
+            {
+                return Error.Validation(
+                    "cloudflare.direct_selector_required",
+                    "mode=direct requiere tunnelId o targetVmId.");
+            }
+
+            return await mediator.Send(new GetTunnelForVmQuery(targetVmId.Trim()), ct);
+        }
+
+        var r = await mediator.Send(new GetTunnelQuery(tunnelId), ct);
+        if (r.IsFailure)
+        {
+            return r.Error;
+        }
+        if (r.Value is not null && parsedMode.Value is not null && !ModeMatches(r.Value.Mode, parsedMode.Value.Value))
+        {
+            return Error.NotFound(
+                "cloudflare.tunnel_mode_mismatch",
+                $"El túnel '{r.Value.TunnelId}' no coincide con mode={mode}.");
+        }
+
+        return r;
+    }
+
+    private static async Task<Result<TunnelDnsTarget>> ResolveTunnelDnsTargetAsync(
+        IMediator mediator,
+        IConfiguration configuration,
+        string? tunnelId,
+        string? mode,
+        CancellationToken ct)
+    {
+        var parsedMode = ParseTunnelMode(mode);
+        if (parsedMode.IsFailure)
+        {
+            return parsedMode.Error;
+        }
+
+        if (parsedMode.Value == TunnelMode.Direct || !string.IsNullOrWhiteSpace(tunnelId))
+        {
+            if (string.IsNullOrWhiteSpace(tunnelId))
+            {
+                return Error.Validation(
+                    "cloudflare.direct_tunnel_id_required",
+                    "tunnelId es obligatorio para asegurar DNS de un túnel Direct.");
+            }
+
+            var tunnel = await mediator.Send(new GetTunnelQuery(tunnelId), ct);
+            if (tunnel.IsFailure)
+            {
+                return tunnel.Error;
+            }
+            if (tunnel.Value is null)
+            {
+                return Error.NotFound("tunnel.none", "No hay túnel gestionado registrado.");
+            }
+            if (parsedMode.Value is not null && !ModeMatches(tunnel.Value.Mode, parsedMode.Value.Value))
+            {
+                return Error.NotFound(
+                    "cloudflare.tunnel_mode_mismatch",
+                    $"El túnel '{tunnel.Value.TunnelId}' no coincide con mode={mode}.");
+            }
+
+            if (string.Equals(tunnel.Value.Mode, "direct", StringComparison.OrdinalIgnoreCase))
+            {
+                return new TunnelDnsTarget($"{tunnel.Value.TunnelId}.cfargotunnel.com", Strict: true);
+            }
+        }
+
+        var tunnelCname = configuration["NativeDeploy:TunnelCname"];
+        if (string.IsNullOrWhiteSpace(tunnelCname))
+        {
+            return Error.Conflict(
+                "cloudflare.tunnel_cname_missing",
+                "NativeDeploy:TunnelCname no esta configurado; no se puede crear el CNAME.");
+        }
+
+        return new TunnelDnsTarget(tunnelCname, Strict: false);
+    }
+
+    private static Result<TunnelMode?> ParseTunnelMode(string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode))
+        {
+            return Result<TunnelMode?>.Success(null);
+        }
+
+        return mode.Trim().ToLowerInvariant().Replace("-", "_") switch
+        {
+            "centralproxy" or "central_proxy" => Result<TunnelMode?>.Success(TunnelMode.CentralProxy),
+            "direct" => Result<TunnelMode?>.Success(TunnelMode.Direct),
+            _ => Error.Validation("cloudflare.tunnel_mode_invalid", "Modo de túnel no soportado."),
+        };
+    }
+
+    private static bool ModeMatches(string value, TunnelMode mode)
+        => mode switch
+        {
+            TunnelMode.CentralProxy => string.Equals(value, "central_proxy", StringComparison.OrdinalIgnoreCase),
+            TunnelMode.Direct => string.Equals(value, "direct", StringComparison.OrdinalIgnoreCase),
+            _ => false,
+        };
+
+    private static bool ExistingCnameMatches(string type, string content, string desiredTarget)
+        => string.Equals(type, "CNAME", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(NormalizeDnsTarget(content), NormalizeDnsTarget(desiredTarget), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeDnsTarget(string target)
+        => target.Trim().TrimEnd('.');
+
+    private sealed record TunnelDnsTarget(string Target, bool Strict);
 
     private static IResult MapError(Error e) => e.Type switch
     {

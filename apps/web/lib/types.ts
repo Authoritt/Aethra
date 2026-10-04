@@ -898,6 +898,7 @@ export interface CloudflareTunnelDto {
   aethraService: string;
   fallbackService: string;
   fallbackNoTlsVerify: boolean;
+  mode: "central_proxy" | "direct" | string;
   targetVmId: string | null;
   createdAt: string;
   updatedAt: string;
