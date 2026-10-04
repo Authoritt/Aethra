@@ -506,6 +506,138 @@ public sealed class TunnelHandlerR3Tests
         result.Value.Should().BeNull();
     }
 
+    // OT-008 H3 - cableado del timeout del lock: el HANDLER (no solo LockTimeoutFor) decide si lo pasa.
+    [Fact]
+    public async Task Ensure_with_explicit_tunnel_id_returns_ingress_lock_timeout_when_lock_is_held()
+    {
+        using var shortTimeout = ShortLockTimeout(TimeSpan.FromMilliseconds(150));
+        var dbName = Guid.NewGuid().ToString("N");
+        await using (var seed = NewDb(dbName))
+        {
+            AddTunnel(seed, "direct-lock-tun", TunnelMode.Direct, Now, "vm-bogota");
+            await seed.SaveChangesAsync();
+        }
+
+        await using var firstDb = NewDb(dbName);
+        await using var secondDb = NewDb(dbName);
+        var (api, entered, release) = BlockingApi("direct-lock-tun");
+        var first = SendEnsureAsync(
+            firstDb, api, new EnsureTunnelHostnameCommand("one.example.com", "direct-lock-tun", "http://one:80"));
+        (await Task.WhenAny(entered.Task, Task.Delay(TimeSpan.FromSeconds(2)))).Should().Be(entered.Task);
+
+        // Si el handler dejara de pasar el timeout, esto esperaria el lock hasta que el token lo cancele.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var second = await SendEnsureAsync(
+            secondDb, api, new EnsureTunnelHostnameCommand("two.example.com", "direct-lock-tun", "http://two:80"), cts.Token);
+
+        second.IsFailure.Should().BeTrue();
+        second.Error.Code.Should().Be("cloudflare.ingress_lock_timeout");
+        release.SetResult();
+        (await first).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Ensure_on_central_without_tunnel_id_waits_for_the_lock_instead_of_timing_out()
+    {
+        using var shortTimeout = ShortLockTimeout(TimeSpan.FromMilliseconds(100));
+        var dbName = Guid.NewGuid().ToString("N");
+        await using (var seed = NewDb(dbName))
+        {
+            AddTunnel(seed, "central-wait-tun", TunnelMode.CentralProxy, Now);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var firstDb = NewDb(dbName);
+        await using var secondDb = NewDb(dbName);
+        var (api, entered, release) = BlockingApi("central-wait-tun");
+        var first = SendEnsureAsync(firstDb, api, new EnsureTunnelHostnameCommand("one.example.com"));
+        (await Task.WhenAny(entered.Task, Task.Delay(TimeSpan.FromSeconds(2)))).Should().Be(entered.Task);
+
+        var second = SendEnsureAsync(secondDb, api, new EnsureTunnelHostnameCommand("two.example.com"));
+        await Task.Delay(500); // 5x el timeout: en Central NO debe vencer (R2: espera de siempre).
+        second.IsCompleted.Should().BeFalse("en Central la espera del lock no tiene timeout");
+        release.SetResult();
+
+        (await first).IsSuccess.Should().BeTrue();
+        var secondResult = await second;
+        secondResult.IsSuccess.Should().BeTrue();
+    }
+
+    // OT-008 H2 - «ingress no leida» no es «host ausente».
+    [Fact]
+    public async Task GetTunnelForVm_strict_returns_ingress_unreadable_when_cloudflare_api_fails()
+    {
+        await using var db = NewDb();
+        AddTunnel(db, "direct-tun", TunnelMode.Direct, Now, "vm-bogota");
+        await db.SaveChangesAsync();
+        var api = new FakeCloudflareApi
+        {
+            OnGetAsync = _ => throw new CloudflareApiException(500, 0, "boom"),
+        };
+
+        var result = await SendGetTunnelForVmAsync(
+            db, api, new GetTunnelForVmQuery("vm-bogota", FailIfIngressUnreadable: true));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("tunnel.ingress_unreadable");
+        result.Error.Message.Should().Contain("No se pudo leer la ingress del tunel direct-tun");
+    }
+
+    [Fact]
+    public async Task GetTunnelForVm_default_keeps_returning_tunnel_without_ingress_when_cloudflare_api_fails()
+    {
+        await using var db = NewDb();
+        AddTunnel(db, "direct-tun", TunnelMode.Direct, Now, "vm-bogota");
+        await db.SaveChangesAsync();
+        var api = new FakeCloudflareApi
+        {
+            OnGetAsync = _ => throw new CloudflareApiException(500, 0, "boom"),
+        };
+
+        var result = await SendGetTunnelForVmAsync(db, api, new GetTunnelForVmQuery("vm-bogota"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Ingress.Should().BeEmpty();
+    }
+
+    private static (FakeCloudflareApi Api, TaskCompletionSource Entered, TaskCompletionSource Release) BlockingApi(string tunnelId)
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var blockFirstGet = true;
+        var api = new FakeCloudflareApi
+        {
+            OnGetAsync = _ =>
+            {
+                if (!blockFirstGet)
+                {
+                    return Task.CompletedTask;
+                }
+
+                blockFirstGet = false;
+                entered.SetResult();
+                return release.Task;
+            },
+        };
+        api.SetIngress(tunnelId, [new TunnelIngressRule(null, "https://localhost:443")]);
+        return (api, entered, release);
+    }
+
+    private static RestoreLockTimeout ShortLockTimeout(TimeSpan value)
+    {
+        var support = typeof(CloudflareTunnel).Assembly
+            .GetType("Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands.TunnelIngressSupport")!;
+        var property = support.GetProperty("LockTimeout", BindingFlags.Static | BindingFlags.Public)!;
+        var original = (TimeSpan)property.GetValue(null)!;
+        property.SetValue(null, value);
+        return new RestoreLockTimeout(property, original);
+    }
+
+    private sealed class RestoreLockTimeout(PropertyInfo property, TimeSpan original) : IDisposable
+    {
+        public void Dispose() => property.SetValue(null, original);
+    }
+
     private static CloudflareDbContext NewDb(string? databaseName = null)
         => new(new DbContextOptionsBuilder<CloudflareDbContext>()
             .UseInMemoryDatabase(databaseName ?? Guid.NewGuid().ToString("N"))

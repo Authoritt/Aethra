@@ -34,7 +34,9 @@ public sealed record SetTunnelIngressCommand(
 
 internal static class TunnelIngressSupport
 {
-    private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(30);
+    /// <summary>Timeout del lock de ingress cuando hay TunnelId explicito (Direct). Escribible solo para tests.</summary>
+    public static TimeSpan LockTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> TunnelLocks = new(StringComparer.Ordinal);
 
     public static async Task<(CloudflareTunnel? Tunnel, string Token)> LoadAsync(

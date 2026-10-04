@@ -742,47 +742,55 @@ public static class OperationsEndpoints
                 "cloudflare.tunnel_missing",
                 "Registra o promueve un tunnel remoto antes de asegurar ingress."));
         }
-        else if (IsDirectTunnel(publicInfra.Tunnel))
-        {
-            // N1 - Direct no se reescribe aqui: el ingress lo escribe el runner con {slug}-{svc}:{port},
-            // distinto de Instance.ContainerName. Solo se comprueba que el host exista.
-            var directDecision = PublicAccessReconcileRules.DecideDirectIngress(
-                HasTunnelIngress(desiredHostname, publicInfra),
-                desiredHostname,
-                publicInfra.Tunnel.TunnelId);
-            var directSkipped = directDecision.Action == DirectIngressAction.Skip;
-            actions.Add(new PublicAccessReconcileActionDto(
-                directSkipped ? "tunnel" : "direct_ingress",
-                directSkipped ? "skipped" : "blocked",
-                directDecision.Message,
-                publicInfra.Tunnel.Id,
-                directSkipped ? null : "tunnel.direct_redeploy_required",
-                directSkipped ? null : "Redespliega la instancia para que el runner escriba el ingress Direct."));
-        }
-        else if (!HasTunnelIngress(desiredHostname, publicInfra))
-        {
-            await ApplyAction(
-                actions,
-                dryRun,
-                "ensure_tunnel_ingress",
-                $"Asegurar ingress del tunnel para {desiredHostname}.",
-                async () =>
-                {
-                    var result = await mediator.Send(new EnsureTunnelHostnameCommand(desiredHostname), ct).ConfigureAwait(false);
-                    return result.IsSuccess
-                        ? new AppliedResource(publicInfra.Tunnel.Id, null, null)
-                        : new AppliedResource(null, result.Error.Code, result.Error.Message);
-                });
-        }
         else
         {
-            actions.Add(new PublicAccessReconcileActionDto(
-                "tunnel",
-                "skipped",
-                "El tunnel ya tiene ingress para el hostname.",
-                publicInfra.Tunnel.Id,
-                null,
-                null));
+            // H3 - la decision vive en PublicAccessReconcileRules.PlanTunnelIngress (probada): Direct nunca llega a Ensure.
+            var tunnelStep = PublicAccessReconcileRules.PlanTunnelIngress(
+                IsDirectTunnel(publicInfra.Tunnel),
+                HasTunnelIngress(desiredHostname, publicInfra));
+            switch (tunnelStep)
+            {
+                case TunnelIngressStep.DirectSkip:
+                case TunnelIngressStep.DirectBlockedRedeploy:
+                    // N1 - Direct no se reescribe aqui: el ingress lo escribe el runner con {slug}-{svc}:{port},
+                    // distinto de Instance.ContainerName. Solo se comprueba que el host exista.
+                    var directDecision = PublicAccessReconcileRules.DecideDirectIngress(
+                        tunnelStep == TunnelIngressStep.DirectSkip,
+                        desiredHostname,
+                        publicInfra.Tunnel.TunnelId);
+                    var directSkipped = directDecision.Action == DirectIngressAction.Skip;
+                    actions.Add(new PublicAccessReconcileActionDto(
+                        directSkipped ? "tunnel" : "direct_ingress",
+                        directSkipped ? "skipped" : "blocked",
+                        directDecision.Message,
+                        publicInfra.Tunnel.Id,
+                        directSkipped ? null : "tunnel.direct_redeploy_required",
+                        directSkipped ? null : "Redespliega la instancia para que el runner escriba el ingress Direct."));
+                    break;
+                case TunnelIngressStep.EnsureIngress:
+                    await ApplyAction(
+                        actions,
+                        dryRun,
+                        "ensure_tunnel_ingress",
+                        $"Asegurar ingress del tunnel para {desiredHostname}.",
+                        async () =>
+                        {
+                            var result = await mediator.Send(new EnsureTunnelHostnameCommand(desiredHostname), ct).ConfigureAwait(false);
+                            return result.IsSuccess
+                                ? new AppliedResource(publicInfra.Tunnel.Id, null, null)
+                                : new AppliedResource(null, result.Error.Code, result.Error.Message);
+                        });
+                    break;
+                default:
+                    actions.Add(new PublicAccessReconcileActionDto(
+                        "tunnel",
+                        "skipped",
+                        "El tunnel ya tiene ingress para el hostname.",
+                        publicInfra.Tunnel.Id,
+                        null,
+                        null));
+                    break;
+            }
         }
 
         var existingRoutes = routesByHost.GetValueOrDefault(desiredHostname) ?? [];
@@ -1804,7 +1812,9 @@ public static class OperationsEndpoints
             IMediator mediator,
             CancellationToken ct)
     {
-        return await ResolvePublicAccessInfraForVm(instance.targetVmId, centralInfra, mediator, ct).ConfigureAwait(false);
+        // H2 - el reconcile necesita saber si la ingress NO se pudo leer (no confundirlo con «host ausente»).
+        return await ResolvePublicAccessInfraForVm(instance.targetVmId, centralInfra, mediator, ct, strictIngress: true)
+            .ConfigureAwait(false);
     }
 
     private static async Task<(PublicAccessInfraSnapshot Infra, PublicAccessReconcileActionDto? BlockedAction)>
@@ -1812,14 +1822,15 @@ public static class OperationsEndpoints
             string? targetVmId,
             PublicAccessInfraSnapshot centralInfra,
             IMediator mediator,
-            CancellationToken ct)
+            CancellationToken ct,
+            bool strictIngress = false)
     {
         if (string.IsNullOrWhiteSpace(targetVmId))
         {
             return (centralInfra, null);
         }
 
-        var directResult = await mediator.Send(new GetTunnelForVmQuery(targetVmId), ct)
+        var directResult = await mediator.Send(new GetTunnelForVmQuery(targetVmId, FailIfIngressUnreadable: strictIngress), ct)
             .ConfigureAwait(false);
         if (directResult.IsFailure)
         {
@@ -1861,7 +1872,16 @@ public static class OperationsEndpoints
             .Where(v => !string.IsNullOrWhiteSpace(v))
             .Distinct(StringComparer.Ordinal))
         {
-            var resolved = await ResolvePublicAccessInfraForVm(vmId, centralInfra, mediator, ct).ConfigureAwait(false);
+            // H1 - una VM cuya resolucion lanza (token que no descifra...) cae a la infra central;
+            // la cancelacion real se propaga (SafeResolveRules).
+            var safe = await SafeResolveRules.TryResolveAsync(
+                () => ResolvePublicAccessInfraForVm(vmId, centralInfra, mediator, ct), ct).ConfigureAwait(false);
+            if (!safe.Succeeded)
+            {
+                continue;
+            }
+
+            var resolved = safe.Value;
             if (resolved.BlockedAction is null && !ReferenceEquals(resolved.Infra, centralInfra))
             {
                 byVm[vmId] = resolved.Infra;

@@ -9,6 +9,22 @@ public enum DirectIngressAction
     BlockedRedeploy = 1,
 }
 
+/// <summary>Qué hace el reconcile con el ingress del túnel de un host (OT-008 H3).</summary>
+public enum TunnelIngressStep
+{
+    /// <summary>Central: el host ya tiene ingress, nada que hacer.</summary>
+    AlreadyPresent = 0,
+
+    /// <summary>Central: falta el ingress y el reconcile lo asegura (EnsureTunnelHostnameCommand).</summary>
+    EnsureIngress = 1,
+
+    /// <summary>Direct: el host ya tiene ingress, el backend lo gestiona el despliegue.</summary>
+    DirectSkip = 2,
+
+    /// <summary>Direct: falta el ingress; se bloquea y NUNCA se llama a Ensure.</summary>
+    DirectBlockedRedeploy = 3,
+}
+
 public sealed record DirectIngressDecision(DirectIngressAction Action, string Message);
 
 public sealed record PublicAccessInfraChoice(bool IsDirect, string? TunnelCname);
@@ -31,6 +47,16 @@ public static class PublicAccessReconcileRules
         => string.IsNullOrWhiteSpace(directTunnelId)
             ? new PublicAccessInfraChoice(false, centralTunnelCname)
             : new PublicAccessInfraChoice(true, TunnelCnameFor(directTunnelId.Trim()));
+
+    /// <summary>
+    /// Paso del reconcile sobre el ingress del túnel. Con túnel Direct jamás devuelve
+    /// <see cref="TunnelIngressStep.EnsureIngress"/>: reescribir el ingress con
+    /// <c>Instance.ContainerName</c> dejaría el host apuntando a un contenedor inexistente (N1).
+    /// </summary>
+    public static TunnelIngressStep PlanTunnelIngress(bool isDirectTunnel, bool hostHasIngress)
+        => isDirectTunnel
+            ? (hostHasIngress ? TunnelIngressStep.DirectSkip : TunnelIngressStep.DirectBlockedRedeploy)
+            : (hostHasIngress ? TunnelIngressStep.AlreadyPresent : TunnelIngressStep.EnsureIngress);
 
     public static DirectIngressDecision DecideDirectIngress(bool hostHasIngress, string hostname, string tunnelId)
         => hostHasIngress

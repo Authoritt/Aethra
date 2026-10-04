@@ -58,4 +58,68 @@ public sealed class PublicAccessReconcileRulesTests
         MonitorSlugRules.Decide("yunke", "a.example.com", desired, "https://a.example.com/", null)
             .InitialSlug.Should().Be("a");
     }
+
+    // OT-008 H3 - Direct jamas llega a EnsureTunnelHostnameCommand.
+    [Theory]
+    [InlineData(true, true, TunnelIngressStep.DirectSkip)]
+    [InlineData(true, false, TunnelIngressStep.DirectBlockedRedeploy)]
+    [InlineData(false, true, TunnelIngressStep.AlreadyPresent)]
+    [InlineData(false, false, TunnelIngressStep.EnsureIngress)]
+    public void PlanTunnelIngress_solo_asegura_ingress_en_central(bool isDirect, bool hostHasIngress, TunnelIngressStep expected)
+    {
+        PublicAccessReconcileRules.PlanTunnelIngress(isDirect, hostHasIngress).Should().Be(expected);
+    }
+
+    // OT-008 H1 - una VM que lanza al resolverse no tumba la vista.
+    [Fact]
+    public async Task TryResolve_convierte_una_excepcion_en_fallo_sin_propagarla()
+    {
+        var result = await SafeResolveRules.TryResolveAsync<int>(
+            () => throw new InvalidOperationException("token no descifra"), CancellationToken.None);
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Contain("token no descifra");
+    }
+
+    [Fact]
+    public async Task TryResolve_devuelve_el_valor_cuando_no_falla()
+    {
+        var result = await SafeResolveRules.TryResolveAsync(() => Task.FromResult(7), CancellationToken.None);
+
+        result.Succeeded.Should().BeTrue();
+        result.Value.Should().Be(7);
+    }
+
+    [Fact]
+    public async Task TryResolve_propaga_la_cancelacion_real()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await SafeResolveRules.TryResolveAsync<int>(
+            () => throw new OperationCanceledException(cts.Token), cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    // Guardas de CABLEADO: apps/api no tiene proyecto de tests, asi que se fija que el endpoint y el runner
+    // SIGAN llamando a las reglas puras (si alguien revierte la llamada, estos tests fallan).
+    [Theory]
+    [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "PublicAccessReconcileRules.PlanTunnelIngress(")]
+    [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "SafeResolveRules.TryResolveAsync(")]
+    [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "FailIfIngressUnreadable: strictIngress")]
+    [InlineData("apps/api/Bootstrap/OperationsEndpoints.cs", "strictIngress: true")]
+    [InlineData("apps/api/Bootstrap/NativeDeployRunner.cs", "MonitorSlugRules.DesiredHostCount(desired.Select(")]
+    [InlineData("apps/api/Bootstrap/NativeDeployRunner.cs", "MonitorSlugRules.Decide(slug, host, desiredHostCount,")]
+    public void El_endpoint_y_el_runner_llaman_a_las_reglas_puras(string relativePath, string expectedCall)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Aethra.slnx")))
+        {
+            dir = dir.Parent;
+        }
+
+        dir.Should().NotBeNull("el test necesita localizar la raiz del repo");
+        File.ReadAllText(Path.Combine(dir!.FullName, relativePath)).Should().Contain(expectedCall);
+    }
 }
