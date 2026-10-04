@@ -245,6 +245,57 @@ public sealed class TunnelHandlerR3Tests
     }
 
     [Fact]
+    public async Task Ensure_with_null_tunnel_id_propagates_cancellation_while_waiting_for_ingress_lock()
+    {
+        var dbName = Guid.NewGuid().ToString("N");
+        await using (var seed = NewDb(dbName))
+        {
+            AddTunnel(seed, "central-tun", TunnelMode.CentralProxy, Now);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var firstDb = NewDb(dbName);
+        await using var secondDb = NewDb(dbName);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var blockFirstGet = true;
+        var api = new FakeCloudflareApi
+        {
+            OnGetAsync = _ =>
+            {
+                if (!blockFirstGet)
+                {
+                    return Task.CompletedTask;
+                }
+
+                blockFirstGet = false;
+                entered.SetResult();
+                return release.Task;
+            }
+        };
+        api.SetIngress("central-tun", [new TunnelIngressRule(null, "https://localhost:443")]);
+
+        var first = SendEnsureAsync(
+            firstDb,
+            api,
+            new EnsureTunnelHostnameCommand("one.example.com"),
+            CancellationToken.None);
+        (await Task.WhenAny(entered.Task, Task.Delay(TimeSpan.FromSeconds(1)))).Should().Be(entered.Task);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        var second = async () => await SendEnsureAsync(
+            secondDb,
+            api,
+            new EnsureTunnelHostnameCommand("two.example.com"),
+            cts.Token);
+
+        await second.Should().ThrowAsync<OperationCanceledException>();
+
+        release.SetResult();
+        (await first).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task SetIngress_fails_when_rules_are_missing_after_put_reread()
     {
         await using var db = NewDb();
@@ -365,6 +416,60 @@ public sealed class TunnelHandlerR3Tests
     }
 
     [Fact]
+    public async Task GetTunnelForVm_with_include_ingress_false_does_not_decode_token()
+    {
+        await using var db = NewDb();
+        AddTunnel(db, "direct-tun", TunnelMode.Direct, Now, "vm-bogota");
+        await db.SaveChangesAsync();
+
+        var api = new FakeCloudflareApi();
+
+        var result = await SendGetTunnelForVmAsync(
+            db,
+            api,
+            new GetTunnelForVmQuery("vm-bogota", IncludeIngress: false),
+            new ThrowingDecodeTokenCodec());
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.TunnelId.Should().Be("direct-tun");
+        result.Value.Ingress.Should().BeEmpty();
+        api.GetCalls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetCentralProxyTunnel_with_include_ingress_false_does_not_decode_token()
+    {
+        await using var db = NewDb();
+        AddTunnel(db, "central-tun", TunnelMode.CentralProxy, Now, "vm_ET39W0FFRCCQS60DY90B516MPR");
+        await db.SaveChangesAsync();
+
+        var result = await SendGetCentralProxyTunnelAsync(
+            db,
+            new FakeCloudflareApi(),
+            new GetCentralProxyTunnelQuery(IncludeIngress: false),
+            new ThrowingDecodeTokenCodec());
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.TunnelId.Should().Be("central-tun");
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("  ", false)]
+    [InlineData("direct-tun", true)]
+    public void Lock_timeout_applies_only_with_explicit_tunnel_id(string? tunnelId, bool expectsTimeout)
+    {
+        var support = typeof(CloudflareTunnel).Assembly
+            .GetType("Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands.TunnelIngressSupport")!;
+        var timeout = (TimeSpan?)support
+            .GetMethod("LockTimeoutFor", BindingFlags.Static | BindingFlags.Public)!
+            .Invoke(null, [tunnelId]);
+
+        timeout.HasValue.Should().Be(expectsTimeout);
+    }
+
+    [Fact]
     public async Task GetCentralProxyTunnel_with_include_ingress_false_returns_target_vm_without_cloudflare_api()
     {
         await using var db = NewDb();
@@ -401,9 +506,9 @@ public sealed class TunnelHandlerR3Tests
         result.Value.Should().BeNull();
     }
 
-    private static CloudflareDbContext NewDb()
+    private static CloudflareDbContext NewDb(string? databaseName = null)
         => new(new DbContextOptionsBuilder<CloudflareDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .UseInMemoryDatabase(databaseName ?? Guid.NewGuid().ToString("N"))
             .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options);
 
@@ -432,11 +537,13 @@ public sealed class TunnelHandlerR3Tests
     private static Task<Result> SendEnsureAsync(
         CloudflareDbContext db,
         FakeCloudflareApi api,
-        EnsureTunnelHostnameCommand command)
+        EnsureTunnelHostnameCommand command,
+        CancellationToken cancellationToken = default)
         => InvokeCommandAsync(
             "Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands.EnsureTunnelHostnameHandler",
             [db, api, new PlainTextTokenCodec(), new FixedClock(Now.AddMinutes(5))],
-            command);
+            command,
+            cancellationToken);
 
     private static Task<Result> SendRemoveAsync(
         CloudflareDbContext db,
@@ -483,19 +590,21 @@ public sealed class TunnelHandlerR3Tests
     private static Task<Result<CloudflareTunnelDto?>> SendGetTunnelForVmAsync(
         CloudflareDbContext db,
         FakeCloudflareApi api,
-        GetTunnelForVmQuery query)
+        GetTunnelForVmQuery query,
+        ICloudflareTokenCodec? codec = null)
         => InvokeQueryAsync<CloudflareTunnelDto?>(
             "Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries.GetTunnelForVmHandler",
-            [db, api, new PlainTextTokenCodec()],
+            [db, api, codec ?? new PlainTextTokenCodec()],
             query);
 
     private static Task<Result<CloudflareTunnelDto?>> SendGetCentralProxyTunnelAsync(
         CloudflareDbContext db,
         FakeCloudflareApi api,
-        GetCentralProxyTunnelQuery query)
+        GetCentralProxyTunnelQuery query,
+        ICloudflareTokenCodec? codec = null)
         => InvokeQueryAsync<CloudflareTunnelDto?>(
             "Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries.GetCentralProxyTunnelHandler",
-            [db, api, new PlainTextTokenCodec()],
+            [db, api, codec ?? new PlainTextTokenCodec()],
             query);
 
     private static async Task<Result> SendRunSerializedAsync(
@@ -516,12 +625,13 @@ public sealed class TunnelHandlerR3Tests
     private static async Task<Result> InvokeCommandAsync<TCommand>(
         string handlerTypeName,
         object[] dependencies,
-        TCommand command)
+        TCommand command,
+        CancellationToken cancellationToken = default)
     {
         var handler = CreateHandler(handlerTypeName, dependencies);
         var task = (Task<Result>)handler.GetType()
             .GetMethod("Handle", BindingFlags.Instance | BindingFlags.Public)!
-            .Invoke(handler, [command!, CancellationToken.None])!;
+            .Invoke(handler, [command!, cancellationToken])!;
         return await task.ConfigureAwait(false);
     }
 
@@ -555,6 +665,13 @@ public sealed class TunnelHandlerR3Tests
         public string Decode(byte[] cipher) => Encoding.UTF8.GetString(cipher);
     }
 
+    private sealed class ThrowingDecodeTokenCodec : ICloudflareTokenCodec
+    {
+        public byte[] Encode(string token) => Encoding.UTF8.GetBytes(token);
+
+        public string Decode(byte[] cipher) => throw new InvalidOperationException("Decode should not be called.");
+    }
+
     private sealed class FixedClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
@@ -570,6 +687,8 @@ public sealed class TunnelHandlerR3Tests
 
         public List<string> PutCalls { get; } = [];
 
+        public Func<string, Task>? OnGetAsync { get; init; }
+
         public void SetIngress(string tunnelId, IReadOnlyList<TunnelIngressRule> rules)
             => _ingress[tunnelId] = rules.ToList();
 
@@ -582,8 +701,20 @@ public sealed class TunnelHandlerR3Tests
             CancellationToken cancellationToken)
         {
             GetCalls.Add(tunnelId);
+            var delay = OnGetAsync?.Invoke(tunnelId) ?? Task.CompletedTask;
+            if (!delay.IsCompletedSuccessfully)
+            {
+                return CompleteGetAfterDelayAsync(delay, tunnelId);
+            }
+
             return Task.FromResult<IReadOnlyList<TunnelIngressRule>>(
                 _ingress.TryGetValue(tunnelId, out var rules) ? rules.ToList() : []);
+        }
+
+        private async Task<IReadOnlyList<TunnelIngressRule>> CompleteGetAfterDelayAsync(Task delay, string tunnelId)
+        {
+            await delay.ConfigureAwait(false);
+            return _ingress.TryGetValue(tunnelId, out var rules) ? rules.ToList() : [];
         }
 
         public Task PutTunnelIngressAsync(

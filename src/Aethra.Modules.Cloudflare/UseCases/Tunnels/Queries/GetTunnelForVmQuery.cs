@@ -33,7 +33,7 @@ internal sealed class GetTunnelForVmHandler(
         }
 
         var (tunnel, token) = await TunnelIngressSupport
-            .LoadForVmAsync(db, codec, request.TargetVmId, cancellationToken)
+            .LoadForVmAsync(db, codec, request.TargetVmId, cancellationToken, request.IncludeIngress)
             .ConfigureAwait(false);
         if (tunnel is null)
         {
@@ -68,7 +68,7 @@ internal sealed class GetCentralProxyTunnelHandler(
         CancellationToken cancellationToken)
     {
         var (tunnel, token) = await TunnelIngressSupport
-            .LoadAsync(db, codec, cancellationToken)
+            .LoadAsync(db, codec, cancellationToken, includeToken: request.IncludeIngress)
             .ConfigureAwait(false);
         if (tunnel is null)
         {
