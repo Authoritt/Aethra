@@ -124,6 +124,7 @@ public sealed class NativeDeployRunner(
         {
             return Fail(placementError, hostname);
         }
+        LogCentralPlacementWarnings(instance.Slug, edgePlacement);
         var edgeRouting = edgePlacement.Kind == EdgePlacementKind.Direct
             ? new EdgeRoutingContext(edgePlacement.Kind, edgePlacement.Tunnel!.TunnelId)
             : null;
@@ -635,6 +636,7 @@ public sealed class NativeDeployRunner(
             log.LogError("reconcile-routing {Inst}: {Error}", instance.Slug, placementError);
             return;
         }
+        LogCentralPlacementWarnings(instance.Slug, edgePlacement);
         var edgeRouting = edgePlacement.Kind == EdgePlacementKind.Direct
             ? new EdgeRoutingContext(edgePlacement.Kind, edgePlacement.Tunnel!.TunnelId)
             : null;
@@ -827,7 +829,7 @@ public sealed class NativeDeployRunner(
         }
 
         // 4) Monitor por cada host tocado (slug propio cuando hay varios hosts).
-        var desiredHostCount = desired.Select(d => d.Host).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        var desiredHostCount = MonitorSlugRules.DesiredHostCount(desired.Select(d => d.Host));
         foreach (var host in hostsTouched)
         {
             var monitorUrl = $"https://{host}/";
@@ -1071,6 +1073,16 @@ public sealed class NativeDeployRunner(
         {
             return (new EdgePlacementDecision(EdgePlacementKind.Failed, null, []),
                 $"No se pudo resolver la colocación edge: {ex.Message}");
+        }
+    }
+
+    // OT-008 N5 — el aviso «VM sin túnel Direct» (EdgePlacementRules) no debe perderse en silencio:
+    // en Central el deploy sigue igual que siempre, pero queda traza en el log.
+    private void LogCentralPlacementWarnings(string slug, EdgePlacementDecision placement)
+    {
+        if (placement.Kind == EdgePlacementKind.Central && placement.Warnings.Count > 0)
+        {
+            log.LogWarning("edge-placement {Slug}: {Warnings}", slug, string.Join("; ", placement.Warnings));
         }
     }
 

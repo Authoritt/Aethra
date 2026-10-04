@@ -9,6 +9,18 @@ public sealed record MonitorSlugDecision(string InitialSlug, string DesiredSlug,
 /// </summary>
 public static class MonitorSlugRules
 {
+    /// <summary>
+    /// OT-008 T7b (#6/N6) — nº de hosts DESEADOS (distintos, sin distinguir mayúsculas, sin vacíos).
+    /// El slug del monitor depende de esto y no de los hosts tocados en esta pasada (en Direct
+    /// los hosts "tocados" dependen del éxito de cada ruta).
+    /// </summary>
+    public static int DesiredHostCount(IEnumerable<string?> desiredHosts)
+        => desiredHosts
+            .Where(h => !string.IsNullOrWhiteSpace(h))
+            .Select(h => h!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
     public static string InitialSlug(string instanceSlug, string host, int hostCount)
         => hostCount > 1 ? FirstLabel(host) : NormalizeSlug(instanceSlug);
 

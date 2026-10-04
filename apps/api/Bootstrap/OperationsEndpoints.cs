@@ -1,6 +1,7 @@
 using Aethra.Modules.Deployments.Infrastructure;
 using Aethra.Modules.Deployments.Domain.Build;
 using Aethra.Modules.Deployments.Domain.Deployment;
+using Aethra.Modules.Deployments.Rollout;
 using Aethra.Modules.Cloudflare.Application.Dtos;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Commands;
 using Aethra.Modules.Cloudflare.UseCases.DnsRecords.Queries;
@@ -497,12 +498,13 @@ public static class OperationsEndpoints
     {
         var snapshot = await LoadSnapshot(projectsDb, null, monitoringDb, ct);
         var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
+        var infraByVm = await ResolveInfraByVmAsync(snapshot.Instances, publicInfra, mediator, ct).ConfigureAwait(false);
         var routesByHost = await LoadRoutesByHost(proxyDb, ct);
         var groups = routesByHost
             .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
             .Select(kvp =>
             {
-                return BuildPublicEndpoint(kvp.Key, kvp.Value, snapshot, publicInfra);
+                return BuildPublicEndpoint(kvp.Key, kvp.Value, snapshot, publicInfra, infraByVm);
             })
             .Where(e => MatchesPublicEndpointFilters(e, q, health, appId, environment, dns, tunnel, monitor))
             .OrderBy(e => e.HealthStatus == "healthy")
@@ -591,6 +593,7 @@ public static class OperationsEndpoints
         var snapshot = await LoadSnapshot(projectsDb, null, monitoringDb, ct);
         var routesByHost = await LoadRoutesByHost(proxyDb, ct);
         var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
+        var infraByVm = await ResolveInfraByVmAsync(snapshot.Instances, publicInfra, mediator, ct).ConfigureAwait(false);
 
         var instances = snapshot.Instances.AsEnumerable();
         if (!string.IsNullOrWhiteSpace(appEnvironmentId))
@@ -598,7 +601,7 @@ public static class OperationsEndpoints
             instances = instances.Where(i => string.Equals(i.id, appEnvironmentId, StringComparison.Ordinal));
         }
 
-        var states = instances.Select(instance => BuildPublicAccessState(instance, snapshot, routesByHost, publicInfra))
+        var states = instances.Select(instance => BuildPublicAccessState(instance, snapshot, routesByHost, InfraForVm(instance.targetVmId, publicInfra, infraByVm)))
         .OrderBy(s => s.HealthStatus == "healthy")
         .ThenBy(s => s.AppName)
         .ThenBy(s => s.TenantName)
@@ -739,34 +742,33 @@ public static class OperationsEndpoints
                 "cloudflare.tunnel_missing",
                 "Registra o promueve un tunnel remoto antes de asegurar ingress."));
         }
-        else if (IsDirectTunnel(publicInfra.Tunnel) && backendUrl is null)
+        else if (IsDirectTunnel(publicInfra.Tunnel))
         {
+            // N1 - Direct no se reescribe aqui: el ingress lo escribe el runner con {slug}-{svc}:{port},
+            // distinto de Instance.ContainerName. Solo se comprueba que el host exista.
+            var directDecision = PublicAccessReconcileRules.DecideDirectIngress(
+                HasTunnelIngress(desiredHostname, publicInfra),
+                desiredHostname,
+                publicInfra.Tunnel.TunnelId);
+            var directSkipped = directDecision.Action == DirectIngressAction.Skip;
             actions.Add(new PublicAccessReconcileActionDto(
-                "configure_direct_backend",
-                "blocked",
-                "La instancia tiene túnel Direct, pero no tiene puerto primario para construir el backend del ingress.",
+                directSkipped ? "tunnel" : "direct_ingress",
+                directSkipped ? "skipped" : "blocked",
+                directDecision.Message,
                 publicInfra.Tunnel.Id,
-                "app_environment.primary_port_missing",
-                "Configura al menos un puerto del contenedor antes de asegurar ingress Direct."));
+                directSkipped ? null : "tunnel.direct_redeploy_required",
+                directSkipped ? null : "Redespliega la instancia para que el runner escriba el ingress Direct."));
         }
-        else if (!HasTunnelIngress(
-            desiredHostname,
-            publicInfra,
-            IsDirectTunnel(publicInfra.Tunnel) ? backendUrl : null))
+        else if (!HasTunnelIngress(desiredHostname, publicInfra))
         {
             await ApplyAction(
                 actions,
                 dryRun,
                 "ensure_tunnel_ingress",
-                IsDirectTunnel(publicInfra.Tunnel)
-                    ? $"Asegurar ingress Direct del tunnel {publicInfra.Tunnel.TunnelId} para {desiredHostname} -> {backendUrl}."
-                    : $"Asegurar ingress del tunnel para {desiredHostname}.",
+                $"Asegurar ingress del tunnel para {desiredHostname}.",
                 async () =>
                 {
-                    var result = await mediator.Send(new EnsureTunnelHostnameCommand(
-                        desiredHostname,
-                        IsDirectTunnel(publicInfra.Tunnel) ? publicInfra.Tunnel!.TunnelId : null,
-                        IsDirectTunnel(publicInfra.Tunnel) ? backendUrl : null), ct).ConfigureAwait(false);
+                    var result = await mediator.Send(new EnsureTunnelHostnameCommand(desiredHostname), ct).ConfigureAwait(false);
                     return result.IsSuccess
                         ? new AppliedResource(publicInfra.Tunnel.Id, null, null)
                         : new AppliedResource(null, result.Error.Code, result.Error.Message);
@@ -940,6 +942,8 @@ public static class OperationsEndpoints
 
         var routesByHost = await LoadRoutesByHost(proxyDb, ct);
         var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
+        // OT-008 N4 - vista de solo lectura: la infra es la de la VM de la instancia (Direct o central).
+        publicInfra = (await ResolvePublicAccessInfraForInstance(instance, publicInfra, mediator, ct).ConfigureAwait(false)).Infra;
         var state = BuildPublicAccessState(instance, snapshot, routesByHost, publicInfra);
         var checks = new List<PublicAccessVerificationCheckDto>();
 
@@ -1574,9 +1578,10 @@ public static class OperationsEndpoints
 
         var routesByHost = await LoadRoutesByHost(proxyDb, ct);
         var publicInfra = await LoadPublicAccessInfra(mediator, configuration, ct);
+        var infraByVm = await ResolveInfraByVmAsync(snapshot.Instances, publicInfra, mediator, ct).ConfigureAwait(false);
         foreach (var (hostname, routes) in routesByHost)
         {
-            var endpoint = BuildPublicEndpoint(hostname, routes, snapshot, publicInfra);
+            var endpoint = BuildPublicEndpoint(hostname, routes, snapshot, publicInfra, infraByVm);
             foreach (var code in endpoint.Issues)
             {
                 issues.Add(new OperationalIssueDto(
@@ -1799,19 +1804,29 @@ public static class OperationsEndpoints
             IMediator mediator,
             CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(instance.targetVmId))
+        return await ResolvePublicAccessInfraForVm(instance.targetVmId, centralInfra, mediator, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<(PublicAccessInfraSnapshot Infra, PublicAccessReconcileActionDto? BlockedAction)>
+        ResolvePublicAccessInfraForVm(
+            string? targetVmId,
+            PublicAccessInfraSnapshot centralInfra,
+            IMediator mediator,
+            CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(targetVmId))
         {
             return (centralInfra, null);
         }
 
-        var directResult = await mediator.Send(new GetTunnelForVmQuery(instance.targetVmId), ct)
+        var directResult = await mediator.Send(new GetTunnelForVmQuery(targetVmId), ct)
             .ConfigureAwait(false);
         if (directResult.IsFailure)
         {
             return (centralInfra, new PublicAccessReconcileActionDto(
                 "resolve_tunnel",
                 "blocked",
-                $"No se pudo resolver el túnel Direct para la VM {instance.targetVmId}.",
+                $"No se pudo resolver el túnel Direct para la VM {targetVmId}.",
                 null,
                 directResult.Error.Code,
                 directResult.Error.Message));
@@ -1821,12 +1836,46 @@ public static class OperationsEndpoints
             return (centralInfra, null);
         }
 
+        var choice = PublicAccessReconcileRules.ChooseInfra(directResult.Value.TunnelId, centralInfra.TunnelCname);
         return (centralInfra with
         {
-            TunnelCname = TunnelCnameFor(directResult.Value.TunnelId),
+            TunnelCname = choice.TunnelCname,
             Tunnel = directResult.Value,
         }, null);
     }
+
+    /// <summary>
+    /// OT-008 N4 - infra por VM para las vistas de solo lectura (una consulta por VM distinta).
+    /// Solo contiene las VMs con tunel Direct; el resto cae a la infra central. Un fallo al resolver
+    /// una VM tampoco rompe la vista: usa la infra central, como hacia antes de T6.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<string, PublicAccessInfraSnapshot>> ResolveInfraByVmAsync(
+        IEnumerable<InstanceRow> instances,
+        PublicAccessInfraSnapshot centralInfra,
+        IMediator mediator,
+        CancellationToken ct)
+    {
+        var byVm = new Dictionary<string, PublicAccessInfraSnapshot>(StringComparer.Ordinal);
+        foreach (var vmId in instances
+            .Select(i => i.targetVmId)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Distinct(StringComparer.Ordinal))
+        {
+            var resolved = await ResolvePublicAccessInfraForVm(vmId, centralInfra, mediator, ct).ConfigureAwait(false);
+            if (resolved.BlockedAction is null && !ReferenceEquals(resolved.Infra, centralInfra))
+            {
+                byVm[vmId] = resolved.Infra;
+            }
+        }
+
+        return byVm;
+    }
+
+    private static PublicAccessInfraSnapshot InfraForVm(
+        string? targetVmId,
+        PublicAccessInfraSnapshot centralInfra,
+        IReadOnlyDictionary<string, PublicAccessInfraSnapshot> infraByVm)
+        => targetVmId is not null && infraByVm.TryGetValue(targetVmId, out var infra) ? infra : centralInfra;
 
     private static DnsRecordRow? FindDnsRecord(string hostname, PublicAccessInfraSnapshot infra)
         => infra.DnsRecords
@@ -1849,9 +1898,6 @@ public static class OperationsEndpoints
 
     private static bool IsDirectTunnel(CloudflareTunnelDto? tunnel)
         => string.Equals(tunnel?.Mode, "direct", StringComparison.OrdinalIgnoreCase);
-
-    private static string TunnelCnameFor(string tunnelId)
-        => $"{tunnelId}.cfargotunnel.com";
 
     private static (string ReconciliationPolicy, string EdgeTlsPolicy) ResolvePublicAccessPolicy(string environment)
         => environment.Equals("production", StringComparison.OrdinalIgnoreCase)
@@ -1892,8 +1938,8 @@ public static class OperationsEndpoints
         var zone = desiredHostname is null ? null : FindZoneForHostname(desiredHostname, publicInfra);
         var dnsTargetConfigured = string.IsNullOrWhiteSpace(publicInfra.TunnelCname)
             || string.Equals(dnsRecord?.content, publicInfra.TunnelCname, StringComparison.OrdinalIgnoreCase);
-        var expectedIngressService = IsDirectTunnel(publicInfra.Tunnel) ? BuildBackendUrl(instance) : null;
-        var tunnelConfigured = desiredHostname is not null && HasTunnelIngress(desiredHostname, publicInfra, expectedIngressService);
+        // N1 - en Direct el backend del ingress lo escribe el runner ({slug}-{svc}); aqui solo se comprueba el host.
+        var tunnelConfigured = desiredHostname is not null && HasTunnelIngress(desiredHostname, publicInfra);
         var issues = new List<string>();
 
         if (desiredHostname is null)
@@ -2324,9 +2370,11 @@ public static class OperationsEndpoints
         string hostname,
         IReadOnlyList<RouteRow> routeRows,
         OpsSnapshot snapshot,
-        PublicAccessInfraSnapshot publicInfra)
+        PublicAccessInfraSnapshot centralInfra,
+        IReadOnlyDictionary<string, PublicAccessInfraSnapshot> infraByVm)
     {
         var owner = ResolveEndpointOwner(hostname, routeRows, snapshot);
+        var publicInfra = InfraForVm(owner?.machineId, centralInfra, infraByVm);
         var monitor = snapshot.MonitorsByUrlHost.GetValueOrDefault(hostname);
         var dnsRecord = FindDnsRecord(hostname, publicInfra);
         var dnsTargetConfigured = string.IsNullOrWhiteSpace(publicInfra.TunnelCname)
