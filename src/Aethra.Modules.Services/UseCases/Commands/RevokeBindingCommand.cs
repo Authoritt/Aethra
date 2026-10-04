@@ -66,10 +66,19 @@ internal sealed class RevokeBindingHandler(
             var outcome = await provisioner.RevokeAsync(svc, binding, credentials, cancellationToken);
             if (!outcome.Success)
             {
-                logger.LogWarning("Revoke del provisioner fallo para binding {Id}: {Code} {Msg}",
-                    binding.Id, outcome.ErrorCode, outcome.ErrorMessage);
-                return Error.Conflict(outcome.ErrorCode ?? "revoke_failed",
-                    outcome.ErrorMessage ?? "Revocacion fallo");
+                if (IsConnectionUnavailable(outcome))
+                {
+                    logger.LogWarning(
+                        "Binding {Id} se revoca solo en metadata/env vars: el provisioner no pudo conectar al servicio {ServiceId}: {Code} {Msg}",
+                        binding.Id, svc.Id, outcome.ErrorCode, outcome.ErrorMessage);
+                }
+                else
+                {
+                    logger.LogWarning("Revoke del provisioner fallo para binding {Id}: {Code} {Msg}",
+                        binding.Id, outcome.ErrorCode, outcome.ErrorMessage);
+                    return Error.Conflict(outcome.ErrorCode ?? "revoke_failed",
+                        outcome.ErrorMessage ?? "Revocacion fallo");
+                }
             }
         }
 
@@ -81,5 +90,25 @@ internal sealed class RevokeBindingHandler(
             cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success();
+    }
+
+    private static bool IsConnectionUnavailable(RevokeOutcome outcome)
+    {
+        var code = outcome.ErrorCode ?? string.Empty;
+        if (code.EndsWith(".connect_failed", StringComparison.Ordinal) ||
+            string.Equals(code, "postgres.revoke_failed", StringComparison.Ordinal) ||
+            string.Equals(code, "rabbit.http_error", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var message = outcome.ErrorMessage ?? string.Empty;
+        return message.Contains("UnableToConnect", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("no connection", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("connection refused", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("actively refused", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("could not connect", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("failed to connect", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("server selection timeout", StringComparison.OrdinalIgnoreCase);
     }
 }

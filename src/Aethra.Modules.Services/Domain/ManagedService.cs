@@ -12,6 +12,8 @@ namespace Aethra.Modules.Services.Domain;
 /// </summary>
 public sealed class ManagedService : AggregateRoot<ManagedServiceId>
 {
+    public const string RuntimeContainerMissingErrorCode = "runtime.container_missing";
+
     public string Slug { get; private set; }
     public string Name { get; private set; }
     public ServiceType Type { get; private set; }
@@ -138,6 +140,23 @@ public sealed class ManagedService : AggregateRoot<ManagedServiceId>
         UpdatedAt = now;
         Raise(new ManagedServiceFailedEvent(Id, Slug, code, message));
     }
+
+    public void MarkRuntimeContainerMissing(DateTimeOffset now)
+    {
+        var message = $"Container '{ContainerName}' no existe en la VM '{TargetVmId}'.";
+        if (Status is ManagedServiceStatus.Failed &&
+            string.Equals(ErrorCode, RuntimeContainerMissingErrorCode, StringComparison.Ordinal) &&
+            string.Equals(ErrorMessage, message, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        MarkFailed(RuntimeContainerMissingErrorCode, message, now);
+    }
+
+    public bool IsRuntimeContainerMissing()
+        => Status is ManagedServiceStatus.Failed &&
+           string.Equals(ErrorCode, RuntimeContainerMissingErrorCode, StringComparison.Ordinal);
 
     public void MarkStopped(DateTimeOffset now)
     {

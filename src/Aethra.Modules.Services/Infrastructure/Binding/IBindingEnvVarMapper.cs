@@ -60,6 +60,8 @@ public sealed class DefaultBindingEnvVarMapper : IBindingEnvVarMapper
         Var(prefix, "REDIS_USERNAME", creds.Username),
         Var(prefix, "REDIS_PASSWORD", creds.Password),
         Var(prefix, "REDIS_PREFIX", $"{keyspace}:"),
+        Var(prefix, "REDIS_KEY_PREFIX", $"{keyspace}:"),
+        Var(prefix, "REDIS_CHANNEL_PREFIX", $"{keyspace}:"),
     ];
 
     private static List<EnvVarUpsert> BuildRabbitMQ(string prefix, string host, int port, string vhost, BindingCredentials creds) =>

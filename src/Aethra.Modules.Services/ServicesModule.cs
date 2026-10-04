@@ -2,6 +2,7 @@ using Aethra.Modules.Services.Infrastructure;
 using Aethra.Modules.Services.Infrastructure.Backup;
 using Aethra.Modules.Services.Infrastructure.Binding;
 using Aethra.Modules.Services.Infrastructure.Provisioning;
+using Aethra.Modules.Services.Infrastructure.Reconciliation;
 using Aethra.Modules.Services.Infrastructure.Scheduling;
 using Aethra.Modules.Services.Presentation;
 using Aethra.Modules.Services.Templates;
@@ -52,6 +53,10 @@ public static class ServicesModule
         services.AddHttpClient("services-backup", c => c.Timeout = TimeSpan.FromMinutes(5));
 
         services.AddHostedService<BackupWorker>();
+
+        // Reconciliacion runtime: evita reportar Ready para servicios cuyo contenedor ya no existe.
+        services.AddScoped<ManagedServiceRuntimeReconciler>();
+        services.AddHostedService<ManagedServiceRuntimeReconciliationWorker>();
 
         // F12.1A: scheduled jobs por servicio (cron + docker exec via satellite RPC).
         services.AddSingleton<ScheduledJobWorker>();

@@ -8,7 +8,8 @@ namespace Aethra.Modules.Services.Infrastructure.Provisioning;
 
 /// <summary>
 /// Aprovisiona ACL users sobre Redis 6+. Cada binding obtiene un user con permisos limitados
-/// a su <c>ResourceName</c> como prefijo de keys (<c>~prefix:*</c>).
+/// a su <c>ResourceName</c> como prefijo de keys (<c>~prefix:*</c>) y canales
+/// pub/sub (<c>&amp;prefix:*</c>).
 /// </summary>
 public sealed partial class RedisProvisioner : IServiceProvisioner
 {
@@ -77,6 +78,11 @@ public sealed partial class RedisProvisioner : IServiceProvisioner
             await db.ExecuteAsync("ACL", "DELUSER", credentials.Username).ConfigureAwait(false);
             return new RevokeOutcome(true, null, null);
         }
+        catch (RedisConnectionException ex)
+        {
+            _logger.LogError(ex, "Redis revoke conexion fallo binding {Binding}", binding.Id);
+            return new RevokeOutcome(false, "redis.connect_failed", ex.Message);
+        }
         catch (RedisException ex)
         {
             _logger.LogError(ex, "Redis revoke falló binding {Binding}", binding.Id);
@@ -132,18 +138,28 @@ public sealed partial class RedisProvisioner : IServiceProvisioner
         }
     }
 
-    private static object[] BuildAclSetUser(string username, string password, string prefix, BindingPermissions permissions)
+    internal static object[] BuildAclSetUser(string username, string password, string prefix, BindingPermissions permissions)
     {
-        // Forma: SETUSER {user} on >{pwd} ~{prefix}:* +@all -@dangerous
         // ReadOnly recorta a +@read; ReadWrite añade +@write además de @read.
+        // ReadOnly usa comandos de suscripcion explicitos: +@pubsub tambien permitiria PUBLISH.
+        //
+        // `+@scripting` NO es un extra: un cliente real no funciona sin el. El patron estandar de
+        // lock distribuido libera y renueva con un compare-and-delete en Lua (`EVAL`), y el cache
+        // `Microsoft.Extensions.Caching.StackExchangeRedis` tambien ejecuta Lua en cada lectura con
+        // refresh. Sin esto el lock ADQUIERE y NO LIBERA: se queda esperando al TTL, que es un fallo
+        // lento y silencioso. Medido contra Yunke en produccion el 2026-09-19.
+        //
+        // Darselo tambien a ReadOnly es seguro y esta MEDIDO: desde Redis 7 el ACL del llamante se
+        // aplica DENTRO del script, asi que con `-@write` un `EVAL` que intente SET o DEL recibe
+        // "ACL failure in script". El script no es una puerta trasera a la escritura.
         var permTokens = permissions switch
         {
-            BindingPermissions.ReadOnly => new[] { "+@read", "-@write", "-@dangerous" },
-            BindingPermissions.ReadWrite => new[] { "+@read", "+@write", "-@dangerous" },
+            BindingPermissions.ReadOnly => new[] { "+@connection", "+subscribe", "+psubscribe", "+unsubscribe", "+punsubscribe", "+@scripting", "+@read", "-@write", "-@dangerous" },
+            BindingPermissions.ReadWrite => new[] { "+@connection", "+@pubsub", "+@scripting", "+@read", "+@write", "-@dangerous" },
             _ => new[] { "+@all", "-@dangerous" },
         };
 
-        var args = new List<object>(8 + permTokens.Length)
+        var args = new List<object>(9 + permTokens.Length)
         {
             "SETUSER",
             username,
@@ -151,6 +167,7 @@ public sealed partial class RedisProvisioner : IServiceProvisioner
             "on",
             ">" + password,
             "~" + prefix + ":*",
+            "&" + prefix + ":*",
         };
         args.AddRange(permTokens);
         return [.. args];
