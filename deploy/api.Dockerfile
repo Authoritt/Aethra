@@ -18,6 +18,21 @@ COPY . .
 RUN dotnet restore apps/api/Aethra.Api.csproj -a $TARGETARCH
 RUN dotnet publish apps/api/Aethra.Api.csproj -c Release -o /app/publish --no-restore -a $TARGETARCH --no-self-contained
 
+# T15 - binarios del satelite para el endpoint publico GET /api/satellite/binary?arch=... (sin esto
+# respondia 503 binary_not_published y el instalador oficial no servia para ninguna VM nueva).
+# Misma receta que scripts/publish-satellite.sh (self-contained, sin trim). Corre en BUILDPLATFORM:
+# publica CRUZADO a los dos RID de Linux, asi que no depende de la arquitectura del central.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS satellite
+WORKDIR /src
+COPY . .
+RUN set -eu; mkdir -p /out; \
+    for RID in linux-x64 linux-arm64; do \
+      dotnet publish apps/satellite/Aethra.Satellite.csproj -c Release -r "$RID" \
+        -p:PublishTrimmed=false -p:SelfContained=true -p:DebugType=embedded -o "/tmp/sat-$RID/"; \
+      tar -czf "/out/aethra-satellite-$RID.tar.gz" -C "/tmp/sat-$RID" .; \
+    done; \
+    sed 's/\r$//' scripts/install-satellite.sh > /out/install-satellite.sh
+
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
@@ -28,6 +43,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/publish .
+# T15: tarballs + install-satellite.sh en ContentRoot/satellite-binaries (donde los busca VmsEndpoints).
+COPY --from=satellite /out ./satellite-binaries
 
 # DataProtection persistente (montar volumen en /keys). Sin esto los secretos cifrados se
 # vuelven ilegibles tras reiniciar el contenedor.

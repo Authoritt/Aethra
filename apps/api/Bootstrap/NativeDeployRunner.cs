@@ -1007,16 +1007,17 @@ public sealed class NativeDeployRunner(
                 return $"auto-dns {hostname}: ninguna zona Cloudflare registrada cubre el hostname.";
             }
 
-            var existing = await mediator.Send(new ListDnsRecordsQuery(zone.Id), ct).ConfigureAwait(false);
+            // T15: la decision de Direct se toma con la verdad de Cloudflare (API en vivo), no con la copia
+            // local db.DnsRecords, que se desfasa. Si la API falla: error explicito, jamas cae a la cache.
+            var existing = await mediator.Send(new ListLiveDnsRecordsQuery(zone.Id), ct).ConfigureAwait(false);
             if (existing.IsFailure)
             {
-                return $"auto-dns {hostname}: no se pudieron listar records: [{existing.Error.Code}] {existing.Error.Message}";
+                return $"auto-dns {hostname}: no se pudieron leer los records en Cloudflare: [{existing.Error.Code}] {existing.Error.Message}";
             }
 
             // T14: la regla decide con TODOS los registros del host (solo cuentan CNAME/A/AAAA; MX/TXT se ignoran).
             var decision = DnsRecordRules.ClassifyHost(
-                existing.Value.Select(r => new CloudflareDnsRecordInfo(
-                    r.Id, r.Type, r.Name, r.Content, r.Ttl, r.Proxied, r.Comment)),
+                existing.Value,
                 hostname,
                 desiredTarget);
             if (decision.Action == DnsRecordRuleAction.Ok)

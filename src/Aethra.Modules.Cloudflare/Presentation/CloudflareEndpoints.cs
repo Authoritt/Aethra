@@ -438,19 +438,7 @@ public static class CloudflareEndpoints
     }
 
     private static Result<TunnelMode?> ParseTunnelMode(string? mode)
-    {
-        if (string.IsNullOrWhiteSpace(mode))
-        {
-            return Result<TunnelMode?>.Success(null);
-        }
-
-        return mode.Trim().ToLowerInvariant().Replace("-", "_") switch
-        {
-            "centralproxy" or "central_proxy" => Result<TunnelMode?>.Success(TunnelMode.CentralProxy),
-            "direct" => Result<TunnelMode?>.Success(TunnelMode.Direct),
-            _ => Error.Validation("cloudflare.tunnel_mode_invalid", "Modo de túnel no soportado."),
-        };
-    }
+        => Aethra.Modules.Cloudflare.UseCases.Tunnels.TunnelModeParser.Parse(mode);
 
     private static bool ModeMatches(string value, TunnelMode mode)
         => mode switch

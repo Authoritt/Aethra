@@ -162,10 +162,8 @@ internal sealed class CreateServiceFromTemplateHandler(
             }
         }
 
-        HealthcheckSpec? hc = template.Healthcheck is { } h
-            ? new HealthcheckSpec(h.Test, h.IntervalSeconds, h.Retries,
-                TimeoutSeconds: null, StartPeriodSeconds: null)
-            : null;
+        // T15: el healthcheck se interpola igual que env/command (antes viajaba con ${admin_user} literal).
+        var hc = TemplateInterpolator.ApplyHealthcheck(template.Healthcheck, subs);
 
         return new RunSpec(
             ContainerName: svc.ContainerName,

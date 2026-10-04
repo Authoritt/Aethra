@@ -65,4 +65,26 @@ public static partial class TemplateInterpolator
         }
         return result;
     }
+
+    /// <summary>
+    /// OT-008 T15: resuelve el healthcheck de la plantilla con los mismos valores que env/command. Antes
+    /// el <c>Test</c> viajaba literal (<c>pg_isready -U ${admin_user}</c>) y el contenedor sano salía
+    /// <c>unhealthy</c>. Solo aplica a servicios creados desde ahora: los existentes conservan el suyo hasta recrearse.
+    /// </summary>
+    public static Aethra.Shared.Contracts.Containers.HealthcheckSpec? ApplyHealthcheck(
+        TemplateHealthcheck? healthcheck,
+        IReadOnlyDictionary<string, string> values)
+    {
+        if (healthcheck is null)
+        {
+            return null;
+        }
+
+        return new Aethra.Shared.Contracts.Containers.HealthcheckSpec(
+            Apply(healthcheck.Test, values)!,
+            healthcheck.IntervalSeconds,
+            healthcheck.Retries,
+            TimeoutSeconds: null,
+            StartPeriodSeconds: null);
+    }
 }
