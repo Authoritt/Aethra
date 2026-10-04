@@ -37,8 +37,26 @@ public sealed class ConfigurationCentralVmIdProvider(IConfiguration configuratio
 /// </summary>
 public static class BackupExecutionRules
 {
-    /// <summary>Cabecera (primera línea del SQL) que distingue el formato remoto del COPY-v1 local.</summary>
-    public const string RemoteDumpHeader = "-- aethra-pg-dump remote v1";
+    /// <summary>
+    /// Cabecera (primera línea del script) del formato remoto. v2 (T13) = TODAS las bases no-plantilla + roles;
+    /// la distingue del COPY-v1 local y del remoto v1 (T11, una sola base) que ya NO se restaura.
+    /// </summary>
+    public const string RemoteDumpHeader = "-- aethra-pg-dump remote v2";
+
+    /// <summary>Cabecera del formato remoto v1 (T11: solo la base del admin). Se rechaza de forma explícita.</summary>
+    public const string RemoteDumpHeaderV1 = "-- aethra-pg-dump remote v1";
+
+    /// <summary>
+    /// Última línea de un dump remoto COMPLETO. Solo se emite si TODAS las etapas (roles + cada pg_dump) acabaron
+    /// bien: un gzip válido pero cortado (subshell abortado, base64 truncado) no la lleva y se rechaza.
+    /// </summary>
+    public const string RemoteDumpEnd = "-- aethra-pg-dump end";
+
+    /// <summary>
+    /// Base temporal en la que se carga cada base antes de intercambiarla por la viva. Si una carga falla, la
+    /// base viva sigue intacta. Se excluye del dump (resto de una ejecución interrumpida).
+    /// </summary>
+    public const string RestoreTempDatabase = "aethra_restore_tmp";
 
     /// <summary>
     /// Tope del dump comprimido. El stdout viaja en base64 (x4/3) en UN mensaje SignalR de 64 MiB
@@ -81,30 +99,105 @@ public static class BackupExecutionRules
     // en `ps` del contenedor y del host y en `docker events`. Se conecta SIN -h, por el socket unix local, donde
     // la imagen oficial `postgres` usa `local all all trust` (las plantillas no tocan pg_hba). `-w` impide el
     // prompt: si un pg_hba exigiera contraseña en local, pg_dump/psql FALLAN explícitamente en vez de colgarse.
-    public static string BuildDumpCommand(string tag, string username, string database)
-        => "set -e; " + TryPipefail + "f=/tmp/aethra-bk-" + tag + "; trap 'rm -f \"$f.gz\" \"$f.rc\"' EXIT; rm -f \"$f.rc\"; "
-           + "{ echo " + ShellQuote(RemoteDumpHeader) + "; "
-           + "pg_dump -w -U " + ShellQuote(username) + " -d " + ShellQuote(database)
-           + " --clean --if-exists --no-owner --no-privileges || echo 1 > \"$f.rc\"; } | gzip -c > \"$f.gz\"; "
+    //
+    // T13 — formato remoto v2: UN gzip con un script psql que restaura TODAS las bases no-plantilla + roles.
+    //
+    //   -- aethra-pg-dump remote v2
+    //   -- aethra-section globals            BEGIN; <pg_dumpall --roles-only, CREATE ROLE idempotente>; COMMIT;
+    //   -- aethra-section database <db>      (una por base)
+    //       DROP DATABASE IF EXISTS aethra_restore_tmp WITH (FORCE);
+    //       CREATE DATABASE aethra_restore_tmp ... OWNER <dueño>;     (fuera de transaccion: no puede ir en una)
+    //       \connect aethra_restore_tmp
+    //       BEGIN; <pg_dump de la base>; COMMIT;                      (la carga de la base es atomica)
+    //       \connect template1
+    //       DROP DATABASE IF EXISTS "<db>" WITH (FORCE);              (intercambio: milisegundos sin la base viva)
+    //       ALTER DATABASE aethra_restore_tmp RENAME TO "<db>";
+    //   -- aethra-pg-dump end
+    //
+    // Por que pg_dumpall --roles-only + un pg_dump por base y NO un pg_dumpall entero: pg_dumpall emite
+    // DROP/CREATE DATABASE + \connect y luego los objetos sin transaccion posible por base (DROP DATABASE no admite
+    // BEGIN), asi que una carga que falla a medias deja la base viva vacia o parcial. Con la carga en una base
+    // temporal + intercambio, una carga fallida deja la base viva INTACTA. Ademas pg_dumpall volcaria tablespaces y
+    // con --clean exigiria DROP ROLE (imposible sobre el rol en uso o dueño de objetos de otras bases).
+    //
+    // ATOMICIDAD: globals = 1 transaccion; cada base = 1 transaccion de carga + intercambio (DROP+RENAME, dos
+    // sentencias seguidas); ENTRE bases no hay atomicidad: el restore se detiene en la primera que falla
+    // (ON_ERROR_STOP) -> las anteriores quedan restauradas; la fallida y las siguientes conservan su estado vivo.
+    // Cada pg_dump es una instantanea propia (sin snapshot comun entre bases). NO cubierto: ALTER DATABASE ... SET,
+    // tablespaces, locale ICU (se asume libc), nombres de base fuera de [A-Za-z0-9_.-] (el dump falla explicito).
+    private const string ListableDatabases =
+        "FROM pg_database WHERE NOT datistemplate AND datallowconn AND datname <> $q$" + RestoreTempDatabase + "$q$";
+
+    // Todo el SQL usa dollar-quoting ($q$..$q$): NINGUNA comilla simple, asi cabe en un argumento de 'sh -c'.
+    private const string ListDatabasesSql = "SELECT datname " + ListableDatabases + " ORDER BY datname";
+
+    private const string CountBadNamesSql =
+        "SELECT count(*) " + ListableDatabases + " AND (datname ~ $q$[^A-Za-z0-9_.-]$q$ OR datname ~ $q$^[.-]$q$)";
+
+    // El nombre de la base (ya validado) se concatena en el shell:  '<prefijo>'"$db"'$q$'
+    private const string CreateTempDatabaseSqlPrefix =
+        "SELECT format($q$CREATE DATABASE " + RestoreTempDatabase + " WITH TEMPLATE template0 OWNER %I ENCODING %L "
+        + "LC_COLLATE %L LC_CTYPE %L;$q$, pg_get_userbyid(datdba), pg_encoding_to_char(encoding), datcollate, datctype) "
+        + "FROM pg_database WHERE datname = $q$";
+
+    // pg_dumpall emite `CREATE ROLE x;` a secas (falla si ya existe, p.ej. el propio postgres): se vuelve idempotente.
+    private const string RolesSedScript =
+        "s/^CREATE ROLE \\(.*\\);$/DO $q$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE quote_ident(rolname) = $n$\\1$n$) "
+        + "THEN CREATE ROLE \\1; END IF; END $q$;/";
+
+    // busybox ash: sin pipefail fiable, y `echo` interpreta barras (\c) -> printf '%s\n'. El estado de CADA etapa
+    // (psql, pg_dumpall, cada pg_dump) va al fichero $f.rc; `set +e` dentro del grupo para que una etapa caida no
+    // aborte el subshell dejando un gzip valido pero cortado (ademas lo caza la linea RemoteDumpEnd).
+    public static string BuildDumpCommand(string tag, string username)
+    {
+        var u = ShellQuote(username);
+        const string fail = " || echo 1 > \"$f.rc\"";
+        var psql = "psql -w -U " + u + " -d template1 -X -At";
+        return "set -e; " + TryPipefail + "f=/tmp/aethra-bk-" + tag + "; trap 'rm -f \"$f.gz\" \"$f.rc\"' EXIT; rm -f \"$f.rc\"; "
+           + "{ set +e; "
+           + "printf '%s\\n' " + ShellQuote(RemoteDumpHeader) + " '-- aethra-section globals' 'BEGIN;'; "
+           + "{ pg_dumpall -w -U " + u + " --roles-only </dev/null" + fail + "; } | sed " + ShellQuote(RolesSedScript) + "; "
+           + "printf '%s\\n' 'COMMIT;'; "
+           + "dbs=$(" + psql + " -c " + ShellQuote(ListDatabasesSql) + " </dev/null)" + fail + "; "
+           + "bad=$(" + psql + " -c " + ShellQuote(CountBadNamesSql) + " </dev/null)" + fail + "; "
+           + "[ \"$bad\" = 0 ] || { echo \"aethra-dump-invalid-db-name\" >&2; echo 1 > \"$f.rc\"; }; "
+           + "[ -n \"$dbs\" ] || { echo \"aethra-dump-no-databases\" >&2; echo 1 > \"$f.rc\"; }; "
+           + "for db in $dbs; do "
+           + "if [ -e \"$f.rc\" ]; then break; fi; "
+           + "printf '%s\\n' \"-- aethra-section database $db\" 'DROP DATABASE IF EXISTS " + RestoreTempDatabase + " WITH (FORCE);'; "
+           + psql + " -c '" + CreateTempDatabaseSqlPrefix + "'\"$db\"'$q$' </dev/null" + fail + "; "
+           + "printf '%s\\n' '\\connect " + RestoreTempDatabase + "' 'BEGIN;'; "
+           + "{ pg_dump -w -U " + u + " -d \"$db\" </dev/null" + fail + "; }; "
+           + "printf '%s\\n' 'COMMIT;' '\\connect template1' "
+           + "\"DROP DATABASE IF EXISTS \\\"$db\\\" WITH (FORCE);\" "
+           + "\"ALTER DATABASE " + RestoreTempDatabase + " RENAME TO \\\"$db\\\";\"; "
+           + "done; "
+           + "if [ ! -e \"$f.rc\" ]; then printf '%s\\n' " + ShellQuote(RemoteDumpEnd) + "; fi; "
+           + "} | gzip -c > \"$f.gz\"; "
            + "if [ -e \"$f.rc\" ]; then echo \"" + DumpFailedMarker + "\" >&2; exit 4; fi; "
            + "sz=$(wc -c < \"$f.gz\"); "
            + "if [ \"$sz\" -gt " + MaxCompressedDumpBytes + " ]; then echo \"" + TooLargeMarker + ":$sz\" >&2; exit 3; fi; "
            + "base64 -w 0 \"$f.gz\"";
+    }
 
     public static string BuildRestoreAppendCommand(string tag, string base64Chunk, bool first)
         => "f=/tmp/aethra-rs-" + tag + "; printf %s " + ShellQuote(base64Chunk)
            + (first ? " > " : " >> ") + "\"$f.b64\"";
 
     // Sin .sql intermedio: primero `gunzip -t` valida el gzip ENTERO (un gzip truncado/corrupto no debe llegar a
-    // psql: --single-transaction haría COMMIT de un script cortado al EOF) y luego se canaliza a psql.
-    public static string BuildRestoreApplyCommand(string tag, string username, string database)
+    // psql) y luego se canaliza a psql. SIN --single-transaction: el script lleva sus propias transacciones por base
+    // (DROP/CREATE DATABASE no caben en una) y ON_ERROR_STOP detiene el restore en el primer error (psql exit 3).
+    public static string BuildRestoreApplyCommand(string tag, string username)
         => "set -e; " + TryPipefail + "f=/tmp/aethra-rs-" + tag + "; trap 'rm -f \"$f.b64\"' EXIT; "
            + "base64 -d \"$f.b64\" | gunzip -t; "
-           + "base64 -d \"$f.b64\" | gunzip -c | psql -w -U " + ShellQuote(username) + " -d " + ShellQuote(database)
-           + " -v ON_ERROR_STOP=1 --single-transaction -q";
+           + "base64 -d \"$f.b64\" | gunzip -c | psql -w -U " + ShellQuote(username) + " -d template1 -X"
+           + " -v ON_ERROR_STOP=1 -q";
 
-    public static string BuildRestoreCleanupCommand(string tag)
-        => "rm -f /tmp/aethra-rs-" + tag + ".b64 /tmp/aethra-rs-" + tag + ".sql";
+    // Limpieza (mejor esfuerzo): ficheros y base temporal de una carga que falló a medias.
+    public static string BuildRestoreCleanupCommand(string tag, string username)
+        => "rm -f /tmp/aethra-rs-" + tag + ".b64 /tmp/aethra-rs-" + tag + ".sql; "
+           + "psql -w -U " + ShellQuote(username) + " -d template1 -X -q -c "
+           + ShellQuote("DROP DATABASE IF EXISTS " + RestoreTempDatabase + " WITH (FORCE)") + " </dev/null || true";
 
     /// <summary>
     /// Convierte el stdout del dump remoto (base64 de un gzip) en los bytes del backup. Lanza
@@ -174,6 +267,9 @@ public static class BackupExecutionRules
         }
         string? first;
         bool truncated;
+        var tail = new byte[512];
+        var tailLen = 0;
+        string lastLine;
         try
         {
             using var ms = new MemoryStream(backup);
@@ -187,7 +283,25 @@ public static class BackupExecutionRules
             var buffer = new byte[81920];
             long total = 0;
             int n;
-            while ((n = gz2.Read(buffer, 0, buffer.Length)) > 0) { total += n; }
+            while ((n = gz2.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                total += n;
+                // Cola del script (últimos bytes) para exigir RemoteDumpEnd sin materializar el SQL entero.
+                if (n >= tail.Length)
+                {
+                    Array.Copy(buffer, n - tail.Length, tail, 0, tail.Length);
+                    tailLen = tail.Length;
+                }
+                else
+                {
+                    var keep = Math.Min(tailLen, tail.Length - n);
+                    Array.Copy(tail, tailLen - keep, tail, 0, keep);
+                    Array.Copy(buffer, 0, tail, keep, n);
+                    tailLen = keep + n;
+                }
+            }
+            lastLine = Encoding.UTF8.GetString(tail, 0, tailLen).TrimEnd('\r', '\n');
+            lastLine = lastLine[(lastLine.LastIndexOf('\n') + 1)..];
             truncated = backup.Length < 18 || (uint)total != BitConverter.ToUInt32(backup, backup.Length - 4);
         }
         catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException)
@@ -198,11 +312,22 @@ public static class BackupExecutionRules
         {
             throw new InvalidOperationException("Restore remoto: el backup está truncado o corrupto (tamaño del gzip no coincide).");
         }
+        if (string.Equals(first, RemoteDumpHeaderV1, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Restore remoto: el backup es del formato 'aethra-pg-dump remote v1' (T11), que solo cubría UNA base "
+                + "y ya no se restaura; haz un backup nuevo (v2). No se aplica.");
+        }
         if (!string.Equals(first, RemoteDumpHeader, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                "Restore remoto: el backup no es del formato 'aethra-pg-dump remote v1' "
+                "Restore remoto: el backup no es del formato 'aethra-pg-dump remote v2' "
                 + "(¿es un backup local COPY-v1 de otro servicio?). No se aplica.");
+        }
+        if (!string.Equals(lastLine, RemoteDumpEnd, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Restore remoto: el backup no termina con '" + RemoteDumpEnd + "' (dump incompleto). No se aplica.");
         }
     }
 
