@@ -138,6 +138,29 @@ public sealed class TunnelHandlerR3Tests
     }
 
     [Fact]
+    public async Task Ensure_and_remove_with_explicit_missing_tunnel_return_not_found()
+    {
+        await using var db = NewDb();
+        var api = new FakeCloudflareApi();
+
+        var ensure = await SendEnsureAsync(
+            db,
+            api,
+            new EnsureTunnelHostnameCommand("app.example.com", "missing-tun", "http://app:3000"));
+        var remove = await SendRemoveAsync(
+            db,
+            api,
+            new RemoveTunnelHostnameCommand("app.example.com", "missing-tun"));
+
+        ensure.IsFailure.Should().BeTrue();
+        ensure.Error.Code.Should().Be("tunnel.not_found");
+        remove.IsFailure.Should().BeTrue();
+        remove.Error.Code.Should().Be("tunnel.not_found");
+        api.GetCalls.Should().BeEmpty();
+        api.PutCalls.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Remove_with_null_argument_removes_from_central_tunnel_only_and_verifies_after_put()
     {
         await using var db = NewDb();
@@ -187,6 +210,38 @@ public sealed class TunnelHandlerR3Tests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("cloudflare.ingress_not_applied");
+    }
+
+    [Fact]
+    public async Task RunSerializedAsync_returns_timeout_when_tunnel_lock_is_held()
+    {
+        await using var db = NewDb();
+        var direct = AddTunnel(db, "direct-tun", TunnelMode.Direct, Now, "vm-bogota");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var first = SendRunSerializedAsync(
+            direct,
+            async () =>
+            {
+                entered.SetResult();
+                await release.Task.ConfigureAwait(false);
+                return Result.Success();
+            },
+            TimeSpan.FromSeconds(5),
+            CancellationToken.None);
+        (await Task.WhenAny(entered.Task, Task.Delay(TimeSpan.FromSeconds(1)))).Should().Be(entered.Task);
+
+        var second = await SendRunSerializedAsync(
+            direct,
+            () => Task.FromResult(Result.Success()),
+            TimeSpan.FromMilliseconds(10),
+            CancellationToken.None);
+
+        second.IsFailure.Should().BeTrue();
+        second.Error.Code.Should().Be("cloudflare.ingress_lock_timeout");
+        release.SetResult();
+        (await first).IsSuccess.Should().BeTrue();
     }
 
     [Fact]
@@ -289,6 +344,22 @@ public sealed class TunnelHandlerR3Tests
         result.Value.Mode.Should().Be("direct");
     }
 
+    [Fact]
+    public async Task GetTunnelForVm_ignores_production_central_proxy_tunnel_targeting_principal()
+    {
+        await using var db = NewDb();
+        AddTunnel(db, "central-tun", TunnelMode.CentralProxy, Now, "principal");
+        await db.SaveChangesAsync();
+
+        var result = await SendGetTunnelForVmAsync(
+            db,
+            new FakeCloudflareApi(),
+            new GetTunnelForVmQuery("principal"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeNull();
+    }
+
     private static CloudflareDbContext NewDb()
         => new(new DbContextOptionsBuilder<CloudflareDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -376,6 +447,21 @@ public sealed class TunnelHandlerR3Tests
             "Aethra.Modules.Cloudflare.UseCases.Tunnels.Queries.GetTunnelForVmHandler",
             [db, api, new PlainTextTokenCodec()],
             query);
+
+    private static async Task<Result> SendRunSerializedAsync(
+        CloudflareTunnel tunnel,
+        Func<Task<Result>> action,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        var type = typeof(EnsureTunnelHostnameCommand).Assembly.GetType(
+            "Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands.TunnelIngressSupport",
+            throwOnError: true)!;
+        var task = (Task<Result>)type
+            .GetMethod("RunSerializedAsync", BindingFlags.Static | BindingFlags.Public)!
+            .Invoke(null, [tunnel, action, cancellationToken, timeout])!;
+        return await task.ConfigureAwait(false);
+    }
 
     private static async Task<Result> InvokeCommandAsync<TCommand>(
         string handlerTypeName,

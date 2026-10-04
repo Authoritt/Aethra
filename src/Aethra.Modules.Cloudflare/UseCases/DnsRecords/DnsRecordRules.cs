@@ -32,15 +32,19 @@ public static class DnsRecordRules
         }
 
         var existingTarget = NormalizeTarget(existing.Content);
-        if (string.Equals(existing.Type, "CNAME", StringComparison.OrdinalIgnoreCase)
+        var isCname = string.Equals(existing.Type, "CNAME", StringComparison.OrdinalIgnoreCase);
+        if (isCname
+            && existing.Proxied
             && string.Equals(existingTarget, desired, StringComparison.OrdinalIgnoreCase))
         {
             return new DnsRecordRuleDecision(DnsRecordRuleAction.Ok, desired, existingTarget, null);
         }
 
-        var reason = string.Equals(existing.Type, "CNAME", StringComparison.OrdinalIgnoreCase)
-            ? "CNAME points to a different target."
-            : "Existing record is not a CNAME.";
+        var reason = !isCname
+            ? "Existing record is not a CNAME."
+            : !existing.Proxied
+                ? "CNAME is DNS-only; it must be proxied."
+                : "CNAME points to a different target.";
         return new DnsRecordRuleDecision(DnsRecordRuleAction.Conflict, desired, existingTarget, reason);
     }
 

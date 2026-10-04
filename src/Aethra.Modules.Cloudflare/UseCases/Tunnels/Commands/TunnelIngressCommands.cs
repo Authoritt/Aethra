@@ -34,6 +34,7 @@ public sealed record SetTunnelIngressCommand(
 
 internal static class TunnelIngressSupport
 {
+    private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(30);
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> TunnelLocks = new(StringComparer.Ordinal);
 
     public static async Task<(CloudflareTunnel? Tunnel, string Token)> LoadAsync(
@@ -78,10 +79,32 @@ internal static class TunnelIngressSupport
         return rules;
     }
 
-    public static async Task<Result> RunSerializedAsync(CloudflareTunnel tunnel, Func<Task<Result>> action)
+    public static async Task<Result> RunSerializedAsync(
+        CloudflareTunnel tunnel,
+        Func<Task<Result>> action,
+        CancellationToken cancellationToken,
+        TimeSpan? timeout = null)
     {
         var gate = TunnelLocks.GetOrAdd(tunnel.TunnelId, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync().ConfigureAwait(false);
+        bool entered;
+        try
+        {
+            entered = await gate.WaitAsync(timeout ?? LockTimeout, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return Error.Failure(
+                "cloudflare.ingress_lock_cancelled",
+                string.Create(CultureInfo.InvariantCulture, $"La espera por el lock de ingress del tunel {tunnel.TunnelId} fue cancelada."));
+        }
+
+        if (!entered)
+        {
+            return Error.Failure(
+                "cloudflare.ingress_lock_timeout",
+                string.Create(CultureInfo.InvariantCulture, $"Timeout esperando el lock de ingress del tunel {tunnel.TunnelId}."));
+        }
+
         try
         {
             return await action().ConfigureAwait(false);
@@ -130,6 +153,10 @@ internal sealed class EnsureTunnelHostnameHandler(
             .ConfigureAwait(false);
         if (tunnel is null)
         {
+            if (!string.IsNullOrWhiteSpace(request.TunnelId))
+            {
+                return Error.NotFound("tunnel.not_found", $"Tunel '{request.TunnelId.Trim()}' no existe.");
+            }
             return Result.Success();
         }
 
@@ -177,7 +204,7 @@ internal sealed class EnsureTunnelHostnameHandler(
                 return Error.Failure("cloudflare.api_error",
                     string.Create(CultureInfo.InvariantCulture, $"No se pudo asegurar ingress (code {ex.Code}): {ex.Message}"));
             }
-        }).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -192,6 +219,10 @@ internal sealed class RemoveTunnelHostnameHandler(
             .ConfigureAwait(false);
         if (tunnel is null)
         {
+            if (!string.IsNullOrWhiteSpace(request.TunnelId))
+            {
+                return Error.NotFound("tunnel.not_found", $"Tunel '{request.TunnelId.Trim()}' no existe.");
+            }
             return Result.Success();
         }
 
@@ -235,7 +266,7 @@ internal sealed class RemoveTunnelHostnameHandler(
                 return Error.Failure("cloudflare.api_error",
                     string.Create(CultureInfo.InvariantCulture, $"No se pudo quitar ingress (code {ex.Code}): {ex.Message}"));
             }
-        }).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -279,6 +310,6 @@ internal sealed class SetTunnelIngressHandler(
                 return Error.Failure("cloudflare.api_error",
                     string.Create(CultureInfo.InvariantCulture, $"No se pudo aplicar ingress (code {ex.Code}): {ex.Message}"));
             }
-        }).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 }

@@ -29,6 +29,18 @@ public sealed class DnsRecordRulesTests
     }
 
     [Fact]
+    public void Classify_conflicts_when_matching_cname_is_dns_only()
+    {
+        var existing = new CloudflareDnsRecordInfo(
+            "rec-1", "CNAME", "app.example.com", "abc.cfargotunnel.com", 1, false, null);
+
+        var decision = DnsRecordRules.Classify(existing, "abc.cfargotunnel.com");
+
+        decision.Action.Should().Be(DnsRecordRuleAction.Conflict);
+        decision.Reason.Should().Contain("DNS-only");
+    }
+
+    [Fact]
     public void Classify_conflicts_when_cname_points_to_another_tunnel()
     {
         var existing = new CloudflareDnsRecordInfo(

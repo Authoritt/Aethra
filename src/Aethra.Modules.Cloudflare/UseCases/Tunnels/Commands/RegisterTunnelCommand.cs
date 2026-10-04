@@ -92,7 +92,7 @@ internal sealed class RegisterTunnelHandler(
             existing.UpdateToken(cipher, now);
             existing.UpdateServices(request.AethraService, request.FallbackService, request.FallbackNoTlsVerify, now);
             if (!string.IsNullOrWhiteSpace(request.TargetVmId)) { existing.SetTargetVm(request.TargetVmId, now); }
-            existing.SetMode(mode, now);
+            if (request.Mode is not null) { existing.SetMode(mode, now); }
             existing.MarkSynced(now);
             tunnel = existing;
         }
