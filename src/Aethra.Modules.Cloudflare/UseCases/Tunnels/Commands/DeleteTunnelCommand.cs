@@ -1,4 +1,5 @@
 using Aethra.Modules.Cloudflare.Infrastructure;
+using Aethra.Modules.Cloudflare.Domain;
 using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Results;
@@ -19,7 +20,11 @@ internal sealed class DeleteTunnelHandler(CloudflareDbContext db)
     public async Task<Result> Handle(DeleteTunnelCommand request, CancellationToken cancellationToken)
     {
         var tunnel = string.IsNullOrWhiteSpace(request.TunnelId)
-            ? await db.Tunnels.OrderBy(t => t.CreatedAt).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            ? await db.Tunnels
+                .Where(t => t.Mode == TunnelMode.CentralProxy)
+                .OrderBy(t => t.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false)
             : await db.Tunnels.FirstOrDefaultAsync(t => t.TunnelId == request.TunnelId.Trim(), cancellationToken).ConfigureAwait(false);
 
         if (tunnel is null)
