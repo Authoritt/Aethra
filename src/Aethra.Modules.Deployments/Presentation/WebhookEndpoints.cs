@@ -102,32 +102,45 @@ public static class WebhookEndpoints
     }
 
     /// <summary>
-    /// OT-012 (H3) — registro anti-replay de UNA entrega. Se consulta solo tras validar la firma.
+    /// OT-012 (H3) — registro anti-replay de UNA entrega, por Template autenticado. Se consulta
+    /// solo tras validar la firma. G2: la clave es (Template, cuerpo) y (Template, delivery), nunca
+    /// global — dos Templates del mismo repo+rama reciben el mismo cuerpo por dos webhooks.
     /// </summary>
     private sealed class ReplayCheck(WebhookReplayGuard guard, string deliveryId, byte[] body)
     {
-        private bool _registered;
+        private readonly List<string> _registered = [];
 
         /// <summary>
-        /// <c>null</c> si la entrega es nueva (queda registrada); si no, la respuesta 409.
+        /// Deja solo los Templates para los que esta entrega es nueva (y los registra). Si no
+        /// queda ninguno devuelve la respuesta 409 en <paramref name="duplicate"/>.
         /// </summary>
-        public IResult? RejectIfReplay(ILogger logger, HttpContext http)
+        public List<TemplateForBuildView> KeepFresh(
+            IReadOnlyList<TemplateForBuildView> authenticated, ILogger logger, HttpContext http, out IResult? duplicate)
         {
-            if (guard.TryRegister(deliveryId, body))
+            var fresh = new List<TemplateForBuildView>(authenticated.Count);
+            foreach (var tpl in authenticated)
             {
-                _registered = true;
-                return null;
+                if (guard.TryRegister(tpl.TemplateId, deliveryId, body))
+                {
+                    _registered.Add(tpl.TemplateId);
+                    fresh.Add(tpl);
+                }
             }
-            logger.LogWarning("Webhook REPETIDO rechazado (delivery {Delivery}) desde {Ip}",
-                deliveryId, http.Connection.RemoteIpAddress);
-            return Results.Conflict(new { error = "duplicate_delivery" });
+            duplicate = null;
+            if (fresh.Count == 0)
+            {
+                logger.LogWarning("Webhook REPETIDO rechazado (delivery {Delivery}) desde {Ip}",
+                    deliveryId, http.Connection.RemoteIpAddress);
+                duplicate = Results.Conflict(new { error = "duplicate_delivery" });
+            }
+            return fresh;
         }
 
         public void ForgetIfRegistered()
         {
-            if (_registered)
+            foreach (var scope in _registered)
             {
-                guard.Forget(deliveryId, body);
+                guard.Forget(scope, deliveryId, body);
             }
         }
     }
@@ -200,7 +213,8 @@ public static class WebhookEndpoints
         }
 
         // OT-012 (H3): firma valida != entrega nueva. La firma no cubre ningun nonce.
-        if (replay.RejectIfReplay(logger, http) is { } duplicate)
+        authenticatedTemplates = replay.KeepFresh(authenticatedTemplates, logger, http, out var duplicate);
+        if (duplicate is not null)
         {
             return duplicate;
         }
@@ -333,7 +347,8 @@ public static class WebhookEndpoints
             return Results.Unauthorized();
         }
 
-        if (replay.RejectIfReplay(logger, http) is { } duplicate)
+        authenticatedTemplates = replay.KeepFresh(authenticatedTemplates, logger, http, out var duplicate);
+        if (duplicate is not null)
         {
             return duplicate;
         }

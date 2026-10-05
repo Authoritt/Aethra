@@ -163,7 +163,11 @@ Si la API hace tambien de proxy de tus apps (YARP), fija `Panel__Hosts__0=<host 
 Aethra (`/auth`, `/api`, hubs, `/mcp`, webhooks, `/openapi`) solo responden en ese host y en `localhost`/`127.0.0.1`,
 y cualquier otro host va directo a su app. Sin fijarlo responden en cualquier host (se avisa al arrancar).
 `/auth/login` y `/auth/login/totp` tienen limite por IP del cliente (`Panel__LoginRateLimit__PermitLimit`, 10 por
-defecto, cada `Panel__LoginRateLimit__WindowSeconds`, 300 por defecto).
+defecto, cada `Panel__LoginRateLimit__WindowSeconds`, 300 por defecto). Si la API corre en un contenedor con el
+puerto publicado, fija tambien `Panel__LocalPeers__0=<gateway del bridge>` (`docker network inspect <red> -f
+'{{(index .IPAM.Config 0).Gateway}}'`): solo loopback y esa IP exacta pueden usar `Host: localhost`, saltarse el
+limitador del login y mandar `CF-Connecting-IP` (esto ultimo se cambia con `Panel__TunnelPeers__N`). Los demas
+contenedores de la red no son de confianza.
 
 El compose levanta cuatro contenedores: el central, el panel Next.js, Postgres y un registry local al
 que empuja el pipeline de build. El **satélite no está ahí a propósito** — va en cada máquina que

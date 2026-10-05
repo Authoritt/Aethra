@@ -21,8 +21,8 @@ public sealed class WebhookReplayGuardTests
     {
         var guard = new WebhookReplayGuard(new ManualClock(DateTimeOffset.UnixEpoch), TimeSpan.FromHours(1));
 
-        guard.TryRegister("d1", Body).Should().BeTrue();
-        guard.TryRegister("d1", Body).Should().BeFalse();
+        guard.TryRegister("tpl_a", "d1", Body).Should().BeTrue();
+        guard.TryRegister("tpl_a", "d1", Body).Should().BeFalse();
     }
 
     [Fact]
@@ -30,9 +30,9 @@ public sealed class WebhookReplayGuardTests
     {
         var guard = new WebhookReplayGuard(new ManualClock(DateTimeOffset.UnixEpoch), TimeSpan.FromHours(1));
 
-        guard.TryRegister("d1", Body).Should().BeTrue();
-        guard.TryRegister("forged", Body).Should().BeFalse();
-        guard.TryRegister(null, Body).Should().BeFalse();
+        guard.TryRegister("tpl_a", "d1", Body).Should().BeTrue();
+        guard.TryRegister("tpl_a", "forged", Body).Should().BeFalse();
+        guard.TryRegister("tpl_a", null, Body).Should().BeFalse();
     }
 
     [Fact]
@@ -40,8 +40,8 @@ public sealed class WebhookReplayGuardTests
     {
         var guard = new WebhookReplayGuard(new ManualClock(DateTimeOffset.UnixEpoch), TimeSpan.FromHours(1));
 
-        guard.TryRegister("d1", Body).Should().BeTrue();
-        guard.TryRegister("d1", Encoding.UTF8.GetBytes("{\"after\":\"def\"}")).Should().BeFalse();
+        guard.TryRegister("tpl_a", "d1", Body).Should().BeTrue();
+        guard.TryRegister("tpl_a", "d1", Encoding.UTF8.GetBytes("{\"after\":\"def\"}")).Should().BeFalse();
     }
 
     [Fact]
@@ -50,10 +50,10 @@ public sealed class WebhookReplayGuardTests
         var clock = new ManualClock(DateTimeOffset.UnixEpoch);
         var guard = new WebhookReplayGuard(clock, TimeSpan.FromHours(1));
 
-        guard.TryRegister("d1", Body).Should().BeTrue();
+        guard.TryRegister("tpl_a", "d1", Body).Should().BeTrue();
         clock.Now += TimeSpan.FromHours(1) + TimeSpan.FromSeconds(1);
 
-        guard.TryRegister("d1", Body).Should().BeTrue();
+        guard.TryRegister("tpl_a", "d1", Body).Should().BeTrue();
     }
 
     [Fact]
@@ -61,9 +61,20 @@ public sealed class WebhookReplayGuardTests
     {
         var guard = new WebhookReplayGuard(new ManualClock(DateTimeOffset.UnixEpoch), TimeSpan.FromHours(1));
 
-        guard.TryRegister("d1", Body).Should().BeTrue();
-        guard.Forget("d1", Body);
+        guard.TryRegister("tpl_a", "d1", Body).Should().BeTrue();
+        guard.Forget("tpl_a", "d1", Body);
 
-        guard.TryRegister("d1", Body).Should().BeTrue();
+        guard.TryRegister("tpl_a", "d1", Body).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Same_body_for_another_template_is_not_a_replay()
+    {
+        // G2 de OT-012: dos Templates del mismo repo+rama = dos webhooks con el MISMO cuerpo.
+        var guard = new WebhookReplayGuard(new ManualClock(DateTimeOffset.UnixEpoch), TimeSpan.FromHours(1));
+
+        guard.TryRegister("tpl_a", "d1", Body).Should().BeTrue();
+        guard.TryRegister("tpl_b", "d2", Body).Should().BeTrue();
+        guard.TryRegister("tpl_b", "d2", Body).Should().BeFalse();
     }
 }

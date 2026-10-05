@@ -98,4 +98,29 @@ public sealed class LoginRateLimitTests(AethraApiFactory factory) : IClassFixtur
             (await TotpAsync(TunnelPeer, "203.0.113.40", host: "yunke.test")).Should().Be(HttpStatusCode.OK);
         }
     }
+
+    [Theory]
+    [InlineData("127.0.0.1")]
+    [InlineData(AethraApiFactory.BridgeGateway)]
+    public async Task Local_automation_without_CF_header_is_not_limited(string localPeer)
+    {
+        // G2 de OT-012: scripts de deploy, aethra-report.py y agentes con Host: localhost llegan
+        // sin CF-Connecting-IP por loopback/docker-proxy. Antes compartian UN cupo de 10/300 s.
+        for (var i = 0; i < 10; i++)
+        {
+            (await TotpAsync(localPeer, null, host: "localhost")).Should().Be(HttpStatusCode.Unauthorized);
+        }
+    }
+
+    [Fact]
+    public async Task Another_container_on_the_bridge_cannot_pick_its_bucket_with_CF_header()
+    {
+        // Un contenedor de la red (app con RCE/SSRF) NO es el conector del tunel: su cabecera no vale.
+        for (var i = 0; i < 3; i++)
+        {
+            await TotpAsync(AethraApiFactory.OtherContainer, $"203.0.113.{60 + i}");
+        }
+
+        (await TotpAsync(AethraApiFactory.OtherContainer, "203.0.113.99")).Should().Be((HttpStatusCode)429);
+    }
 }

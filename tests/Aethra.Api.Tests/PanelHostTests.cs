@@ -156,4 +156,21 @@ public sealed class PanelHostTests(AethraApiFactory factory) : IClassFixture<Aet
         status.Should().Be(HttpStatusCode.NotFound);
         body.Should().NotStartWith("app:");
     }
+
+    [Theory]
+    [InlineData("localhost", AethraApiFactory.OtherContainer, HttpStatusCode.NotFound)]
+    [InlineData("127.0.0.1:5080", AethraApiFactory.OtherContainer, HttpStatusCode.NotFound)]
+    [InlineData("localhost", AethraApiFactory.BridgeGateway, HttpStatusCode.Unauthorized)]
+    [InlineData("localhost", "127.0.0.1", HttpStatusCode.Unauthorized)]
+    public async Task Loopback_host_only_opens_the_panel_to_a_real_local_peer(
+        string host, string peer, HttpStatusCode expected)
+    {
+        // G2 de OT-012: Host: localhost esquiva Cloudflare Access. Desde otro contenedor de la red
+        // (no el gateway exacto) responde 404, igual que un host desconocido.
+        var (status, body) = await SendAsync(HttpMethod.Get, host, "/auth/me",
+            r => r.Headers.Add(AethraApiFactory.PeerHeader, peer));
+
+        status.Should().Be(expected);
+        body.Should().NotStartWith("app:");
+    }
 }

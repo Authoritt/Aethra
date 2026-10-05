@@ -24,7 +24,7 @@ public static class LoginRateLimiting
         var permit = Math.Max(1, configuration.GetValue("Panel:LoginRateLimit:PermitLimit", 10));
         var window = TimeSpan.FromSeconds(
             Math.Max(1, configuration.GetValue("Panel:LoginRateLimit:WindowSeconds", 300)));
-        var trusted = ClientAddress.ResolveTrustedNetworks(configuration);
+        var peers = PanelPeers.FromConfiguration(configuration);
 
         services.AddRateLimiter(options =>
         {
@@ -39,19 +39,20 @@ public static class LoginRateLimiting
                 ctx.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
                     .CreateLogger("Aethra.Auth.RateLimit")
                     .LogWarning("Login limitado para {Client} en {Path}",
-                        ClientAddress.ForRateLimit(ctx.HttpContext, trusted),
+                        ClientAddress.ForRateLimit(ctx.HttpContext, peers) ?? "local",
                         ctx.HttpContext.Request.Path);
                 return ValueTask.CompletedTask;
             };
-            options.AddPolicy(PolicyName, http => RateLimitPartition.GetFixedWindowLimiter(
-                ClientAddress.ForRateLimit(http, trusted),
-                _ => new FixedWindowRateLimiterOptions
+            options.AddPolicy(PolicyName, http => ClientAddress.ForRateLimit(http, peers) is { } key
+                ? RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = permit,
                     Window = window,
                     QueueLimit = 0,
                     AutoReplenishment = true,
-                }));
+                })
+                // Par local sin CF-Connecting-IP: automatizacion de la maquina (G2 de OT-012).
+                : RateLimitPartition.GetNoLimiter("local"));
         });
         return services;
     }

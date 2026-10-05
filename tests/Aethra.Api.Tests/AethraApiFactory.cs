@@ -30,6 +30,8 @@ public class AethraApiFactory : WebApplicationFactory<Program>
 {
     public const string PanelHost = "aethra.test";
     public const string PeerHeader = "X-Test-Peer";
+    public const string BridgeGateway = "172.18.0.1";
+    public const string OtherContainer = "172.18.0.7";
 
     // Program lee la cadena de conexion y Panel:Hosts directamente de builder.Configuration;
     // las variables de entorno las ve con seguridad antes de Build().
@@ -42,6 +44,9 @@ public class AethraApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Tls__AccountEmail", "tests@aethra.local");
         Environment.SetEnvironmentVariable("Tls__UseStaging", "true");
         Environment.SetEnvironmentVariable("Panel__Hosts__0", PanelHost);
+        // Gateway EXACTO del bridge (como en produccion): par local y del tunel. El resto de
+        // 172.16/12 (otros contenedores) no es de confianza.
+        Environment.SetEnvironmentVariable("Panel__LocalPeers__0", BridgeGateway);
         Environment.SetEnvironmentVariable("Panel__LoginRateLimit__PermitLimit", "3");
         Environment.SetEnvironmentVariable("Panel__LoginRateLimit__WindowSeconds", "600");
     }

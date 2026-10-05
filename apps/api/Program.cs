@@ -344,6 +344,19 @@ forwardedHeadersOptions.KnownIPNetworks.Clear();
 // OT-012: el par TCP real se guarda ANTES de que UseForwardedHeaders reescriba RemoteIpAddress
 // con X-Forwarded-For (falsificable: KnownProxies esta vacio). Lo usa el limitador del login.
 app.UseRawPeerCapture();
+// G2 de OT-012: Host localhost/127.0.0.1 en rutas del panel solo desde un par local real.
+var panelPeers = PanelPeers.FromConfiguration(app.Configuration);
+if (PanelSurface.ResolvePanelHosts(app.Configuration) is not null)
+{
+    app.UsePanelLoopbackHostGuard(panelPeers);
+    if (!panelPeers.HasConfiguredLocalPeers)
+    {
+        app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Aethra.Panel.Surface").LogWarning(
+            "ARRANQUE: Panel:LocalPeers vacio -> solo 127.0.0.0/8 y ::1 son locales. Si el central es un "
+            + "contenedor con el puerto publicado, fija Panel__LocalPeers__0=<gateway del bridge>: si no, "
+            + "los scripts con Host: localhost reciben 404 y CF-Connecting-IP no se acepta.");
+    }
+}
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseSerilogRequestLogging();

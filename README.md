@@ -164,7 +164,10 @@ If the API also fronts your apps (the YARP proxy), set `Panel__Hosts__0=<panel h
 (`/auth`, `/api`, hubs, `/mcp`, webhooks, `/openapi`) then answer only on that host and on `localhost`/`127.0.0.1`,
 and every other hostname goes straight to its app. Unset, they answer on any host (a warning is logged at boot).
 `/auth/login` and `/auth/login/totp` are rate limited per client IP (`Panel__LoginRateLimit__PermitLimit`, default 10,
-per `Panel__LoginRateLimit__WindowSeconds`, default 300).
+per `Panel__LoginRateLimit__WindowSeconds`, default 300). If the API runs in a container with its port published,
+also set `Panel__LocalPeers__0=<bridge gateway>` (`docker network inspect <network> -f '{{(index .IPAM.Config 0).Gateway}}'`):
+only loopback and that exact address may use `Host: localhost`, skip the login limiter, and send `CF-Connecting-IP`
+(override the latter with `Panel__TunnelPeers__N`). Other containers on the network are not trusted.
 
 Compose brings up four containers: the central API, the Next.js panel, Postgres, and a local image
 registry the build pipeline pushes to. The **satellite is deliberately not one of them** — it belongs

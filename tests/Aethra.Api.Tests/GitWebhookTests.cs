@@ -20,6 +20,8 @@ public sealed class GitWebhookTests(GitWebhookTests.Factory factory) : IClassFix
 {
     private const string Secret = "s3cret-ot012";
     private const string KnownRepo = "https://github.com/acme/known.git";
+    private const string TwinRepo = "https://github.com/acme/twin.git";
+    private const string SecretB = "otro-secreto-ot012";
 
     public sealed class Factory : AethraApiFactory
     {
@@ -31,16 +33,23 @@ public sealed class GitWebhookTests(GitWebhookTests.Factory factory) : IClassFix
                 var lookup = Substitute.For<ITemplateLookup>();
                 lookup.FindByRepoAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                     .Returns(ci => Task.FromResult<IReadOnlyList<TemplateForBuildView>>(
-                        ci.ArgAt<string>(0) == KnownRepo ? [Template()] : []));
+                        ci.ArgAt<string>(0) switch
+                        {
+                            KnownRepo => [Template()],
+                            // Dos Templates del mismo repo+rama, cada uno con su webhook y su secreto.
+                            TwinRepo => [Template("tpl_twin_a", TwinRepo, Secret), Template("tpl_twin_b", TwinRepo, SecretB)],
+                            _ => [],
+                        }));
                 services.RemoveAll<ITemplateLookup>();
                 services.AddSingleton(lookup);
             });
         }
 
         // WatchPaths que nunca casa: la entrega autentica se acepta y no dispara builds (sin BD).
-        private static TemplateForBuildView Template() => new(
-            TemplateId: "tpl_1", ProjectId: "prj_1", Slug: "known", Name: "known",
-            GitRepoUrl: KnownRepo, Branch: "main", WebhookSecret: Secret, BaseDirectory: ".",
+        private static TemplateForBuildView Template(
+            string id = "tpl_1", string repo = KnownRepo, string secret = Secret) => new(
+            TemplateId: id, ProjectId: "prj_1", Slug: id, Name: id,
+            GitRepoUrl: repo, Branch: "main", WebhookSecret: secret, BaseDirectory: ".",
             WatchPaths: ["never/**"], BuildType: "dockerfile", DockerfilePath: "Dockerfile");
     }
 
@@ -116,5 +125,19 @@ public sealed class GitWebhookTests(GitWebhookTests.Factory factory) : IClassFix
         (await PostAsync(body, "sha256=00", "d-e1")).Status.Should().Be(HttpStatusCode.Unauthorized);
 
         (await PostAsync(body, Sign(body, Secret), "d-e1")).Status.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Two_templates_on_the_same_repo_and_branch_both_get_their_delivery()
+    {
+        // G2 de OT-012 (ALTO): GitHub manda el MISMO cuerpo por los dos webhooks (distinto secreto
+        // y distinto X-GitHub-Delivery). Con la clave global por cuerpo, el segundo recibia 409.
+        var body = PushBody(TwinRepo, "f1");
+
+        (await PostAsync(body, Sign(body, Secret), "d-twin-a")).Status.Should().Be(HttpStatusCode.OK);
+        (await PostAsync(body, Sign(body, SecretB), "d-twin-b")).Status.Should().Be(HttpStatusCode.OK);
+
+        (await PostAsync(body, Sign(body, SecretB), "d-twin-b")).Status.Should().Be(HttpStatusCode.Conflict,
+            "el replay de cada webhook sigue rechazado");
     }
 }
