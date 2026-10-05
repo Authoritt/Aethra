@@ -15,6 +15,44 @@ namespace Aethra.Modules.Projects.Infrastructure.Lookups;
 /// </summary>
 internal sealed class EfEnvironmentResolver(ProjectsDbContext db, ISecretCodec codec) : IEnvironmentResolver
 {
+    public async Task<IReadOnlyDictionary<string, string>> ResolveBuildTimeEnvAsync(
+        EnvironmentScopeChain scope, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        // Misma cascada Project → Template → Client → Instance que el runtime (lo más específico
+        // gana), pero solo env vars IsBuildTime y NUNCA secretos: un build arg queda en las capas
+        // de la imagen (docker history), asi que un secreto no puede viajar por ahi. El modelo de
+        // secretos no tiene flag build-time; se ignoran por diseño.
+        var levels = new (EnvScopeType Type, string Id)[]
+        {
+            (EnvScopeType.Project, scope.ProjectId),
+            (EnvScopeType.Template, scope.TemplateId),
+            (EnvScopeType.Client, scope.ClientId),
+            (EnvScopeType.Instance, scope.InstanceId),
+        };
+
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (type, id) in levels)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                continue;
+            }
+
+            var envVars = await db.EnvironmentVariables.AsNoTracking()
+                .Where(e => e.ScopeType == type && e.ScopeId == id && e.IsBuildTime)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            foreach (var e in envVars)
+            {
+                result[e.Key] = e.Value;
+            }
+        }
+
+        return result;
+    }
+
     public async Task<IReadOnlyDictionary<string, string>> ResolveRuntimeEnvAsync(
         EnvironmentScopeChain scope, CancellationToken ct)
     {

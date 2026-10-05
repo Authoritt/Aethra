@@ -178,6 +178,11 @@ public sealed class NativeDeployRunner(
             var baseEnv = await envResolver.ResolveRuntimeEnvAsync(
                 new EnvironmentScopeChain(instance.ProjectId, instance.TemplateId, instance.ClientId, instance.InstanceId), ct)
                 .ConfigureAwait(false);
+            // Env vars IsBuildTime efectivas de la instancia (misma cascada que el runtime, sin
+            // secretos): alimentan los --build-arg y pisan a los BuildArgs del template.
+            var buildTimeEnv = await envResolver.ResolveBuildTimeEnvAsync(
+                new EnvironmentScopeChain(instance.ProjectId, instance.TemplateId, instance.ClientId, instance.InstanceId), ct)
+                .ConfigureAwait(false);
 
         // Modo git: clonar el repo UNA vez (al branch trackeado) y construir cada imagen.
         BuildContextResult? gitCtx = null;
@@ -224,7 +229,15 @@ public sealed class NativeDeployRunner(
                 image = $"aethra/{instance.Slug}-{svc.Name}:{shortSha}";
                 // OT-008 T12 — BuildArgs del template con {instance}/{domain} interpolados. Sin BuildArgs
                 // el resultado es un diccionario vacio (build identico al historico).
-                var buildArgs = BuildArgsRules.Resolve(template.BuildArgs, instance.Slug, hostname);
+                // Precedencia: env var build-time de la instancia > BuildArg del template (misma clave).
+                var buildArgs = BuildArgsRules.Resolve(template.BuildArgs, instance.Slug, hostname, buildTimeEnv);
+                if (buildArgs.Args.Count > 0)
+                {
+                    // Solo CLAVES: los valores nunca se loguean.
+                    deployment.AppendLog(DeploymentLogLevel.Info, "starting",
+                        $"Build args de '{svc.Name}': [{string.Join(", ", buildArgs.Args.Keys.Order(StringComparer.Ordinal))}]",
+                        clock.UtcNow);
+                }
                 if (buildArgs.UnresolvedDomainKeys.Count > 0)
                 {
                     var argsError = $"Build (git) del servicio '{svc.Name}' no puede resolver {{domain}} en los build args "

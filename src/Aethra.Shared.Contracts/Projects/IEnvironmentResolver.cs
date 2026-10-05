@@ -26,6 +26,13 @@ public interface IEnvironmentResolver
     /// </summary>
     Task<IReadOnlyDictionary<string, string>> ResolveRuntimeEnvAsync(
         EnvironmentScopeChain scope, CancellationToken ct);
+
+    /// <summary>
+    /// Env vars efectivas con <c>IsBuildTime=true</c> (misma cascada de scopes), para los
+    /// <c>--build-arg</c> del build. Nunca incluye secretos (quedarian en las capas de la imagen).
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> ResolveBuildTimeEnvAsync(
+        EnvironmentScopeChain scope, CancellationToken ct);
 }
 
 /// <summary>
