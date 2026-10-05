@@ -11,8 +11,9 @@ namespace Aethra.Modules.Projects.Infrastructure.Lookups;
 /// <c>ScopeId</c>).
 ///
 /// <para>
-/// Idempotencia: <see cref="UpsertManyAsync"/> sobrescribe si ya existe (mismo
-/// <c>ScopeType + ScopeId + Key + Source</c>), pero NO toca filas con otra <c>Source</c> — un
+/// Idempotencia: <see cref="UpsertManyAsync"/> sobrescribe si ya existe (<c>ScopeType + ScopeId + Key</c>,
+/// la unicidad real de BD). Con otra <c>Source</c> aplica <see cref="SourcePolicy"/>: un escritor humano
+/// (<c>manual:</c>/<c>mcp:</c>) actualiza y toma la fila; un binding NO toca una fila humana — un
 /// usuario manual no pierde su override cuando un ServiceBinding actualiza sus vars.
 /// </para>
 ///
@@ -45,13 +46,12 @@ internal sealed class EfEnvVarWriter(ProjectsDbContext db, IClock clock) : IEnvV
         var scopeType = MapScope(scope);
         var now = clock.UtcNow;
 
-        // Pre-carga las vars existentes de este scope/source para decidir update vs insert sin
-        // disparar N round-trips.
+        // Pre-carga las vars existentes de este scope (CUALQUIER source: el índice único es
+        // (scope, key) sin source) para decidir update vs insert sin N round-trips.
         var keys = vars.Select(v => v.Key.Trim()).ToList();
         var existing = await db.EnvironmentVariables
             .Where(e => e.ScopeType == scopeType
                 && e.ScopeId == scopeId
-                && e.Source == source
                 && keys.Contains(e.Key))
             .ToListAsync(ct)
             .ConfigureAwait(false);
@@ -62,6 +62,14 @@ internal sealed class EfEnvVarWriter(ProjectsDbContext db, IClock clock) : IEnvV
             var key = v.Key.Trim();
             if (existingByKey.TryGetValue(key, out var current))
             {
+                if (!SourcePolicy.CanOverwrite(current.Source, source))
+                {
+                    continue; // override humano preservado frente a un binding
+                }
+                if (!string.Equals(current.Source, source, StringComparison.Ordinal))
+                {
+                    current.TransferSource(source, now);
+                }
                 current.UpdateValue(v.Value ?? string.Empty, now);
                 current.UpdateFlags(v.IsBuildTime, v.IsRuntime, isLiteral: null, isMultiline: null, now);
             }

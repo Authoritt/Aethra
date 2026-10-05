@@ -12,8 +12,8 @@ namespace Aethra.Modules.Projects.Infrastructure.Lookups;
 /// (<see cref="ISecretCodec"/>) en la tabla separada <c>projects.secrets</c>.
 ///
 /// Idempotencia: misma semántica que <see cref="EfEnvVarWriter"/> — sobrescribe si existe
-/// (mismo <c>ScopeType + ScopeId + Key</c> dentro de la <c>Source</c>), no toca filas de otra
-/// <c>Source</c>. Persiste con <c>SaveChangesAsync</c> antes de retornar (punto-de-no-retorno;
+/// (<c>ScopeType + ScopeId + Key</c>, unicidad real de BD); con otra <c>Source</c> aplica
+/// <see cref="SourcePolicy"/> (humano pisa; binding no pisa humano). Persiste con <c>SaveChangesAsync</c> antes de retornar (punto-de-no-retorno;
 /// no hay transacción cross-DbContext).
 /// </summary>
 internal sealed class EfSecretWriter(ProjectsDbContext db, ISecretCodec codec, IClock clock) : ISecretWriter
@@ -40,7 +40,6 @@ internal sealed class EfSecretWriter(ProjectsDbContext db, ISecretCodec codec, I
         var existing = await db.Secrets
             .Where(e => e.ScopeType == scopeType
                 && e.ScopeId == scopeId
-                && e.Source == source
                 && keys.Contains(e.Key))
             .ToListAsync(ct)
             .ConfigureAwait(false);
@@ -52,6 +51,14 @@ internal sealed class EfSecretWriter(ProjectsDbContext db, ISecretCodec codec, I
             var cipher = codec.Encode(s.PlainValue);
             if (existingByKey.TryGetValue(key, out var current))
             {
+                if (!SourcePolicy.CanOverwrite(current.Source, source))
+                {
+                    continue; // override humano preservado frente a un binding
+                }
+                if (!string.Equals(current.Source, source, StringComparison.Ordinal))
+                {
+                    current.TransferSource(source, now);
+                }
                 current.UpdateCipher(cipher, now);
             }
             else

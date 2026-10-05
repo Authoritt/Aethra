@@ -76,6 +76,14 @@ public sealed class Secret : Entity<SecretId>
         UpdatedAt = now;
     }
 
+    /// <summary>Cambia el origen de la fila (último escritor); el índice único no incluye source.</summary>
+    public void TransferSource(string source, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        Source = source;
+        UpdatedAt = now;
+    }
+
     private static void ValidateKey(string key)
     {
         if (string.IsNullOrWhiteSpace(key))

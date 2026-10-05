@@ -94,6 +94,17 @@ public sealed class EnvironmentVariable : Entity<EnvVarId>
         UpdatedAt = now;
     }
 
+    /// <summary>
+    /// Cambia el origen de la fila (último escritor). Necesario porque el índice único es
+    /// (scope, key) sin source: una variable no puede duplicarse por tener otro origen.
+    /// </summary>
+    public void TransferSource(string source, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        Source = source;
+        UpdatedAt = now;
+    }
+
     public void UpdateFlags(bool? isBuildTime, bool? isRuntime, bool? isLiteral, bool? isMultiline,
         DateTimeOffset now)
     {
