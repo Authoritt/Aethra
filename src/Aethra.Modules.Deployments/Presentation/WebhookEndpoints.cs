@@ -55,6 +55,7 @@ public static class WebhookEndpoints
         IMediator mediator,
         IGitHubUserResolver gitHubUsers,
         IPreviewInstanceCoordinator previewCoordinator,
+        WebhookReplayGuard replayGuard,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
@@ -80,13 +81,55 @@ public static class WebhookEndpoints
             return Results.Ok(new { event_name = eventName, handled = false });
         }
 
-        return eventName switch
+        var replay = new ReplayCheck(replayGuard, http.Request.Headers["X-GitHub-Delivery"].ToString(), body);
+        try
         {
-            "push" => await HandlePushAsync(http, body, lookup, instanceLookup, mediator, logger, ct).ConfigureAwait(false),
-            "pull_request" => await HandlePullRequestAsync(
-                http, body, lookup, mediator, gitHubUsers, previewCoordinator, logger, ct).ConfigureAwait(false),
-            _ => Results.Ok(new { event_name = eventName, handled = false }),
-        };
+            return eventName switch
+            {
+                "push" => await HandlePushAsync(http, body, lookup, instanceLookup, mediator, replay, logger, ct).ConfigureAwait(false),
+                "pull_request" => await HandlePullRequestAsync(
+                    http, body, lookup, mediator, gitHubUsers, previewCoordinator, replay, logger, ct).ConfigureAwait(false),
+                _ => Results.Ok(new { event_name = eventName, handled = false }),
+            };
+        }
+        catch
+        {
+            // Entrega aceptada que fallo al procesarse: el reintento de GitHub (mismo id y cuerpo)
+            // no debe tratarse como replay.
+            replay.ForgetIfRegistered();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// OT-012 (H3) — registro anti-replay de UNA entrega. Se consulta solo tras validar la firma.
+    /// </summary>
+    private sealed class ReplayCheck(WebhookReplayGuard guard, string deliveryId, byte[] body)
+    {
+        private bool _registered;
+
+        /// <summary>
+        /// <c>null</c> si la entrega es nueva (queda registrada); si no, la respuesta 409.
+        /// </summary>
+        public IResult? RejectIfReplay(ILogger logger, HttpContext http)
+        {
+            if (guard.TryRegister(deliveryId, body))
+            {
+                _registered = true;
+                return null;
+            }
+            logger.LogWarning("Webhook REPETIDO rechazado (delivery {Delivery}) desde {Ip}",
+                deliveryId, http.Connection.RemoteIpAddress);
+            return Results.Conflict(new { error = "duplicate_delivery" });
+        }
+
+        public void ForgetIfRegistered()
+        {
+            if (_registered)
+            {
+                guard.Forget(deliveryId, body);
+            }
+        }
     }
 
     private static async Task<IResult> HandlePushAsync(
@@ -95,6 +138,7 @@ public static class WebhookEndpoints
         ITemplateLookup lookup,
         IInstanceLookup instanceLookup,
         IMediator mediator,
+        ReplayCheck replay,
         ILogger logger,
         CancellationToken ct)
     {
@@ -138,7 +182,9 @@ public static class WebhookEndpoints
         {
             logger.LogInformation("Webhook push para repo sin Templates registrados: {Repo} @ {Branch}",
                 payload.Repository.CloneUrl, payload.Branch);
-            return Results.Ok(new { matched_templates = 0 });
+            // OT-012 (H3): la misma respuesta que una firma invalida. Antes era 200
+            // {matched_templates:0} vs 401, un oraculo anonimo de que repo+rama tiene Template.
+            return Results.Unauthorized();
         }
 
         // 3. Validar firma por Template: cada Template conserva su propio WebhookSecret.
@@ -151,6 +197,12 @@ public static class WebhookEndpoints
         {
             logger.LogWarning("Webhook firma inválida desde {Ip}", http.Connection.RemoteIpAddress);
             return Results.Unauthorized();
+        }
+
+        // OT-012 (H3): firma valida != entrega nueva. La firma no cubre ningun nonce.
+        if (replay.RejectIfReplay(logger, http) is { } duplicate)
+        {
+            return duplicate;
         }
 
         // 4. Fan-out: por cada Template autenticado, evaluar WatchPaths y encolar Build.
@@ -226,6 +278,7 @@ public static class WebhookEndpoints
         IMediator mediator,
         IGitHubUserResolver gitHubUsers,
         IPreviewInstanceCoordinator coordinator,
+        ReplayCheck replay,
         ILogger logger,
         CancellationToken ct)
     {
@@ -264,7 +317,8 @@ public static class WebhookEndpoints
         if (matchingTemplates.Count == 0)
         {
             logger.LogInformation("PR webhook para repo sin Templates: {Repo}", payload.Repository.CloneUrl);
-            return Results.Ok(new { matched_templates = 0 });
+            // OT-012 (H3): misma respuesta que firma invalida (sin oraculo de Templates).
+            return Results.Unauthorized();
         }
 
         // 2. Validar HMAC por Template, igual que push.
@@ -277,6 +331,11 @@ public static class WebhookEndpoints
         {
             logger.LogWarning("PR webhook firma inválida desde {Ip}", http.Connection.RemoteIpAddress);
             return Results.Unauthorized();
+        }
+
+        if (replay.RejectIfReplay(logger, http) is { } duplicate)
+        {
+            return duplicate;
         }
 
         var prNumber = payload.PullRequest.Number.Value;

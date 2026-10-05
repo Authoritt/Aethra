@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- Mvc.Testing 10.0.x arrastra Hosting/Serilog mas nuevos que los pines centrales (NU1109). -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+    <!-- NU1903: System.Security.Cryptography.Xml (transitiva del grafo de test, sin version
+         parcheada publicada a 2026-10-04: 9.0.0, 10.0.7 y 10.0.8 marcadas). Proyecto de TEST, no
+         se publica; el host real no cambia. -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+    <!-- OpenApiAccessTests llama AddOpenApi: el generador de OpenAPI emite interceptores. -->
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.AspNetCore.OpenApi.Generated</InterceptorsNamespaces>
+    <Description>OT-012: pruebas del host de la API contra el Program real (WebApplicationFactory):
+superficie del panel por host (las apps del proxy no notan nada), limitador del login, OpenAPI y webhook.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <!-- Serilog.AspNetCore 10 (via Aethra.Api) pide sinks mas nuevos que los pines centrales:
+         sin pinning transitivo NuGet los veria como downgrade (NU1605). Solo en este proyecto de test. -->
+    <PackageReference Include="Serilog.Sinks.Console" VersionOverride="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" VersionOverride="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\apps\api\Aethra.Api.csproj" />
+  </ItemGroup>
+
+</Project>

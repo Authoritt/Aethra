@@ -156,7 +156,14 @@ de .NET y de Next, y no es rápido.
 
 Las migraciones se aplican al arrancar porque el compose pone `Aethra__ApplyMigrationsOnStart=true`.
 Es opt-in a propósito: un despliegue gestionado las corre desde su pipeline, y no quieres dos
-instancias migrando a la vez. `/openapi/v1.json` se sirve siempre; fuera de `Development` exige autenticacion.
+instancias migrando a la vez. `/openapi/v1.json` se sirve siempre y exige sesion o API key de admin en cualquier
+entorno.
+
+Si la API hace tambien de proxy de tus apps (YARP), fija `Panel__Hosts__0=<host del panel>`: las rutas propias de
+Aethra (`/auth`, `/api`, hubs, `/mcp`, webhooks, `/openapi`) solo responden en ese host y en `localhost`/`127.0.0.1`,
+y cualquier otro host va directo a su app. Sin fijarlo responden en cualquier host (se avisa al arrancar).
+`/auth/login` y `/auth/login/totp` tienen limite por IP del cliente (`Panel__LoginRateLimit__PermitLimit`, 10 por
+defecto, cada `Panel__LoginRateLimit__WindowSeconds`, 300 por defecto).
 
 El compose levanta cuatro contenedores: el central, el panel Next.js, Postgres y un registry local al
 que empuja el pipeline de build. El **satélite no está ahí a propósito** — va en cada máquina que

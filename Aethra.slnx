@@ -25,6 +25,7 @@
     <Project Path="src/Aethra.Shared.Kernel/Aethra.Shared.Kernel.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Aethra.Api.Tests/Aethra.Api.Tests.csproj" />
     <Project Path="tests/Aethra.ArchitectureTests/Aethra.ArchitectureTests.csproj" />
     <Project Path="tests/Aethra.Modules.Cloudflare.Tests/Aethra.Modules.Cloudflare.Tests.csproj" />
     <Project Path="tests/Aethra.Modules.Deployments.Tests/Aethra.Modules.Deployments.Tests.csproj" />

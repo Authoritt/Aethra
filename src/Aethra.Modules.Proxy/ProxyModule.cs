@@ -45,7 +45,8 @@ public static class ProxyModule
     {
         app.MapRoutesEndpoints();
         app.MapCertificateEndpoints();
-        app.MapAcmeChallengeEndpoint();
+        // OT-012: el HTTP-01 de ACME NO va aqui: llega por el host de cada app y el host lo mapea
+        // fuera del grupo del panel (Program.cs). Este metodo es superficie del panel.
         return app;
     }
 }

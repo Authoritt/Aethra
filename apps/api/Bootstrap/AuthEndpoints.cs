@@ -113,7 +113,9 @@ public static class AuthEndpoints
             });
         })
         .WithName("Login")
-        .AllowAnonymous();
+        .AllowAnonymous()
+        // OT-012: limitador propio por IP real; defensa aunque el borde se salte.
+        .RequireRateLimiting(LoginRateLimiting.PolicyName);
 
         // F12.1B: segundo paso del login para users con 2FA activo. Valida el JWT challenge
         // + el codigo TOTP (o recovery). Si OK, emite la cookie completa.
@@ -175,7 +177,9 @@ public static class AuthEndpoints
             });
         })
         .WithName("LoginTotp")
-        .AllowAnonymous();
+        .AllowAnonymous()
+        // OT-012: limitador propio por IP real; defensa aunque el borde se salte.
+        .RequireRateLimiting(LoginRateLimiting.PolicyName);
 
         // Restringido a cookie: una API key NO debe poder invalidar la sesión humana
         // (default policy es 'cookie OR apikey', así que sin esta restricción cualquier

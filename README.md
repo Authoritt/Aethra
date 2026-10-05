@@ -157,7 +157,14 @@ Next images and is not fast.
 
 Migrations are applied on boot because the compose sets `Aethra__ApplyMigrationsOnStart=true`. That is
 opt-in on purpose: a managed deployment runs them from its pipeline instead, and you do not want two
-instances migrating at once. `/openapi/v1.json` is always served; outside `Development` it requires authentication.
+instances migrating at once. `/openapi/v1.json` is always served and always requires an admin session or admin API key,
+whatever the environment.
+
+If the API also fronts your apps (the YARP proxy), set `Panel__Hosts__0=<panel hostname>`: Aethra's own routes
+(`/auth`, `/api`, hubs, `/mcp`, webhooks, `/openapi`) then answer only on that host and on `localhost`/`127.0.0.1`,
+and every other hostname goes straight to its app. Unset, they answer on any host (a warning is logged at boot).
+`/auth/login` and `/auth/login/totp` are rate limited per client IP (`Panel__LoginRateLimit__PermitLimit`, default 10,
+per `Panel__LoginRateLimit__WindowSeconds`, default 300).
 
 Compose brings up four containers: the central API, the Next.js panel, Postgres, and a local image
 registry the build pipeline pushes to. The **satellite is deliberately not one of them** — it belongs

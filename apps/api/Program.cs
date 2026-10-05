@@ -12,6 +12,7 @@ using Aethra.Modules.Notes;
 using Aethra.Modules.Notifications;
 using Aethra.Modules.Projects;
 using Aethra.Modules.Proxy;
+using Aethra.Modules.Proxy.Presentation;
 using Aethra.Modules.Services;
 using Aethra.Modules.Settings;
 using Aethra.Modules.Identity.Infrastructure.Authentication;
@@ -200,7 +201,12 @@ builder.Services.AddAuthorization(opts =>
         .AddAuthenticationSchemes(AuthSchemes.Cookie)
         .RequireAuthenticatedUser());
     opts.AddApiKeyScopePolicies();
+    // OT-012 (H2): /openapi solo para admin, sea cual sea el entorno.
+    opts.AddOpenApiAdminPolicy();
 });
+
+// OT-012: limitador propio de /auth/login y /auth/login/totp (por IP real tras el tunel).
+builder.Services.AddAethraLoginRateLimiter(builder.Configuration);
 
 // -----------------------------------------------------------------------------
 // SignalR: hub de satélite (entrada de métricas) + hub de dashboard (push al frontend).
@@ -335,6 +341,9 @@ var forwardedHeadersOptions = new ForwardedHeadersOptions
 };
 forwardedHeadersOptions.KnownProxies.Clear();
 forwardedHeadersOptions.KnownIPNetworks.Clear();
+// OT-012: el par TCP real se guarda ANTES de que UseForwardedHeaders reescriba RemoteIpAddress
+// con X-Forwarded-For (falsificable: KnownProxies esta vacio). Lo usa el limitador del login.
+app.UseRawPeerCapture();
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseSerilogRequestLogging();
@@ -345,42 +354,65 @@ app.UseStatusCodePages();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+// Solo actua sobre endpoints con RequireRateLimiting (el login): sin limitador global, el proxy
+// de las apps no lo nota. El endpoint ya esta resuelto: el UseRouting implicito va primero.
+app.UseRateLimiter();
 
 // -----------------------------------------------------------------------------
 // Endpoints
 // -----------------------------------------------------------------------------
-// El documento OpenAPI es el unico artefacto DERIVADO del registro de rutas: no se mantiene
-// a mano, asi que no puede desviarse del codigo como si puede un mapa de arquitectura o un
-// README. Estaba mapeado solo en Development, es decir, ausente exactamente del despliegue
-// donde alguien necesita preguntar que rutas existen de verdad.
-//
-// Fuera de Development exige autenticacion. El codigo es abierto, asi que la superficie no
-// es un secreto; pero servirsela a un escaner anonimo no aporta nada a nadie.
-var openApi = app.MapOpenApi();
-if (!app.Environment.IsDevelopment())
+// OT-012 (H1): toda la superficie propia de Aethra va en el grupo del panel (RequireHost con
+// Panel:Hosts + loopback). Por cualquier otro host esas rutas no casan y la peticion sigue al
+// catch-all de YARP de ese host: las apps reciben sus propias /auth, /api, /hubs como si Aethra
+// no existiera. Ver PanelSurface.
+var panelHosts = PanelSurface.ResolvePanelHosts(app.Configuration);
+var surfaceLog = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Aethra.Panel.Surface");
+if (panelHosts is null)
 {
-    openApi.RequireAuthorization();
+    surfaceLog.LogWarning(
+        "ARRANQUE: Panel:Hosts vacio -> las rutas de Aethra responden en CUALQUIER host que llegue "
+        + "a este proceso (incluidos los de las apps del proxy). En produccion fija "
+        + "Panel__Hosts__0=<host del panel>.");
+}
+else
+{
+    surfaceLog.LogInformation("ARRANQUE: rutas de Aethra restringidas a los hosts {Hosts}",
+        string.Join(", ", panelHosts));
 }
 
+// Fuera del grupo, a proposito (atienden en TODOS los hosts, como antes):
+//  - /health y /health/ready: hoy los hosts de las apps los devuelven desde Aethra y puede haber
+//    monitores apuntando ahi; moverlos cambia lo que ve una app/monitor. No exponen nada.
+//  - /.well-known/acme-challenge: el HTTP-01 de Let's Encrypt llega por el host de CADA app.
 app.MapHealthEndpoints();
-app.MapAuthEndpoints();
-app.MapContextEndpoints();
-app.MapNativeDeployEndpoints();
-app.MapOperationsEndpoints();
-app.MapProjectsModuleEndpoints();
-app.MapVmsModuleEndpoints();
-app.MapMetricsModuleEndpoints();
-app.MapProxyModuleEndpoints();
-app.MapDeploymentsModuleEndpoints();
-app.MapServicesModuleEndpoints();
-app.MapCloudflareModuleEndpoints();
-app.MapMonitoringModuleEndpoints();
-app.MapNotesModuleEndpoints();
-app.MapNotificationsModuleEndpoints();
-app.MapIdentityModuleEndpoints();
-app.MapMcpModuleEndpoints();
-app.MapSettingsModuleEndpoints();
-app.MapDashboardHub();
+app.MapAcmeChallengeEndpoint();
+
+var panel = app.MapPanelGroup(panelHosts);
+
+// El documento OpenAPI es el unico artefacto DERIVADO del registro de rutas: no se mantiene
+// a mano, asi que no puede desviarse del codigo como si puede un mapa de arquitectura o un
+// README. OT-012 (H2): exige sesion o clave de admin SIEMPRE — produccion corre en Development
+// a proposito y antes eso lo dejaba anonimo.
+panel.MapAethraOpenApi();
+
+panel.MapAuthEndpoints();
+panel.MapContextEndpoints();
+panel.MapNativeDeployEndpoints();
+panel.MapOperationsEndpoints();
+panel.MapProjectsModuleEndpoints();
+panel.MapVmsModuleEndpoints();
+panel.MapMetricsModuleEndpoints();
+panel.MapProxyModuleEndpoints();
+panel.MapDeploymentsModuleEndpoints();
+panel.MapServicesModuleEndpoints();
+panel.MapCloudflareModuleEndpoints();
+panel.MapMonitoringModuleEndpoints();
+panel.MapNotesModuleEndpoints();
+panel.MapNotificationsModuleEndpoints();
+panel.MapIdentityModuleEndpoints();
+panel.MapMcpModuleEndpoints();
+panel.MapSettingsModuleEndpoints();
+panel.MapDashboardHub();
 
 // YARP reverse proxy: catch-all al final. Cualquier hostname no manejado por endpoints
 // REST/hubs anteriores se enruta vía YARP usando la config en la BD.

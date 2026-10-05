@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
 namespace Aethra.Modules.Deployments;
@@ -37,6 +38,10 @@ public static class DeploymentsModule
         services.AddAethraModuleDbContext<DeploymentsDbContext>(conn);
 
         // A7 — Build pipeline: cola in-process + orquestador scoped + worker BackgroundService.
+        // OT-012 (H3): anti-replay del webhook de git (singleton: el registro vive en memoria).
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<Webhooks.WebhookReplayGuard>(sp => new Webhooks.WebhookReplayGuard(sp.GetRequiredService<TimeProvider>()));
+
         services.AddSingleton<IBuildJobQueue, InMemoryBuildJobQueue>();
         services.AddScoped<IBuildOrchestrator, BuildOrchestrator>();
         services.AddHostedService<BuildWorker>();
