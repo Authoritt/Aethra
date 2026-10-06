@@ -267,15 +267,7 @@ public sealed class BuildOrchestrator(
         }
     }
 
-    /// <summary>
-    /// Normaliza un git ref a su shorthand de branch: <c>refs/heads/v2</c> → <c>v2</c>. LibGit2Sharp
-    /// (CloneOptions.BranchName) espera el shorthand, no el ref completo del webhook.
-    /// </summary>
-    private static string NormalizeRef(string gitRef)
-    {
-        const string prefix = "refs/heads/";
-        return gitRef.StartsWith(prefix, StringComparison.Ordinal) ? gitRef[prefix.Length..] : gitRef;
-    }
+    private static string NormalizeRef(string gitRef) => GitRefs.ToBranchShorthand(gitRef);
 
     /// <summary>
     /// Mapea el string del <c>template.BuildType</c> (que viene del read-model) al enum

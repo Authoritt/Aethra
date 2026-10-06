@@ -11,6 +11,21 @@ namespace Aethra.Modules.Deployments.Infrastructure.Build;
 /// realmente materializado (puede diferir del solicitado si el checkout cayó al HEAD del branch)
 /// + líneas de log para anexar al build.
 /// </summary>
+/// <summary>Normalización compartida de refs git (runner de deploy y orquestador de build).</summary>
+public static class GitRefs
+{
+    /// <summary>
+    /// <c>refs/heads/v2</c> → <c>v2</c>. <c>git clone --branch</c> solo acepta el shorthand; el ref
+    /// completo hace fallar el clone. Otros refs (tags, sha, <c>refs/pull/..</c>) pasan intactos.
+    /// </summary>
+    public static string ToBranchShorthand(string gitRef)
+    {
+        const string prefix = "refs/heads/";
+        var t = gitRef?.Trim() ?? string.Empty;
+        return t.StartsWith(prefix, StringComparison.Ordinal) ? t[prefix.Length..] : t;
+    }
+}
+
 public sealed record BuildContextResult(byte[] TarGz, string ResolvedSha, IReadOnlyList<string> Log);
 
 /// <summary>
@@ -62,7 +77,12 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
             // El log usa la URL LIMPIA; la URL con token (si el repo es privado) solo viaja en los
             // args de git. El token queda en .git/config del workDir temporal, que se excluye del
             // tar (PackContext) y se borra al final.
-            log.Add($"Clonando {gitRepoUrl} (branch={branch})...");
+            // Git solo acepta el shorthand en --branch: "refs/heads/x" haría fallar el clone y el
+            // reintento caería al branch por defecto (bug 2026-10-05). Normalizamos aquí también
+            // para que ningún llamante pueda reintroducirlo.
+            var requestedRef = branch;
+            branch = GitRefs.ToBranchShorthand(branch);
+            log.Add($"Clonando {gitRepoUrl} (ref pedido={requestedRef}, branch={branch})...");
             var cloneUrl = ApplyAccessToken(gitRepoUrl, accessToken);
             var hasBranch = !string.IsNullOrWhiteSpace(branch);
             string[] cloneArgs = hasBranch
@@ -72,8 +92,16 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
             var clone = await RunGitAsync(cloneArgs, workingDir: null, ct).ConfigureAwait(false);
             if (clone.ExitCode != 0)
             {
-                // Reintento sin --branch: el ref puede no ser un branch (tag/sha) o el default
-                // difiere del pedido. Clonamos el default y luego intentamos el checkout.
+                // El clone con --branch falla si el ref no es branch/tag o no existe. NUNCA se
+                // construye el branch por defecto en su lugar: con ref explícito, el reintento clona
+                // el default solo como vehículo para traer ESE ref (fetch + checkout detached) y,
+                // si no se puede resolver, falla con ref_not_found. Sin ref explícito no hay
+                // reintento que valga: el clone simple ya era el de la rama por defecto.
+                if (!hasBranch)
+                {
+                    throw new InvalidOperationException(
+                        $"git clone falló: {Redact(Trim(clone.StdErr), accessToken)}");
+                }
                 Directory.Delete(workDir, recursive: true);
                 Directory.CreateDirectory(workDir);
                 var retry = await RunGitAsync(["clone", "--depth", "1", cloneUrl, workDir], null, ct)
@@ -83,6 +111,19 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
                     throw new InvalidOperationException(
                         $"git clone falló: {Redact(Trim(retry.StdErr.Length > 0 ? retry.StdErr : clone.StdErr), accessToken)}");
                 }
+                var fetchRef = await RunGitAsync(["fetch", "--depth", "1", "origin", branch], workDir, ct)
+                    .ConfigureAwait(false);
+                var checkoutRef = fetchRef.ExitCode == 0
+                    ? await RunGitAsync(["checkout", "--detach", "FETCH_HEAD"], workDir, ct).ConfigureAwait(false)
+                    : fetchRef;
+                if (checkoutRef.ExitCode != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"ref_not_found: el ref '{requestedRef}' no existe en {gitRepoUrl} "
+                        + $"({Redact(Trim(fetchRef.StdErr.Length > 0 ? fetchRef.StdErr : checkoutRef.StdErr), accessToken)}). "
+                        + "La build se aborta: construir otro ref (p. ej. el branch por defecto) produciría un artefacto equivocado.");
+                }
+                log.Add($"Ref '{branch}' resuelto por fetch + checkout (no era branch/tag clonable directamente).");
             }
 
             // === Checkout del SHA solicitado — EXIGIDO, no best-effort ===
@@ -150,6 +191,7 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
             var tarGz = await Task.Run(() => PackContext(contextRoot), ct).ConfigureAwait(false);
             log.Add($"Contexto empaquetado: {tarGz.Length / 1024} KiB.");
 
+            log.Add($"Ref pedido '{requestedRef}' -> resuelto {Short(resolvedSha)}.");
             return new BuildContextResult(tarGz, resolvedSha, log);
         }
         finally

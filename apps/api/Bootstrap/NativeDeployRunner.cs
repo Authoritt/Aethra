@@ -189,7 +189,8 @@ public sealed class NativeDeployRunner(
         string? shortSha = null;
         if (services.Any(s => string.Equals(s.BuildMode, "git", StringComparison.OrdinalIgnoreCase)))
         {
-            var branch = !string.IsNullOrWhiteSpace(instance.TrackedRef) ? instance.TrackedRef! : template.Branch;
+            var requestedRef = !string.IsNullOrWhiteSpace(instance.TrackedRef) ? instance.TrackedRef! : template.Branch;
+            var branch = GitRefs.ToBranchShorthand(requestedRef);
             // Repo privado: resolvemos el token de la credencial del template (si la hay) para que
             // el clone autentique. El secreto nunca se loguea (solo viaja en los args de git).
             var cloneToken = string.IsNullOrWhiteSpace(template.AccessTokenCredentialName)
@@ -198,7 +199,7 @@ public sealed class NativeDeployRunner(
             gitCtx = await buildContext.BuildAsync(template.GitRepoUrl, branch, null, template.BaseDirectory ?? string.Empty, cloneToken, ct)
                 .ConfigureAwait(false);
             shortSha = gitCtx.ResolvedSha.Length >= 7 ? gitCtx.ResolvedSha[..7] : gitCtx.ResolvedSha;
-            log.LogInformation("native-deploy {Inst}: contexto git {Repo}@{Branch} → {Sha}", instance.Slug, template.GitRepoUrl, branch, shortSha);
+            log.LogInformation("native-deploy {Inst}: contexto git {Repo} ref pedido={Requested} (rama={Branch}) → resuelto {Sha}", instance.Slug, template.GitRepoUrl, requestedRef, branch, shortSha);
         }
 
         deployment.Transition(DeploymentStatus.Starting, clock.UtcNow);

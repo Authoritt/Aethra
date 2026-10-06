@@ -1,5 +1,9 @@
 using Aethra.Modules.Deployments.Infrastructure.Build;
+using System.Diagnostics;
+using System.Formats.Tar;
+using System.IO.Compression;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Aethra.Modules.Deployments.Tests;
@@ -158,5 +162,126 @@ public sealed class BuildContextBuilderTests
     public void An_unresolvable_head_never_satisfies_a_requested_commit(string? resolved)
     {
         BuildContextBuilder.ResolvedShaSatisfiesRequest("a9f88cb", resolved).Should().BeFalse();
+    }
+
+    // ---------- Ref explícito: nunca construir otra rama (bug 2026-10-05) ----------
+
+    [Theory]
+    [InlineData("refs/heads/x", "x")]
+    [InlineData("x", "x")]
+    [InlineData("feature/y", "feature/y")]
+    [InlineData("v1.0", "v1.0")]
+    public void GitRefs_normalizes_only_the_heads_prefix(string input, string expected)
+    {
+        GitRefs.ToBranchShorthand(input).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("refs/heads/rama-x")]
+    [InlineData("rama-x")]
+    public async Task Builds_the_requested_branch_not_the_default(string requested)
+    {
+        using var repo = TempRepo.Create();
+        var result = await Builder().BuildAsync(repo.Url, requested, null, "", null, CancellationToken.None);
+        result.ResolvedSha.Should().Be(repo.BranchSha);
+        result.ResolvedSha.Should().NotBe(repo.MainSha);
+        TarContent(result.TarGz, "marker.txt").Should().Be("rama-x");
+    }
+
+    [Fact]
+    public async Task A_missing_branch_fails_with_ref_not_found_instead_of_building_default()
+    {
+        using var repo = TempRepo.Create();
+        var act = () => Builder().BuildAsync(repo.Url, "refs/heads/no-existe", null, "", null, CancellationToken.None);
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain("ref_not_found");
+    }
+
+    [Fact]
+    public async Task A_tag_ref_is_built()
+    {
+        using var repo = TempRepo.Create();
+        var result = await Builder().BuildAsync(repo.Url, "v1.0", null, "", null, CancellationToken.None);
+        result.ResolvedSha.Should().Be(repo.BranchSha);
+        TarContent(result.TarGz, "marker.txt").Should().Be("rama-x");
+    }
+
+    private static BuildContextBuilder Builder() => new(NullLogger<BuildContextBuilder>.Instance);
+
+    private static string TarContent(byte[] tarGz, string name)
+    {
+        using var gz = new GZipStream(new MemoryStream(tarGz), CompressionMode.Decompress);
+        using var tar = new TarReader(gz);
+        while (tar.GetNextEntry() is { } e)
+        {
+            if (e.Name == name)
+            {
+                using var r = new StreamReader(e.DataStream!);
+                return r.ReadToEnd().Trim();
+            }
+        }
+        throw new InvalidOperationException($"{name} no está en el tar");
+    }
+
+    /// <summary>Repo git local temporal: main (marker=main) y rama-x (marker=rama-x, tag v1.0).</summary>
+    private sealed class TempRepo : IDisposable
+    {
+        private readonly string _dir;
+        public string Url => new Uri(_dir).AbsoluteUri;
+        public string MainSha { get; private set; } = "";
+        public string BranchSha { get; private set; } = "";
+        private TempRepo(string dir) => _dir = dir;
+
+        public static TempRepo Create()
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "aethra-bcb-test-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            var r = new TempRepo(dir);
+            Git(dir, "init", "-q", "-b", "main");
+            File.WriteAllText(Path.Combine(dir, "marker.txt"), "main");
+            Git(dir, "add", "-A");
+            Git(dir, "commit", "-q", "-m", "main");
+            r.MainSha = Git(dir, "rev-parse", "HEAD").Trim();
+            Git(dir, "checkout", "-q", "-b", "rama-x");
+            File.WriteAllText(Path.Combine(dir, "marker.txt"), "rama-x");
+            Git(dir, "commit", "-q", "-am", "rama");
+            r.BranchSha = Git(dir, "rev-parse", "HEAD").Trim();
+            Git(dir, "tag", "v1.0");
+            Git(dir, "checkout", "-q", "main");
+            return r;
+        }
+
+        private static string Git(string dir, params string[] args)
+        {
+            var psi = new ProcessStartInfo("git") { WorkingDirectory = dir, RedirectStandardOutput = true, RedirectStandardError = true };
+            foreach (var a in new[] { "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false" })
+            {
+                psi.ArgumentList.Add(a);
+            }
+            foreach (var a in args)
+            {
+                psi.ArgumentList.Add(a);
+            }
+            using var p = Process.Start(psi)!;
+            var o = p.StandardOutput.ReadToEnd();
+            p.WaitForExit();
+            if (p.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"git {string.Join(' ', args)}: {p.StandardError.ReadToEnd()}");
+            }
+            return o;
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                foreach (var f in Directory.EnumerateFiles(_dir, "*", SearchOption.AllDirectories))
+                {
+                    File.SetAttributes(f, FileAttributes.Normal);
+                }
+                Directory.Delete(_dir, true);
+            }
+            catch (IOException) { }
+        }
     }
 }
