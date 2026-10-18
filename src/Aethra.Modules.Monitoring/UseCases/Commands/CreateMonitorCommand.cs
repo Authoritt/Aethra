@@ -73,13 +73,10 @@ internal sealed class CreateMonitorHandler(MonitoringDbContext db, IClock clock)
         // Anti-duplicado por URL normalizada (trim + sin '/' final + lowercase): evita dos monitores
         // chequeando EXACTAMENTE el mismo endpoint — el caso que dejó "myapp" y "myapp-admin"
         // apuntando a la misma URL. Monitores de distinto path (p.ej. '/' vs '/health') siguen siendo válidos.
-        static string NormalizeUrl(string u) => u.Trim().TrimEnd('/').ToLowerInvariant();
-        var targetUrl = NormalizeUrl(request.Url);
-        var existingUrls = await db.Monitors.Select(m => m.Url).ToListAsync(ct).ConfigureAwait(false);
-        if (existingUrls.Any(u => NormalizeUrl(u) == targetUrl))
+        if (await MonitorUrlUniqueness.IsTakenAsync(db, request.Url, excludedMonitorId: null, ct)
+            .ConfigureAwait(false))
         {
-            return Error.Conflict("monitor.url_taken",
-                $"Ya existe un monitor para la URL '{request.Url.Trim()}'. Editá el existente en vez de duplicarlo.");
+            return MonitorUrlUniqueness.Conflict(request.Url);
         }
 
         Monitor monitor;
@@ -105,7 +102,14 @@ internal sealed class CreateMonitorHandler(MonitoringDbContext db, IClock clock)
         }
 
         db.Monitors.Add(monitor);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (MonitorUrlUniqueness.IsUniqueConstraintViolation(ex))
+        {
+            return MonitorUrlUniqueness.Conflict(request.Url);
+        }
 
         return MonitorMapper.ToDetail(monitor);
     }

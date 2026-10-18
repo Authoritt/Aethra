@@ -27,6 +27,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
     public Slug Slug { get; private set; }
     public string Name { get; private set; }
     public string Url { get; private set; }
+    public string NormalizedUrl { get; private set; }
     public MonitorHttpMethod HttpMethod { get; private set; }
 
     private List<int> _expectedStatusCodes = [];
@@ -73,6 +74,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         Slug = slug;
         Name = name;
         Url = url;
+        NormalizedUrl = NormalizeUrl(url);
         HttpMethod = method;
         _expectedStatusCodes = NormalizeExpected(expectedStatusCodes);
         IntervalSec = ClampInterval(intervalSec);
@@ -172,6 +174,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
                 throw new ArgumentException("Url debe ser absoluta http(s)://...", nameof(url));
             }
             Url = url.Trim();
+            NormalizedUrl = NormalizeUrl(url);
         }
         if (method is { } m)
         {
@@ -290,6 +293,9 @@ public sealed class Monitor : AggregateRoot<MonitorId>
     private static int ClampInterval(int interval)
         => Math.Clamp(interval, MinIntervalSec, MaxIntervalSec);
 
+    public static string NormalizeUrl(string url)
+        => url.Trim().TrimEnd('/').ToLowerInvariant();
+
     private static int ClampTimeout(int timeout)
         => Math.Clamp(timeout, MinTimeoutMs, MaxTimeoutMs);
 
@@ -322,6 +328,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         Slug = default;
         Name = string.Empty;
         Url = string.Empty;
+        NormalizedUrl = string.Empty;
         _expectedStatusCodes = [];
     }
 }

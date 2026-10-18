@@ -77,6 +77,12 @@ namespace Aethra.Modules.Monitoring.Infrastructure.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("name");
 
+                    b.Property<string>("NormalizedUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("normalized_url");
+
                     b.Property<string>("ProjectId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -115,6 +121,10 @@ namespace Aethra.Modules.Monitoring.Infrastructure.Migrations
 
                     b.HasIndex("InstanceId")
                         .HasDatabaseName("ix_monitors_instance");
+
+                    b.HasIndex("NormalizedUrl")
+                        .IsUnique()
+                        .HasDatabaseName("ux_monitors_normalized_url");
 
                     b.HasIndex("ProjectId")
                         .HasDatabaseName("ix_monitors_project");

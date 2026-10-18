@@ -81,6 +81,12 @@ internal sealed class UpdateMonitorHandler(MonitoringDbContext db, IClock clock)
             return Error.NotFound("monitor.not_found", $"Monitor '{request.MonitorId}' no existe.");
         }
 
+        if (request.Url is not null
+            && await MonitorUrlUniqueness.IsTakenAsync(db, request.Url, monitor.Id, ct).ConfigureAwait(false))
+        {
+            return MonitorUrlUniqueness.Conflict(request.Url);
+        }
+
         MonitorHttpMethod? method = null;
         if (!string.IsNullOrEmpty(request.HttpMethod))
         {
@@ -115,7 +121,15 @@ internal sealed class UpdateMonitorHandler(MonitoringDbContext db, IClock clock)
             return Error.Validation("monitor.invalid_config", ex.Message);
         }
 
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (request.Url is not null
+            && MonitorUrlUniqueness.IsUniqueConstraintViolation(ex))
+        {
+            return MonitorUrlUniqueness.Conflict(request.Url);
+        }
         return MonitorMapper.ToDetail(monitor);
     }
 }
