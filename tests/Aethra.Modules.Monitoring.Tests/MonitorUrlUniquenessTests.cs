@@ -17,6 +17,7 @@ public sealed class MonitorUrlUniquenessTests
     [InlineData(" https://EXAMPLE.com/health/ ", "https://example.com/health")]
     [InlineData("https://example.com/health", "https://example.com/health")]
     [InlineData("HTTPS://User:Secret@EXAMPLE.COM:8443/Health/Ready?Token=AbC", "https://User:Secret@example.com:8443/Health/Ready?Token=AbC")]
+    [InlineData("https://MÜNCHEN.de/Health?Token=AbC", "https://münchen.de/Health?Token=AbC")]
     public void NormalizeUrl_matches_create_and_update_semantics(string url, string expected)
         => UptimeMonitor.NormalizeUrl(url).Should().Be(expected);
 

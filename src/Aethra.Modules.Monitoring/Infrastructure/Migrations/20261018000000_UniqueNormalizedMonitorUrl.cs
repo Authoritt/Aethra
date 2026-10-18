@@ -40,7 +40,7 @@ public partial class UniqueNormalizedMonitorUrl : Migration
             SET normalized_url =
                 translate(parts[1], 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') ||
                 '://' || parts[2] ||
-                translate(parts[3], 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') ||
+                lower(parts[3]) ||
                 parts[4]
             FROM parsed
             WHERE parsed.id = m.id;

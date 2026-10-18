@@ -333,7 +333,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         return string.Concat(
             LowercaseAscii(trimmed.AsSpan(0, schemeSeparator)),
             trimmed.AsSpan(schemeSeparator, hostStart - schemeSeparator),
-            LowercaseAscii(trimmed.AsSpan(hostStart, hostEnd - hostStart)),
+            trimmed[hostStart..hostEnd].ToLowerInvariant(),
             trimmed.AsSpan(hostEnd));
     }
 
