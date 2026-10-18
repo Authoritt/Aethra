@@ -54,11 +54,18 @@ public static class MigrationsBootstrap
             if (pending.Count == 0)
             {
                 logger.LogInformation("{Context}: sin migraciones pendientes", ctx.GetType().Name);
-                continue;
             }
-            logger.LogInformation("{Context}: aplicando {Count} migraciones: {Migrations}",
-                ctx.GetType().Name, pending.Count, string.Join(", ", pending));
-            await ctx.Database.MigrateAsync().ConfigureAwait(false);
+            else
+            {
+                logger.LogInformation("{Context}: aplicando {Count} migraciones: {Migrations}",
+                    ctx.GetType().Name, pending.Count, string.Join(", ", pending));
+                await ctx.Database.MigrateAsync().ConfigureAwait(false);
+            }
+
+            if (ctx is MonitoringDbContext monitoringDb)
+            {
+                await MonitorUrlBackfill.BackfillAsync(monitoringDb, logger).ConfigureAwait(false);
+            }
         }
 
         // F11.1: tras migrar, asegurar los 3 roles builtin + el user admin si la BD está vacía.

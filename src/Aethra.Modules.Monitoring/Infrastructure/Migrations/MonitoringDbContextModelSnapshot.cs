@@ -78,13 +78,11 @@ namespace Aethra.Modules.Monitoring.Infrastructure.Migrations
                         .HasColumnName("name");
 
                     b.Property<string>("NormalizedUrl")
-                        .IsRequired()
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)")
                         .HasColumnName("normalized_url");
 
                     b.Property<string>("NormalizedUrlHash")
-                        .IsRequired()
                         .IsFixedLength()
                         .HasMaxLength(64)
                         .HasColumnType("character(64)")

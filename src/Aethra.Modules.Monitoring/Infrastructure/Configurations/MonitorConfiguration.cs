@@ -42,12 +42,12 @@ internal sealed class MonitorConfiguration : IEntityTypeConfiguration<Monitor>
         builder.Property(m => m.NormalizedUrl)
             .HasColumnName("normalized_url")
             .HasMaxLength(2048)
-            .IsRequired();
+            .IsRequired(false);
         builder.Property(m => m.NormalizedUrlHash)
             .HasColumnName("normalized_url_hash")
             .HasMaxLength(64)
             .IsFixedLength()
-            .IsRequired();
+            .IsRequired(false);
         builder.HasIndex(m => m.NormalizedUrlHash)
             .IsUnique()
             .HasDatabaseName("ux_monitors_normalized_url");
