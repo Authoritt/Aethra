@@ -100,6 +100,31 @@ public sealed class TotpChallengeSingleUseTests
     }
 
     [Fact]
+    public void Invalid_jwt_reports_only_a_stable_error_code()
+    {
+        var tokens = NewTokens(new ConcurrentChallengePersistence());
+
+        tokens.ValidateAndGetUserId("not-a-jwt").Should().BeNull();
+
+        tokens.GetLastValidationError().Should().Be("invalid_token")
+            .And.NotContain("Exception")
+            .And.NotContain("IDX");
+    }
+
+    [Fact]
+    public void Challenge_store_failure_propagates_without_exposing_it_as_a_validation_error()
+    {
+        var token = NewTokens(new ConcurrentChallengePersistence()).Issue("usr-store-failure");
+        var tokens = NewTokens(new ThrowingChallengePersistence());
+
+        var validate = () => tokens.ValidateAndGetUserId(token);
+
+        validate.Should().Throw<InvalidOperationException>()
+            .WithMessage(ThrowingChallengePersistence.Diagnostic);
+        tokens.GetLastValidationError().Should().BeNull();
+    }
+
+    [Fact]
     public async Task Password_step_marks_login_without_2fa_but_not_while_second_factor_is_pending()
     {
         var withoutTotp = User.Create("without-totp@example.com", [1], null, Now);
@@ -167,6 +192,15 @@ public sealed class TotpChallengeSingleUseTests
 
     private static TotpChallengeStore NewStore(ITotpChallengePersistence persistence)
         => new(persistence, new FixedClock(Now));
+
+    private static TotpChallengeTokens NewTokens(ITotpChallengePersistence persistence)
+    {
+        var key = new TotpChallengeSigningKey(Options.Create(new IdentityOptions
+        {
+            TotpChallengeSigningKey = "shared-test-key-with-at-least-32-bytes",
+        }));
+        return new TotpChallengeTokens(key, NewStore(persistence), new FixedClock(Now));
+    }
 
     private static IdentityDbContext NewDisconnectedDb()
     {
@@ -276,5 +310,22 @@ public sealed class TotpChallengeSingleUseTests
             public bool IsActive(DateTime utcNow)
                 => !Consumed && ExpiresAt > utcNow && FailedAttempts < TotpChallenge.MaxFailedAttempts;
         }
+    }
+
+    private sealed class ThrowingChallengePersistence : ITotpChallengePersistence
+    {
+        public const string Diagnostic = "postgres-secret-diagnostic";
+
+        public void Create(TotpChallenge challenge) => throw new NotSupportedException();
+
+        public bool IsActive(string challengeId, string userId, DateTime utcNow)
+            => throw new InvalidOperationException(Diagnostic);
+
+        public Task<bool> TryConsumeAsync(string challengeId, DateTime utcNow, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task RegisterFailedAttemptAsync(
+            string challengeId, DateTime utcNow, CancellationToken ct)
+            => throw new NotSupportedException();
     }
 }

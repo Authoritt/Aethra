@@ -77,6 +77,7 @@ internal sealed class TotpChallengeTokens : ITotpChallengeTokens
         _lastError = null;
         _challenges.ClearCurrent();
         if (string.IsNullOrWhiteSpace(token)) { _lastError = "empty_token"; return null; }
+        ClaimsPrincipal principal;
         try
         {
             var parameters = new TokenValidationParameters
@@ -90,26 +91,35 @@ internal sealed class TotpChallengeTokens : ITotpChallengeTokens
                 IssuerSigningKey = new SymmetricSecurityKey(_signingKey),
                 ClockSkew = TimeSpan.FromSeconds(30),
             };
-            var principal = _handler.ValidateToken(token, parameters, out _);
-            var userId = principal.FindFirst("uid")?.Value;
-            var challengeId = principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
-            if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(challengeId))
-            {
-                _lastError = "missing_challenge_claims";
-                return null;
-            }
-            if (!_challenges.TrySelectActive(challengeId, userId))
-            {
-                _lastError = "challenge_consumed_expired_or_attempts_exhausted";
-                return null;
-            }
-            return userId;
+            principal = _handler.ValidateToken(token, parameters, out _);
         }
-        catch (Exception ex)
+        catch (SecurityTokenMalformedException)
         {
-            _lastError = $"{ex.GetType().Name}: {ex.Message}";
+            _lastError = "invalid_token";
             return null;
         }
+        catch (SecurityTokenException)
+        {
+            _lastError = "invalid_token";
+            return null;
+        }
+
+        var userId = principal.FindFirst("uid")?.Value;
+        var challengeId = principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(challengeId))
+        {
+            _lastError = "missing_challenge_claims";
+            return null;
+        }
+
+        // Deliberately outside the JWT-validation catch: store failures are infrastructure
+        // errors and must reach the API exception pipeline instead of becoming a detailed 401.
+        if (!_challenges.TrySelectActive(challengeId, userId))
+        {
+            _lastError = "challenge_consumed_expired_or_attempts_exhausted";
+            return null;
+        }
+        return userId;
     }
 }
 
