@@ -50,17 +50,52 @@ internal sealed class TotpLoginVerifier(
 
         var outcome = false;
         var strategy = db.Database.CreateExecutionStrategy();
-        await strategy.ExecuteAsync(async () =>
-        {
-            RestoreTracked(usedMask, initialUsedMask);
-            RestoreTracked(updatedAt, initialUpdatedAt);
-            challenges.RestoreCurrent(initialChallengeId);
+        return await strategy.ExecuteAsync<object?, bool>(
+            state: null,
+            operation: async (_, _, operationCt) =>
+            {
+                outcome = false;
+                RestoreTracked(usedMask, initialUsedMask);
+                RestoreTracked(updatedAt, initialUpdatedAt);
+                challenges.RestoreCurrent(initialChallengeId);
 
-            await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-            outcome = await VerifyAndConsumeAsync(user, code, transaction, ct).ConfigureAwait(false);
-        }).ConfigureAwait(false);
+                await using var transaction = await db.Database.BeginTransactionAsync(operationCt)
+                    .ConfigureAwait(false);
+                outcome = await VerifyAndConsumeAsync(user, code, transaction, operationCt)
+                    .ConfigureAwait(false);
+                return outcome;
+            },
+            verifySucceeded: async (_, _, verificationCt) =>
+            {
+                // Si CommitAsync falla despues de que PostgreSQL confirme, VerifyAndConsumeAsync no
+                // alcanza a devolver y `outcome` sigue en false. La mascara rastreada, en cambio, ya
+                // contiene el bit que intento consumir esta unidad y permite comprobar en BD sus dos
+                // efectos atomicos antes de decidir si hay que repetirla.
+                var consumedRecoveryBit = usedMask.CurrentValue & ~initialUsedMask.CurrentValue;
+                if (consumedRecoveryBit == 0 || initialChallengeId is null)
+                {
+                    return new ExecutionResult<bool>(false, false);
+                }
 
-        return outcome;
+                var userId = user.Id;
+                var recoveryCodeWasConsumed = await db.Users
+                    .AsNoTracking()
+                    .AnyAsync(
+                        u => u.Id == userId
+                            && (u.TotpRecoveryCodesUsedMask & consumedRecoveryBit) != 0,
+                        verificationCt)
+                    .ConfigureAwait(false);
+                var challengeWasConsumed = await db.TotpChallenges
+                    .AsNoTracking()
+                    .AnyAsync(
+                        challenge => challenge.Id == initialChallengeId
+                            && challenge.ConsumedAt != null,
+                        verificationCt)
+                    .ConfigureAwait(false);
+                var commitSucceeded = recoveryCodeWasConsumed && challengeWasConsumed;
+                return new ExecutionResult<bool>(commitSucceeded, commitSucceeded);
+            },
+            cancellationToken: ct).ConfigureAwait(false);
 
         static void RestoreTracked<T>(
             Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry<User, T> property,
