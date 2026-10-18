@@ -93,7 +93,9 @@ internal sealed class TotpChallengeTokens : ITotpChallengeTokens
             };
             principal = _handler.ValidateToken(token, parameters, out _);
         }
-        catch (SecurityTokenMalformedException)
+        // ArgumentException cubre SecurityTokenMalformedException y el token mayor que
+        // MaximumTokenSizeInBytes; es seguro aqui porque la consulta al almacen va fuera del try.
+        catch (ArgumentException)
         {
             _lastError = "invalid_token";
             return null;

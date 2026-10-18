@@ -100,6 +100,16 @@ public sealed class TotpChallengeSingleUseTests
     }
 
     [Fact]
+    public void Oversized_jwt_is_an_invalid_token_not_a_server_error()
+    {
+        var tokens = NewTokens(new ConcurrentChallengePersistence());
+        var oversized = new string('a', 300 * 1024);
+
+        tokens.ValidateAndGetUserId(oversized).Should().BeNull();
+        tokens.GetLastValidationError().Should().Be("invalid_token");
+    }
+
+    [Fact]
     public void Invalid_jwt_reports_only_a_stable_error_code()
     {
         var tokens = NewTokens(new ConcurrentChallengePersistence());
