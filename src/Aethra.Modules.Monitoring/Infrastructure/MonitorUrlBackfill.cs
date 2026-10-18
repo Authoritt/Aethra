@@ -38,17 +38,6 @@ public static class MonitorUrlBackfill
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
-        var hasPending = await db.Monitors
-            .AsNoTracking()
-            .AnyAsync(
-                m => EF.Property<string?>(m, nameof(Monitor.NormalizedUrlHash)) == null,
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (!hasPending)
-        {
-            return 0;
-        }
-
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
@@ -60,70 +49,125 @@ public static class MonitorUrlBackfill
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            // Another instance may have completed the work while this one waited for the lock.
+            // Another instance may have reconciled the rows while this one waited for the lock.
             db.ChangeTracker.Clear();
-            var pending = await db.Monitors
-                .Where(m => EF.Property<string?>(m, nameof(Monitor.NormalizedUrlHash)) == null)
+            var monitors = await db.Monitors
                 .OrderBy(m => m.CreatedAt)
                 .ThenBy(m => m.Id)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-            var occupiedRows = await db.Monitors
-                .AsNoTracking()
-                .Where(m => EF.Property<string?>(m, nameof(Monitor.NormalizedUrlHash)) != null)
-                .Select(m => new
-                {
-                    m.Id,
-                    Hash = EF.Property<string>(m, nameof(Monitor.NormalizedUrlHash)),
-                })
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false);
-            var occupiedHashes = occupiedRows.ToDictionary(
-                row => row.Hash,
-                row => row.Id,
-                StringComparer.Ordinal);
-
-            foreach (var monitor in pending)
+            var reconciliations = new List<Reconciliation>(monitors.Count);
+            var retainedByHash = new Dictionary<string, MonitorId>(StringComparer.Ordinal);
+            foreach (var monitor in monitors)
             {
                 var normalizedUrl = Monitor.NormalizeUrl(monitor.Url);
                 var normalizedUrlHash = Monitor.HashNormalizedUrl(normalizedUrl);
-                var persistenceKey = normalizedUrlHash;
-
-                if (occupiedHashes.TryGetValue(persistenceKey, out var keptMonitorId))
+                var isDuplicate = retainedByHash.TryGetValue(normalizedUrlHash, out var keptMonitorId);
+                if (!isDuplicate)
                 {
-                    persistenceKey = CreateRemediationKey(monitor.Id.ToString());
-                    var attempt = 0;
-                    while (occupiedHashes.ContainsKey(persistenceKey))
-                    {
-                        persistenceKey = CreateRemediationKey($"{monitor.Id}:{++attempt}");
-                    }
-
-                    logger.LogWarning(
-                        "Monitor {MonitorId} duplicates the normalized key retained by monitor {KeptMonitorId}; remediation key {RemediationKey} was assigned. Edit the monitor URL to resolve the duplicate.",
-                        monitor.Id,
-                        keptMonitorId,
-                        persistenceKey);
+                    retainedByHash.Add(normalizedUrlHash, monitor.Id);
                 }
 
-                occupiedHashes.Add(persistenceKey, monitor.Id);
-                db.Entry(monitor).Property(m => m.NormalizedUrl).CurrentValue = normalizedUrl;
-                db.Entry(monitor).Property(m => m.NormalizedUrlHash).CurrentValue = persistenceKey;
+                reconciliations.Add(new Reconciliation(
+                    monitor,
+                    normalizedUrl,
+                    normalizedUrlHash,
+                    isDuplicate ? keptMonitorId : null));
             }
 
-            if (pending.Count > 0)
+            var occupiedKeys = reconciliations
+                .Where(item => item.KeptMonitorId is null || IsRemediationKey(item.Monitor.NormalizedUrlHash))
+                .Select(item => item.KeptMonitorId is null
+                    ? item.NormalizedUrlHash
+                    : item.Monitor.NormalizedUrlHash)
+                .ToHashSet(StringComparer.Ordinal);
+
+            foreach (var item in reconciliations.Where(item => item.KeptMonitorId is not null))
+            {
+                if (IsRemediationKey(item.Monitor.NormalizedUrlHash))
+                {
+                    item.PersistenceKey = item.Monitor.NormalizedUrlHash;
+                    continue;
+                }
+
+                var attempt = 0;
+                var persistenceKey = CreateRemediationKey(item.Monitor.Id.ToString());
+                while (!occupiedKeys.Add(persistenceKey))
+                {
+                    persistenceKey = CreateRemediationKey($"{item.Monitor.Id}:{++attempt}");
+                }
+                item.PersistenceKey = persistenceKey;
+            }
+
+            var changed = reconciliations
+                .Where(item => !string.Equals(
+                        item.Monitor.NormalizedUrl,
+                        item.NormalizedUrl,
+                        StringComparison.Ordinal)
+                    || !string.Equals(
+                        item.Monitor.NormalizedUrlHash,
+                        item.PersistenceKey,
+                        StringComparison.Ordinal))
+                .ToList();
+
+            // Release obsolete unique keys first so a real key can safely move to the oldest row.
+            foreach (var item in changed.Where(item =>
+                         !string.Equals(
+                             item.Monitor.NormalizedUrlHash,
+                             item.PersistenceKey,
+                             StringComparison.Ordinal)
+                         && item.Monitor.NormalizedUrlHash is not null))
+            {
+                db.Entry(item.Monitor).Property(m => m.NormalizedUrlHash).CurrentValue = null!;
+            }
+            if (db.ChangeTracker.HasChanges())
+            {
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (var item in changed)
+            {
+                db.Entry(item.Monitor).Property(m => m.NormalizedUrl).CurrentValue = item.NormalizedUrl;
+                db.Entry(item.Monitor).Property(m => m.NormalizedUrlHash).CurrentValue = item.PersistenceKey;
+
+                if (item.KeptMonitorId is { } keptMonitorId)
+                {
+                    logger.LogWarning(
+                        "Monitor {MonitorId} duplicates the normalized key retained by monitor {KeptMonitorId}; edit the monitor URL to resolve the duplicate.",
+                        item.Monitor.Id,
+                        keptMonitorId);
+                }
+            }
+            if (db.ChangeTracker.HasChanges())
             {
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             }
 
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return pending.Count;
+            return changed.Count;
         }).ConfigureAwait(false);
     }
+
+    private static bool IsRemediationKey(string? value)
+        => value?.StartsWith("dup-", StringComparison.Ordinal) == true;
 
     private static string CreateRemediationKey(string value)
     {
         var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
         return $"dup-{hash[..60]}";
+    }
+
+    private sealed class Reconciliation(
+        Monitor monitor,
+        string normalizedUrl,
+        string normalizedUrlHash,
+        MonitorId? keptMonitorId)
+    {
+        public Monitor Monitor { get; } = monitor;
+        public string NormalizedUrl { get; } = normalizedUrl;
+        public string NormalizedUrlHash { get; } = normalizedUrlHash;
+        public MonitorId? KeptMonitorId { get; } = keptMonitorId;
+        public string PersistenceKey { get; set; } = normalizedUrlHash;
     }
 }

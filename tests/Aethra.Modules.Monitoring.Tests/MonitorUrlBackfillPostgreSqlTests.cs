@@ -128,7 +128,7 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
     }
 
     [Fact]
-    public async Task Duplicate_warning_contains_ids_and_remediation_key_but_not_the_url()
+    public async Task Duplicate_warning_contains_only_ids_and_not_the_url_or_remediation_key()
     {
         var options = await postgres.CreateDatabaseOptionsAsync();
         await using var db = new MonitoringDbContext(options);
@@ -145,10 +145,108 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
         (await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, logger)).Should().Be(2);
 
         var warning = logger.WarningMessages.Should().ContainSingle().Subject;
-        warning.Should().Contain(keptId).And.Contain(duplicateId).And.Contain("dup-");
+        warning.Should().Contain(keptId).And.Contain(duplicateId);
         warning.Should().NotContain(sensitiveUrl)
             .And.NotContain("user:password")
-            .And.NotContain("secret-token");
+            .And.NotContain("secret-token")
+            .And.NotContain("dup-");
+    }
+
+    [Fact]
+    public async Task Reconciliation_corrects_a_stale_key_after_an_old_instance_changes_the_url()
+    {
+        var options = await postgres.CreateDatabaseOptionsAsync();
+        await using var db = new MonitoringDbContext(options);
+        await db.Database.MigrateAsync();
+        var id = MonitorId.New().ToString();
+        await InsertLegacyMonitorAsync(
+            db,
+            id,
+            "stale",
+            "https://old.example.com/health",
+            DateTimeOffset.UtcNow);
+        (await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, new CollectingLogger())).Should().Be(1);
+
+        const string newUrl = "https://NEW.example.com/readiness/";
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE monitoring.monitors SET url = {newUrl} WHERE id = {id}
+            """);
+
+        (await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, new CollectingLogger())).Should().Be(1);
+
+        var row = (await ReadBackfillValuesAsync(db))[id];
+        AssertRuntimeKey(row, newUrl);
+    }
+
+    [Fact]
+    public async Task Reconciliation_corrects_a_row_created_without_a_key()
+    {
+        var options = await postgres.CreateDatabaseOptionsAsync();
+        await using var db = new MonitoringDbContext(options);
+        await db.Database.MigrateAsync();
+        var id = MonitorId.New().ToString();
+        const string url = "https://example.com/created-by-old-instance";
+        await InsertLegacyMonitorAsync(db, id, "missing", url, DateTimeOffset.UtcNow);
+
+        (await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, new CollectingLogger())).Should().Be(1);
+
+        AssertRuntimeKey((await ReadBackfillValuesAsync(db))[id], url);
+    }
+
+    [Fact]
+    public async Task Second_reconciliation_does_not_write_when_every_key_is_current()
+    {
+        var options = await postgres.CreateDatabaseOptionsAsync();
+        await using var db = new MonitoringDbContext(options);
+        await db.Database.MigrateAsync();
+        var keptId = MonitorId.New().ToString();
+        var duplicateId = MonitorId.New().ToString();
+        var createdAt = DateTimeOffset.UtcNow;
+        await InsertLegacyMonitorAsync(
+            db,
+            keptId,
+            "kept",
+            "https://example.com/current",
+            createdAt);
+        await InsertLegacyMonitorAsync(
+            db,
+            duplicateId,
+            "duplicate",
+            " HTTPS://EXAMPLE.COM/current/ ",
+            createdAt.AddMinutes(1));
+        (await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, new CollectingLogger())).Should().Be(2);
+        var before = await ReadBackfillValuesAsync(db);
+        before[duplicateId].Key.Should().StartWith("dup-");
+
+        (await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, new CollectingLogger())).Should().Be(0);
+
+        var after = await ReadBackfillValuesAsync(db);
+        after.Should().Equal(before);
+    }
+
+    [Fact]
+    public async Task Remediation_key_is_replaced_with_the_real_hash_after_the_duplicate_is_resolved()
+    {
+        var options = await postgres.CreateDatabaseOptionsAsync();
+        await using var db = new MonitoringDbContext(options);
+        await db.Database.MigrateAsync();
+        var keptId = MonitorId.New().ToString();
+        var duplicateId = MonitorId.New().ToString();
+        const string duplicateUrl = "https://example.com/duplicate";
+        var createdAt = DateTimeOffset.UtcNow;
+        await InsertLegacyMonitorAsync(db, keptId, "kept", duplicateUrl, createdAt);
+        await InsertLegacyMonitorAsync(db, duplicateId, "duplicate", duplicateUrl, createdAt.AddMinutes(1));
+        (await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, new CollectingLogger())).Should().Be(2);
+        (await ReadBackfillValuesAsync(db))[duplicateId].Key.Should().StartWith("dup-");
+
+        const string resolvedUrl = "https://example.com/resolved";
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE monitoring.monitors SET url = {resolvedUrl} WHERE id = {duplicateId}
+            """);
+
+        (await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, new CollectingLogger())).Should().Be(1);
+
+        AssertRuntimeKey((await ReadBackfillValuesAsync(db))[duplicateId], resolvedUrl);
     }
 
     private static void AssertRuntimeKey(BackfillRow row, string url)
@@ -179,7 +277,11 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
     {
         var result = new Dictionary<string, BackfillRow>(StringComparer.Ordinal);
         await using var command = db.Database.GetDbConnection().CreateCommand();
-        command.CommandText = "SELECT id, normalized_url, normalized_url_hash FROM monitoring.monitors ORDER BY id";
+        command.CommandText = """
+            SELECT id, normalized_url, normalized_url_hash, xmin::text::bigint
+            FROM monitoring.monitors
+            ORDER BY id
+            """;
         if (command.Connection!.State != System.Data.ConnectionState.Open)
         {
             await command.Connection.OpenAsync();
@@ -187,12 +289,14 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            result.Add(reader.GetString(0), new BackfillRow(reader.GetString(1), reader.GetString(2)));
+            result.Add(
+                reader.GetString(0),
+                new BackfillRow(reader.GetString(1), reader.GetString(2), reader.GetInt64(3)));
         }
         return result;
     }
 
-    private sealed record BackfillRow(string NormalizedUrl, string Key);
+    private sealed record BackfillRow(string NormalizedUrl, string Key, long Version);
 
     private sealed class CollectingLogger : ILogger
     {
