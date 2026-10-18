@@ -2,6 +2,7 @@ using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Domain.Totp;
 using Aethra.Modules.Identity.UseCases.Totp;
 using Aethra.Shared.Kernel.Time;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Aethra.Modules.Identity.Infrastructure.Authentication;
@@ -30,10 +31,53 @@ internal sealed class TotpLoginVerifier(
     {
         var isRecoveryCode = !string.IsNullOrWhiteSpace(code)
             && RecoveryCodes.LooksLikeRecoveryCode(code.Trim());
-        await using IDbContextTransaction? transaction = isRecoveryCode
-            ? await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false)
-            : null;
 
+        if (!isRecoveryCode)
+        {
+            return await VerifyAndConsumeAsync(user, code, transaction: null, ct).ConfigureAwait(false);
+        }
+
+        // Cada reintento debe partir de la misma foto en memoria. VerifyRecoveryAsync sincroniza
+        // la mascara rastreada tras su UPDATE condicional y el store limpia el challenge al usarlo;
+        // si luego falla el commit, la transaccion revierte la BD pero esos dos estados quedan en
+        // memoria. Restaurarlos evita que el siguiente intento rechace un codigo aun disponible.
+        var entry = db.Entry(user);
+        var usedMask = entry.Property(u => u.TotpRecoveryCodesUsedMask);
+        var updatedAt = entry.Property(u => u.UpdatedAt);
+        var initialUsedMask = (usedMask.CurrentValue, usedMask.OriginalValue, usedMask.IsModified);
+        var initialUpdatedAt = (updatedAt.CurrentValue, updatedAt.OriginalValue, updatedAt.IsModified);
+        var initialChallengeId = challenges.CurrentChallengeId;
+
+        var outcome = false;
+        var strategy = db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            RestoreTracked(usedMask, initialUsedMask);
+            RestoreTracked(updatedAt, initialUpdatedAt);
+            challenges.RestoreCurrent(initialChallengeId);
+
+            await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            outcome = await VerifyAndConsumeAsync(user, code, transaction, ct).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+        return outcome;
+
+        static void RestoreTracked<T>(
+            Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry<User, T> property,
+            (T Current, T Original, bool IsModified) snapshot)
+        {
+            property.CurrentValue = snapshot.Current;
+            property.OriginalValue = snapshot.Original;
+            property.IsModified = snapshot.IsModified;
+        }
+    }
+
+    private async Task<bool> VerifyAndConsumeAsync(
+        User user,
+        string code,
+        IDbContextTransaction? transaction,
+        CancellationToken ct)
+    {
         var valid = await TotpVerifier.VerifyAsync(user, code, codec, db, clock, ct)
             .ConfigureAwait(false);
         if (!valid)

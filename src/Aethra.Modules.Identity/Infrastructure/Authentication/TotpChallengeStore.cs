@@ -80,6 +80,8 @@ internal sealed class TotpChallengeStore(ITotpChallengePersistence persistence, 
 {
     private string? _currentChallengeId;
 
+    internal string? CurrentChallengeId => _currentChallengeId;
+
     public void Create(string challengeId, string userId)
     {
         var challenge = new TotpChallenge(challengeId, userId, clock.UtcNow);
@@ -101,6 +103,8 @@ internal sealed class TotpChallengeStore(ITotpChallengePersistence persistence, 
     }
 
     public void ClearCurrent() => _currentChallengeId = null;
+
+    internal void RestoreCurrent(string? challengeId) => _currentChallengeId = challengeId;
 
     public async Task<bool> TryConsumeCurrentAsync(CancellationToken ct)
     {
