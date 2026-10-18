@@ -301,7 +301,13 @@ public sealed class Monitor : AggregateRoot<MonitorId>
     public static string NormalizeUrl(string url)
     {
         var trimmed = url.Trim();
-        var suffixStart = trimmed.IndexOfAny(['?', '#']);
+        var fragmentStart = trimmed.IndexOf('#');
+        if (fragmentStart >= 0)
+        {
+            trimmed = trimmed[..fragmentStart];
+        }
+
+        var suffixStart = trimmed.IndexOf('?');
         var pathEnd = suffixStart >= 0 ? suffixStart : trimmed.Length;
         var normalizedPathEnd = pathEnd;
         while (normalizedPathEnd > 0 && trimmed[normalizedPathEnd - 1] == '/')

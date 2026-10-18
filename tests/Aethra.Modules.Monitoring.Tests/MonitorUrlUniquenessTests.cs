@@ -22,9 +22,23 @@ public sealed class MonitorUrlUniquenessTests
     [InlineData("https://a.com/?q=/", "https://a.com?q=/")]
     [InlineData("https://example.com/check?redirect=/", "https://example.com/check?redirect=/")]
     [InlineData("https://example.com/check?redirect=", "https://example.com/check?redirect=")]
-    [InlineData("https://a.com/x/#section/", "https://a.com/x#section/")]
+    [InlineData("https://a.com/x/#f", "https://a.com/x")]
+    [InlineData("https://a.com/x?Token=AbC#Fragment", "https://a.com/x?Token=AbC")]
     public void NormalizeUrl_matches_create_and_update_semantics(string url, string expected)
         => UptimeMonitor.NormalizeUrl(url).Should().Be(expected);
+
+    [Fact]
+    public void Fragment_does_not_change_the_normalized_url_key()
+    {
+        var primary = CreateMonitor("https://example.com/health#Primary");
+        var lowercase = CreateMonitor("https://example.com/health#primary");
+        var withoutFragment = CreateMonitor("https://example.com/health");
+
+        primary.NormalizedUrlHash.Should().Be(lowercase.NormalizedUrlHash)
+            .And.Be(withoutFragment.NormalizedUrlHash);
+        primary.NormalizedUrl.Should().Be("https://example.com/health");
+        primary.Url.Should().Be("https://example.com/health#Primary");
+    }
 
     [Fact]
     public void NormalizeUrl_preserves_case_sensitive_path_and_query()

@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using Aethra.Modules.Monitoring.Domain;
 using Aethra.Modules.Monitoring.Infrastructure;
+using Aethra.Modules.Monitoring.UseCases.Commands;
+using Aethra.Shared.Kernel.Time;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -19,6 +21,22 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
     private const string InitialMigration = "20260530055806_Initial";
 
     [Fact]
+    public async Task Create_rejects_a_second_monitor_that_differs_only_by_fragment()
+    {
+        var options = await postgres.CreateDatabaseOptionsAsync();
+        await using var db = new MonitoringDbContext(options);
+        await db.Database.MigrateAsync();
+        var handler = new CreateMonitorHandler(db, new FixedClock(DateTimeOffset.UtcNow));
+
+        var first = await handler.Handle(CreateCommand("primary", "https://example.com/health#Primary"), default);
+        var second = await handler.Handle(CreateCommand("lowercase", "https://example.com/health#primary"), default);
+
+        first.IsSuccess.Should().BeTrue();
+        second.IsFailure.Should().BeTrue();
+        second.Error.Code.Should().Be("monitor.url_taken");
+    }
+
+    [Fact]
     public async Task Startup_backfill_runs_when_migration_is_applied_and_startup_migrations_are_disabled()
     {
         var options = await postgres.CreateDatabaseOptionsAsync();
@@ -29,10 +47,10 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
         var unicodeId = MonitorId.New().ToString();
         var originalId = MonitorId.New().ToString();
         var duplicateId = MonitorId.New().ToString();
-        var legitimateFragmentId = MonitorId.New().ToString();
+        var fragmentDuplicateId = MonitorId.New().ToString();
         var unicodeUrl = "https://İ.EXAMPLE/Health";
         var duplicateUrl = "https://EXAMPLE.com/health/";
-        var legitimateFragmentUrl = $"https://example.com/health#duplicado-{duplicateId}";
+        var fragmentDuplicateUrl = $"https://example.com/health#duplicado-{duplicateId}";
         var createdAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
         await InsertLegacyMonitorAsync(db, unicodeId, "unicode", unicodeUrl, createdAt);
         await InsertLegacyMonitorAsync(db, originalId, "original", duplicateUrl, createdAt.AddMinutes(1));
@@ -44,9 +62,9 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
             createdAt.AddMinutes(2));
         await InsertLegacyMonitorAsync(
             db,
-            legitimateFragmentId,
+            fragmentDuplicateId,
             "fragment",
-            legitimateFragmentUrl,
+            fragmentDuplicateUrl,
             createdAt.AddMinutes(3));
 
         // This models the managed-production path: the deployment pipeline applies the
@@ -61,7 +79,8 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
         var rows = await ReadBackfillValuesAsync(db);
         AssertRuntimeKey(rows[unicodeId], unicodeUrl);
         AssertRuntimeKey(rows[originalId], duplicateUrl);
-        AssertRuntimeKey(rows[legitimateFragmentId], legitimateFragmentUrl);
+        rows[fragmentDuplicateId].NormalizedUrl.Should().Be(UptimeMonitor.NormalizeUrl(duplicateUrl));
+        rows[fragmentDuplicateId].Key.Should().MatchRegex("^dup-[0-9a-f]{60}$");
         rows[duplicateId].NormalizedUrl.Should().Be(UptimeMonitor.NormalizeUrl(duplicateUrl));
         rows[duplicateId].Key.Should().MatchRegex("^dup-[0-9a-f]{60}$");
         rows.Values.Select(row => row.Key).Should().OnlyHaveUniqueItems();
@@ -282,6 +301,9 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
         row.Key.Should().Be(UptimeMonitor.HashNormalizedUrl(normalized));
     }
 
+    private static CreateMonitorCommand CreateCommand(string slug, string url)
+        => new(slug, slug, url, "GET", [200], 60, 5000, null, null, null, null);
+
     private static async Task InsertLegacyMonitorAsync(
         MonitoringDbContext db,
         string id,
@@ -323,6 +345,11 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
     }
 
     private sealed record BackfillRow(string NormalizedUrl, string Key, long Version);
+
+    private sealed class FixedClock(DateTimeOffset now) : IClock
+    {
+        public DateTimeOffset UtcNow => now;
+    }
 
     private sealed class CollectingLogger : ILogger
     {
