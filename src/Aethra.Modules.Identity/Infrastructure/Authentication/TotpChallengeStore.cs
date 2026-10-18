@@ -20,6 +20,12 @@ internal sealed class EfTotpChallengePersistence(IdentityDbContext db) : ITotpCh
 {
     public void Create(TotpChallenge challenge)
     {
+        // ExecuteDelete genera una sola sentencia y no vacia otros cambios rastreados.
+        // Como todo challenge expira en 15 minutos, conservarlo un dia tras expirar cubre
+        // consumidos y agotados sin tocar ningun challenge que aun pueda estar activo.
+        db.TotpChallenges
+            .WherePastRetention(challenge.CreatedAt)
+            .ExecuteDelete();
         db.TotpChallenges.Add(challenge);
         db.SaveChanges();
     }
@@ -55,6 +61,19 @@ internal sealed class EfTotpChallengePersistence(IdentityDbContext db) : ITotpCh
             .ExecuteUpdateAsync(
                 setters => setters.SetProperty(c => c.FailedAttempts, c => c.FailedAttempts + 1), ct)
             .ConfigureAwait(false);
+}
+
+internal static class TotpChallengeRetention
+{
+    internal static readonly TimeSpan RetentionAfterExpiry = TimeSpan.FromDays(1);
+
+    internal static IQueryable<TotpChallenge> WherePastRetention(
+        this IQueryable<TotpChallenge> challenges,
+        DateTime utcNow)
+    {
+        var cutoff = utcNow - RetentionAfterExpiry;
+        return challenges.Where(challenge => challenge.ExpiresAt < cutoff);
+    }
 }
 
 internal sealed class TotpChallengeStore(ITotpChallengePersistence persistence, IClock clock)

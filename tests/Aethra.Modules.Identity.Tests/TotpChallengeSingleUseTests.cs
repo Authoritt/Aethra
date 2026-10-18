@@ -3,6 +3,7 @@ using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Domain.Totp;
 using Aethra.Modules.Identity.Infrastructure;
 using Aethra.Modules.Identity.Infrastructure.Authentication;
+using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Shared.Kernel.Time;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -98,6 +99,42 @@ public sealed class TotpChallengeSingleUseTests
         replayTokens.ValidateAndGetUserId(token).Should().BeNull();
     }
 
+    [Fact]
+    public async Task Password_step_marks_login_without_2fa_but_not_while_second_factor_is_pending()
+    {
+        var withoutTotp = User.Create("without-totp@example.com", [1], null, Now);
+        var withTotp = NewTotpUser();
+        var clock = new FixedClock(Now);
+
+        var plainLogin = new EfUserStore(
+            new StubUserRepository(withoutTotp), new AcceptingPasswordCodec(), clock);
+        var pendingTotpLogin = new EfUserStore(
+            new StubUserRepository(withTotp), new AcceptingPasswordCodec(), clock);
+
+        (await plainLogin.ValidateCredentialsAsync(
+            withoutTotp.Email, "valid", CancellationToken.None))!.LastLoginAt.Should().Be(Now);
+        (await pendingTotpLogin.ValidateCredentialsAsync(
+            withTotp.Email, "valid", CancellationToken.None))!.LastLoginAt.Should().BeNull();
+    }
+
+    [Fact]
+    public void Retention_removes_only_challenges_expired_for_more_than_one_day()
+    {
+        var pastRetention = new TotpChallenge(
+            "past-retention", "usr-old", Now - TotpChallenge.Lifetime
+                - TotpChallengeRetention.RetentionAfterExpiry - TimeSpan.FromSeconds(1));
+        var recentlyExpired = new TotpChallenge(
+            "recently-expired", "usr-recent", Now - TotpChallenge.Lifetime - TimeSpan.FromMinutes(1));
+        var active = new TotpChallenge("active", "usr-active", Now);
+
+        var purgeable = new[] { pastRetention, recentlyExpired, active }
+            .AsQueryable()
+            .WherePastRetention(Now.UtcDateTime)
+            .Select(challenge => challenge.Id);
+
+        purgeable.Should().Equal("past-retention");
+    }
+
     private static User NewTotpUser()
     {
         var user = User.Create($"{Guid.NewGuid():N}@example.com", [1], null, Now);
@@ -148,6 +185,26 @@ public sealed class TotpChallengeSingleUseTests
     {
         public byte[] Protect(byte[] secret) => secret;
         public byte[] Unprotect(byte[] cipher) => cipher;
+    }
+
+    private sealed class AcceptingPasswordCodec : IUserPasswordCodec
+    {
+        public byte[] HashAndProtect(string plainPassword) => [1];
+        public bool Verify(string plainPassword, byte[] storedCipher) => true;
+    }
+
+    private sealed class StubUserRepository(User user) : IUserRepository
+    {
+        public Task<User?> FindByEmailAsync(string email, CancellationToken ct)
+            => Task.FromResult<User?>(user);
+
+        public Task<User?> GetByIdAsync(UserId id, CancellationToken ct)
+            => Task.FromResult<User?>(user.Id == id ? user : null);
+
+        public Task<IReadOnlyList<User>> ListAllAsync(CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<User>>([user]);
+
+        public Task<int> CountAsync(CancellationToken ct) => Task.FromResult(1);
     }
 
     private sealed class ConcurrentChallengePersistence : ITotpChallengePersistence

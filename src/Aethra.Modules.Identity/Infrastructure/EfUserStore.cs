@@ -41,7 +41,12 @@ public sealed class EfUserStore(
         {
             return null;
         }
-        user.MarkLogin(clock.UtcNow);
+        // El primer factor no completa el login cuando TOTP esta habilitado. El endpoint
+        // /auth/login/totp marca el login solo despues de verificar y consumir el challenge.
+        if (!user.TotpEnabled)
+        {
+            user.MarkLogin(clock.UtcNow);
+        }
         return user;
     }
 
