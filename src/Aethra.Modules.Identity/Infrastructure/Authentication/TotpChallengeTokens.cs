@@ -13,7 +13,9 @@ namespace Aethra.Modules.Identity.Infrastructure.Authentication;
 /// (UserId). Si el token caduca o no se firma con la misma key del proceso, la verificacion
 /// falla y el cliente debe reiniciar el login.
 ///
-/// La firma usa una key configurable (<see cref="IdentityOptions.TotpChallengeSigningKey"/>);
+/// Cada JWT contiene un <c>jti</c> aleatorio cuyo estado se persiste. El challenge caduca a los
+/// 15 minutos y admite como maximo 5 codigos fallidos antes de quedar bloqueado. La firma usa una key
+/// configurable (<see cref="IdentityOptions.TotpChallengeSigningKey"/>);
 /// si no se setea, se genera en memoria al arranque (tokens emitidos antes de un restart se
 /// invalidan — aceptable por TTL corto).
 /// </summary>
@@ -30,40 +32,42 @@ internal sealed class TotpChallengeTokens : ITotpChallengeTokens
 {
     private const string Issuer = "aethra-auth";
     private const string Audience = "aethra-totp-challenge";
-    private static readonly TimeSpan DefaultLifetime = TimeSpan.FromMinutes(15);
-
     private readonly byte[] _signingKey;
+    private readonly TotpChallengeStore _challenges;
+    private readonly Aethra.Shared.Kernel.Time.IClock _clock;
     private readonly JwtSecurityTokenHandler _handler = new() { MapInboundClaims = false };
     private string? _lastError;
 
     public string? GetLastValidationError() => _lastError;
 
-    public TotpChallengeTokens(IOptions<IdentityOptions> options)
+    public TotpChallengeTokens(
+        TotpChallengeSigningKey signingKey,
+        TotpChallengeStore challenges,
+        Aethra.Shared.Kernel.Time.IClock clock)
     {
-        var configured = options.Value.TotpChallengeSigningKey;
-        _signingKey = string.IsNullOrWhiteSpace(configured)
-            ? RandomNumberGenerator.GetBytes(32)
-            : Encoding.UTF8.GetBytes(configured);
-        // HS256 requiere key >= 32 bytes; padeamos si quedo corta.
-        if (_signingKey.Length < 32)
-        {
-            var padded = new byte[32];
-            Buffer.BlockCopy(_signingKey, 0, padded, 0, _signingKey.Length);
-            _signingKey = padded;
-        }
+        _signingKey = signingKey.Value;
+        _challenges = challenges;
+        _clock = clock;
     }
 
     public string Issue(string userId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+        var challengeId = Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(32));
+        var now = _clock.UtcNow;
+        _challenges.Create(challengeId, userId);
         var creds = new SigningCredentials(
             new SymmetricSecurityKey(_signingKey), SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
             issuer: Issuer,
             audience: Audience,
-            claims: new[] { new Claim("uid", userId) },
-            notBefore: DateTime.UtcNow,
-            expires: DateTime.UtcNow.Add(DefaultLifetime),
+            claims:
+            [
+                new Claim("uid", userId),
+                new Claim(JwtRegisteredClaimNames.Jti, challengeId),
+            ],
+            notBefore: now.UtcDateTime,
+            expires: now.Add(Aethra.Modules.Identity.Domain.Totp.TotpChallenge.Lifetime).UtcDateTime,
             signingCredentials: creds);
         return _handler.WriteToken(token);
     }
@@ -71,7 +75,9 @@ internal sealed class TotpChallengeTokens : ITotpChallengeTokens
     public string? ValidateAndGetUserId(string token)
     {
         _lastError = null;
+        _challenges.ClearCurrent();
         if (string.IsNullOrWhiteSpace(token)) { _lastError = "empty_token"; return null; }
+        ClaimsPrincipal principal;
         try
         {
             var parameters = new TokenValidationParameters
@@ -85,13 +91,59 @@ internal sealed class TotpChallengeTokens : ITotpChallengeTokens
                 IssuerSigningKey = new SymmetricSecurityKey(_signingKey),
                 ClockSkew = TimeSpan.FromSeconds(30),
             };
-            var principal = _handler.ValidateToken(token, parameters, out _);
-            return principal.FindFirst("uid")?.Value;
+            principal = _handler.ValidateToken(token, parameters, out _);
         }
-        catch (Exception ex)
+        // ArgumentException cubre SecurityTokenMalformedException y el token mayor que
+        // MaximumTokenSizeInBytes; es seguro aqui porque la consulta al almacen va fuera del try.
+        catch (ArgumentException)
         {
-            _lastError = $"{ex.GetType().Name}: {ex.Message}";
+            _lastError = "invalid_token";
             return null;
         }
+        catch (SecurityTokenException)
+        {
+            _lastError = "invalid_token";
+            return null;
+        }
+
+        var userId = principal.FindFirst("uid")?.Value;
+        var challengeId = principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(challengeId))
+        {
+            _lastError = "missing_challenge_claims";
+            return null;
+        }
+
+        // Deliberately outside the JWT-validation catch: store failures are infrastructure
+        // errors and must reach the API exception pipeline instead of becoming a detailed 401.
+        if (!_challenges.TrySelectActive(challengeId, userId))
+        {
+            _lastError = "challenge_consumed_expired_or_attempts_exhausted";
+            return null;
+        }
+        return userId;
+    }
+}
+
+/// <summary>
+/// Conserva una unica key generada por proceso cuando no hay configuracion. El servicio de tokens
+/// es scoped porque usa EF, pero la key debe seguir siendo estable durante toda la vida del proceso.
+/// En despliegues multi-replica se configura la misma key en todas las instancias.
+/// </summary>
+internal sealed class TotpChallengeSigningKey
+{
+    public byte[] Value { get; }
+
+    public TotpChallengeSigningKey(IOptions<IdentityOptions> options)
+    {
+        var configured = options.Value.TotpChallengeSigningKey;
+        var value = string.IsNullOrWhiteSpace(configured)
+            ? RandomNumberGenerator.GetBytes(32)
+            : Encoding.UTF8.GetBytes(configured);
+        if (value.Length < 32)
+        {
+            Array.Resize(ref value, 32);
+        }
+        Value = value;
     }
 }

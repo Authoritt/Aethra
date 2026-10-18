@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Domain.Totp;
 using Aethra.Modules.Identity.Infrastructure;
@@ -73,7 +74,7 @@ internal static class TotpVerifier
             }
             return false;
         }
-        catch (Exception)
+        catch (CryptographicException)
         {
             return false;
         }

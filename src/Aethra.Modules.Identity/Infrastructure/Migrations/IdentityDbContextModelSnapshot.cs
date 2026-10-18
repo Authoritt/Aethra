@@ -133,6 +133,46 @@ namespace Aethra.Modules.Identity.Infrastructure.Migrations
                     b.ToTable("roles", "identity");
                 });
 
+            modelBuilder.Entity("Aethra.Modules.Identity.Domain.Totp.TotpChallenge", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consumed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_attempts");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_totp_challenges_expires_at");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_totp_challenges_user_id");
+
+                    b.ToTable("totp_challenges", "identity");
+                });
+
             modelBuilder.Entity("Aethra.Modules.Identity.Domain.User", b =>
                 {
                     b.Property<string>("Id")

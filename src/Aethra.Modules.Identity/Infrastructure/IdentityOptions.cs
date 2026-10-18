@@ -33,7 +33,9 @@ public sealed class IdentityOptions
     /// F12.1B — secret HMAC para firmar el JWT corto del segundo step del login (entre
     /// password OK y TOTP code OK). Si no se setea, se autogenera al arranque y persiste en
     /// memoria solo por la vida del proceso (los tokens emitidos antes de un restart pierden
-    /// validez — aceptable porque tienen TTL 15min).
+    /// validez — aceptable porque tienen TTL 15min). En despliegues con varias replicas es
+    /// obligatorio configurar el mismo valor en todas para que cualquier replica pueda validar
+    /// un challenge emitido por otra.
     /// </summary>
     public string? TotpChallengeSigningKey { get; set; }
 }
