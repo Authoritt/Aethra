@@ -15,8 +15,7 @@ public partial class UniqueNormalizedMonitorUrl : Migration
             name: "normalized_url",
             schema: "monitoring",
             table: "monitors",
-            type: "character varying(2048)",
-            maxLength: 2048,
+            type: "text",
             nullable: true);
 
         migrationBuilder.AddColumn<string>(

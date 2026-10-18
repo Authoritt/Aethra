@@ -189,6 +189,65 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
     }
 
     [Fact]
+    public async Task Backfill_waits_for_a_concurrent_legacy_update_before_deriving_its_key()
+    {
+        var options = await postgres.CreateDatabaseOptionsAsync();
+        var id = MonitorId.New().ToString();
+        await using (var setup = new MonitoringDbContext(options))
+        {
+            await setup.Database.MigrateAsync();
+            await InsertLegacyMonitorAsync(
+                setup,
+                id,
+                "concurrent",
+                "https://old.example.com/health",
+                DateTimeOffset.UtcNow);
+            (await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(setup, new CollectingLogger())).Should().Be(1);
+        }
+
+        const string newUrl = "https://new.example.com/readiness";
+        await using var writerDb = new MonitoringDbContext(options);
+        await using var writerTransaction = await writerDb.Database.BeginTransactionAsync();
+        await writerDb.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE monitoring.monitors SET url = {newUrl} WHERE id = {id}
+            """);
+
+        await using var backfillDb = new MonitoringDbContext(options);
+        var backfill = MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(
+            backfillDb,
+            new CollectingLogger());
+
+        await using var observerDb = new MonitoringDbContext(options);
+        await WaitForBlockedBackfillAsync(observerDb);
+        backfill.IsCompleted.Should().BeFalse();
+
+        await writerTransaction.CommitAsync();
+        (await backfill).Should().Be(1);
+
+        await using var verificationDb = new MonitoringDbContext(options);
+        AssertRuntimeKey((await ReadBackfillValuesAsync(verificationDb))[id], newUrl);
+    }
+
+    [Fact]
+    public async Task Create_persists_a_canonical_url_longer_than_the_raw_url_limit()
+    {
+        var options = await postgres.CreateDatabaseOptionsAsync();
+        await using var db = new MonitoringDbContext(options);
+        await db.Database.MigrateAsync();
+        var handler = new CreateMonitorHandler(db, new FixedClock(DateTimeOffset.UtcNow));
+        var url = $"https://example.com/{new string('%', 700)}/health";
+        var normalizedUrl = UptimeMonitor.NormalizeUrl(url);
+        normalizedUrl.Length.Should().BeGreaterThan(2048);
+
+        var result = await handler.Handle(CreateCommand("expanded", url), default);
+
+        result.IsSuccess.Should().BeTrue();
+        var row = (await ReadBackfillValuesAsync(db))[result.Value.Id.ToString()];
+        row.NormalizedUrl.Should().Be(normalizedUrl);
+        row.Key.Should().Be(UptimeMonitor.HashNormalizedUrl(normalizedUrl));
+    }
+
+    [Fact]
     public async Task Duplicate_warning_contains_only_ids_and_not_the_url_or_remediation_key()
     {
         var options = await postgres.CreateDatabaseOptionsAsync();
@@ -358,6 +417,32 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
                 new BackfillRow(reader.GetString(1), reader.GetString(2), reader.GetInt64(3)));
         }
         return result;
+    }
+
+    private static async Task WaitForBlockedBackfillAsync(MonitoringDbContext db)
+    {
+        var timeoutAt = DateTimeOffset.UtcNow.AddSeconds(10);
+        while (DateTimeOffset.UtcNow < timeoutAt)
+        {
+            var blocked = await db.Database.SqlQueryRaw<bool>(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM pg_stat_activity
+                        WHERE datname = current_database()
+                          AND wait_event_type = 'Lock'
+                          AND query LIKE '%FOR UPDATE%') AS "Value"
+                    """)
+                .SingleAsync();
+            if (blocked)
+            {
+                return;
+            }
+
+            await Task.Delay(25);
+        }
+
+        throw new TimeoutException("The URL backfill did not wait for the concurrent row update.");
     }
 
     private sealed record BackfillRow(string NormalizedUrl, string Key, long Version);

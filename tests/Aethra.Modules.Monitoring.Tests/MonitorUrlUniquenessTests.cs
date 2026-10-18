@@ -127,6 +127,8 @@ public sealed class MonitorUrlUniquenessTests
         index.IsUnique.Should().BeTrue();
         index.GetDatabaseName().Should().Be("ux_monitors_normalized_url");
         entity.FindProperty(nameof(UptimeMonitor.NormalizedUrlHash))!.GetMaxLength().Should().Be(64);
+        entity.FindProperty(nameof(UptimeMonitor.NormalizedUrl))!.GetColumnType().Should().Be("text");
+        entity.FindProperty(nameof(UptimeMonitor.NormalizedUrl))!.GetMaxLength().Should().BeNull();
     }
 
     [Fact]

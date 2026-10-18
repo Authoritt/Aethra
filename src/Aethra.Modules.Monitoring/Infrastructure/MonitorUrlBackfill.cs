@@ -52,8 +52,13 @@ public static class MonitorUrlBackfill
             // Another instance may have reconciled the rows while this one waited for the lock.
             db.ChangeTracker.Clear();
             var monitors = await db.Monitors
-                .OrderBy(m => m.CreatedAt)
-                .ThenBy(m => m.Id)
+                .FromSqlRaw(
+                    """
+                    SELECT *
+                    FROM monitoring.monitors
+                    ORDER BY created_at, id
+                    FOR UPDATE
+                    """)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
