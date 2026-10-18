@@ -301,25 +301,28 @@ public sealed class Monitor : AggregateRoot<MonitorId>
     public static string NormalizeUrl(string url)
     {
         var trimmed = url.Trim();
+
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        {
+            var canonicalUrl = uri.GetComponents(
+                UriComponents.AbsoluteUri & ~UriComponents.Fragment,
+                UriFormat.SafeUnescaped);
+
+            return RemoveTrailingPathSlashes(UppercasePercentEscapes(canonicalUrl));
+        }
+
+        return NormalizeInvalidUrl(trimmed);
+    }
+
+    private static string NormalizeInvalidUrl(string trimmed)
+    {
         var fragmentStart = trimmed.IndexOf('#');
         if (fragmentStart >= 0)
         {
             trimmed = trimmed[..fragmentStart];
         }
 
-        var suffixStart = trimmed.IndexOf('?');
-        var pathEnd = suffixStart >= 0 ? suffixStart : trimmed.Length;
-        var normalizedPathEnd = pathEnd;
-        while (normalizedPathEnd > 0 && trimmed[normalizedPathEnd - 1] == '/')
-        {
-            normalizedPathEnd--;
-        }
-        if (normalizedPathEnd != pathEnd)
-        {
-            trimmed = string.Concat(
-                trimmed.AsSpan(0, normalizedPathEnd),
-                trimmed.AsSpan(pathEnd));
-        }
+        trimmed = RemoveTrailingPathSlashes(trimmed);
 
         var schemeSeparator = trimmed.IndexOf("://", StringComparison.Ordinal);
         if (schemeSeparator < 0)
@@ -355,6 +358,40 @@ public sealed class Monitor : AggregateRoot<MonitorId>
             trimmed.AsSpan(schemeSeparator, hostStart - schemeSeparator),
             trimmed[hostStart..hostEnd].ToLowerInvariant(),
             trimmed.AsSpan(hostEnd));
+    }
+
+    private static string RemoveTrailingPathSlashes(string value)
+    {
+        var queryStart = value.IndexOf('?');
+        var pathEnd = queryStart >= 0 ? queryStart : value.Length;
+        var normalizedPathEnd = pathEnd;
+        while (normalizedPathEnd > 0 && value[normalizedPathEnd - 1] == '/')
+        {
+            normalizedPathEnd--;
+        }
+
+        return normalizedPathEnd == pathEnd
+            ? value
+            : string.Concat(value.AsSpan(0, normalizedPathEnd), value.AsSpan(pathEnd));
+    }
+
+    private static string UppercasePercentEscapes(string value)
+    {
+        return string.Create(value.Length, value, static (destination, source) =>
+        {
+            source.AsSpan().CopyTo(destination);
+            for (var i = 0; i < source.Length - 2; i++)
+            {
+                if (source[i] != '%')
+                {
+                    continue;
+                }
+
+                destination[i + 1] = char.ToUpperInvariant(source[i + 1]);
+                destination[i + 2] = char.ToUpperInvariant(source[i + 2]);
+                i += 2;
+            }
+        });
     }
 
     public static string HashNormalizedUrl(string normalizedUrl)

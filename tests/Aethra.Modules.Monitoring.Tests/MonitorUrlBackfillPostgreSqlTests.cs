@@ -37,6 +37,22 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
     }
 
     [Fact]
+    public async Task Create_rejects_a_second_monitor_with_lowercase_percent_escape_hex_digits()
+    {
+        var options = await postgres.CreateDatabaseOptionsAsync();
+        await using var db = new MonitoringDbContext(options);
+        await db.Database.MigrateAsync();
+        var handler = new CreateMonitorHandler(db, new FixedClock(DateTimeOffset.UtcNow));
+
+        var first = await handler.Handle(CreateCommand("uppercase", "https://example.com/a%2Fb"), default);
+        var second = await handler.Handle(CreateCommand("lowercase", "https://example.com/a%2fb"), default);
+
+        first.IsSuccess.Should().BeTrue();
+        second.IsFailure.Should().BeTrue();
+        second.Error.Code.Should().Be("monitor.url_taken");
+    }
+
+    [Fact]
     public async Task Startup_backfill_runs_when_migration_is_applied_and_startup_migrations_are_disabled()
     {
         var options = await postgres.CreateDatabaseOptionsAsync();

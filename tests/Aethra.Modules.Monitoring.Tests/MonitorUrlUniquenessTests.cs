@@ -24,8 +24,32 @@ public sealed class MonitorUrlUniquenessTests
     [InlineData("https://example.com/check?redirect=", "https://example.com/check?redirect=")]
     [InlineData("https://a.com/x/#f", "https://a.com/x")]
     [InlineData("https://a.com/x?Token=AbC#Fragment", "https://a.com/x?Token=AbC")]
+    [InlineData("https://A.com:443/x", "https://a.com/x")]
+    [InlineData("https://a.com/a%2fb?q=%2f", "https://a.com/a%2Fb?q=%2F")]
+    [InlineData("https://a.com/%41", "https://a.com/A")]
     public void NormalizeUrl_matches_create_and_update_semantics(string url, string expected)
         => UptimeMonitor.NormalizeUrl(url).Should().Be(expected);
+
+    [Fact]
+    public void Percent_escape_hex_casing_does_not_change_the_normalized_url_key()
+    {
+        var uppercase = CreateMonitor("https://example.com/a%2Fb?redirect=%2F");
+        var lowercase = CreateMonitor("https://example.com/a%2fb?redirect=%2f");
+
+        uppercase.NormalizedUrl.Should().Be(lowercase.NormalizedUrl);
+        uppercase.NormalizedUrlHash.Should().Be(lowercase.NormalizedUrlHash);
+    }
+
+    [Fact]
+    public void System_uri_equivalent_unreserved_escape_does_not_change_the_normalized_url_key()
+    {
+        var escaped = CreateMonitor("https://example.com/%41");
+        var literal = CreateMonitor("https://example.com/A");
+
+        new Uri(escaped.Url).Equals(new Uri(literal.Url)).Should().BeTrue();
+        escaped.NormalizedUrl.Should().Be(literal.NormalizedUrl);
+        escaped.NormalizedUrlHash.Should().Be(literal.NormalizedUrlHash);
+    }
 
     [Fact]
     public void Fragment_does_not_change_the_normalized_url_key()
