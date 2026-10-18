@@ -3,6 +3,8 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- Mvc.Testing 10.0.x requiere Hosting 10.0.7, por encima del pin transitivo central. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
     <Description>Unit tests del dominio del módulo Identity. RecoveryCodes: generación, formato,
 serialización y — crítico para seguridad — el bitmask de uso one-shot de los códigos de recuperación 2FA.</Description>
   </PropertyGroup>
@@ -12,6 +14,8 @@ serialización y — crítico para seguridad — el bitmask de uso one-shot de l
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="NSubstitute" />
     <PackageReference Include="Testcontainers.PostgreSql" />
   </ItemGroup>
 
