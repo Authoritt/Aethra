@@ -1,6 +1,8 @@
 using Aethra.Modules.Identity.Domain;
+using Aethra.Modules.Identity.Domain.Totp;
 using Aethra.Modules.Identity.UseCases.Totp;
 using Aethra.Shared.Kernel.Time;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Aethra.Modules.Identity.Infrastructure.Authentication;
 
@@ -21,8 +23,42 @@ public interface ITotpLoginVerifier
 internal sealed class TotpLoginVerifier(
     IdentityDbContext db,
     ITotpSecretCodec codec,
-    IClock clock) : ITotpLoginVerifier
+    IClock clock,
+    TotpChallengeStore challenges) : ITotpLoginVerifier
 {
-    public Task<bool> VerifyAsync(User user, string code, CancellationToken ct)
-        => TotpVerifier.VerifyAsync(user, code, codec, db, clock, ct);
+    public async Task<bool> VerifyAsync(User user, string code, CancellationToken ct)
+    {
+        var isRecoveryCode = !string.IsNullOrWhiteSpace(code)
+            && RecoveryCodes.LooksLikeRecoveryCode(code.Trim());
+        await using IDbContextTransaction? transaction = isRecoveryCode
+            ? await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false)
+            : null;
+
+        var valid = await TotpVerifier.VerifyAsync(user, code, codec, db, clock, ct)
+            .ConfigureAwait(false);
+        if (!valid)
+        {
+            await challenges.RegisterFailedAttemptAsync(ct).ConfigureAwait(false);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(ct).ConfigureAwait(false);
+            }
+            return false;
+        }
+
+        if (!await challenges.TryConsumeCurrentAsync(ct).ConfigureAwait(false))
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync(ct).ConfigureAwait(false);
+            }
+            return false;
+        }
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
+        }
+        return true;
+    }
 }

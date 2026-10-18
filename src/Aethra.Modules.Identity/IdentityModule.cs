@@ -46,7 +46,10 @@ public static class IdentityModule
 
         // F12.1B: codec dedicado para secretos TOTP + recovery codes + verifier.
         services.AddSingleton<ITotpSecretCodec, DataProtectionTotpSecretCodec>();
-        services.AddSingleton<IdAuth.ITotpChallengeTokens, IdAuth.TotpChallengeTokens>();
+        services.AddSingleton<IdAuth.TotpChallengeSigningKey>();
+        services.AddScoped<IdAuth.ITotpChallengePersistence, IdAuth.EfTotpChallengePersistence>();
+        services.AddScoped<IdAuth.TotpChallengeStore>();
+        services.AddScoped<IdAuth.ITotpChallengeTokens, IdAuth.TotpChallengeTokens>();
         services.AddScoped<IdAuth.ITotpLoginVerifier, IdAuth.TotpLoginVerifier>();
 
         // MediatR escanea el assembly del modulo Identity (registrado en Program.cs central),
