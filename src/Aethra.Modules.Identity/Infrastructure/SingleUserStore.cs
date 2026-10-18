@@ -1,4 +1,5 @@
 using Aethra.Modules.Identity.Domain;
+using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Microsoft.Extensions.Options;
 
 namespace Aethra.Modules.Identity.Infrastructure;
@@ -40,5 +41,34 @@ public sealed class SingleUserStore
             return false;
         }
         return PasswordHasher.Verify(password, _hash);
+    }
+
+    public async ValueTask<bool> ValidateCredentialsAsync(
+        string? email,
+        string password,
+        IAuthenticationAttemptLimiter attemptLimiter,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(attemptLimiter);
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return false;
+        }
+
+        var canonicalAdminEmail = User.NormalizeEmail(AdminEmail);
+        if (!string.Equals(User.NormalizeEmail(email), canonicalAdminEmail, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var lease = await attemptLimiter.AcquirePasswordAsync(canonicalAdminEmail, cancellationToken);
+        if (!lease.IsAllowed || !PasswordHasher.Verify(password, _hash))
+        {
+            return false;
+        }
+
+        await attemptLimiter.ResetPasswordAsync(canonicalAdminEmail, cancellationToken);
+        return true;
     }
 }

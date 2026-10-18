@@ -74,16 +74,14 @@ public static class AuthEndpoints
             }
             else
             {
-                var lease = await attemptLimiter.AcquirePasswordAsync(req.Email, ct);
-                if (!lease.IsAllowed)
+                if (!await singleUserStore.ValidateCredentialsAsync(
+                        req.Email,
+                        req.Password,
+                        attemptLimiter,
+                        ct))
                 {
                     return Results.Json(new { error = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
                 }
-                if (!singleUserStore.ValidateCredentials(req.Email, req.Password))
-                {
-                    return Results.Json(new { error = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
-                }
-                await attemptLimiter.ResetPasswordAsync(req.Email, ct);
                 // Esta rama concede ADMIN con una credencial de configuracion. Es correcta
                 // ANTES del primer usuario y deberia dejar de alcanzarse en cuanto exista uno.
                 // Se registra en Warning porque, si se toma en un sistema ya en uso, significa
