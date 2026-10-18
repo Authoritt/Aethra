@@ -43,7 +43,12 @@ internal sealed class MonitorConfiguration : IEntityTypeConfiguration<Monitor>
             .HasColumnName("normalized_url")
             .HasMaxLength(2048)
             .IsRequired();
-        builder.HasIndex(m => m.NormalizedUrl)
+        builder.Property(m => m.NormalizedUrlHash)
+            .HasColumnName("normalized_url_hash")
+            .HasMaxLength(64)
+            .IsFixedLength()
+            .IsRequired();
+        builder.HasIndex(m => m.NormalizedUrlHash)
             .IsUnique()
             .HasDatabaseName("ux_monitors_normalized_url");
         builder.Property(m => m.HttpMethod)

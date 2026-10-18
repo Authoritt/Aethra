@@ -19,10 +19,31 @@ public partial class UniqueNormalizedMonitorUrl : Migration
             maxLength: 2048,
             nullable: true);
 
+        migrationBuilder.AddColumn<string>(
+            name: "normalized_url_hash",
+            schema: "monitoring",
+            table: "monitors",
+            type: "character(64)",
+            fixedLength: true,
+            maxLength: 64,
+            nullable: true);
+
         migrationBuilder.Sql(
             """
-            UPDATE monitoring.monitors
-            SET normalized_url = lower(rtrim(btrim(url), '/'));
+            WITH parsed AS (
+                SELECT id, regexp_match(
+                    rtrim(btrim(url), '/'),
+                    '^([^:]+)://((?:[^/?#]*@)?)(\[[^]]+\]|[^:/?#]+)(.*)$') AS parts
+                FROM monitoring.monitors
+            )
+            UPDATE monitoring.monitors m
+            SET normalized_url =
+                translate(parts[1], 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') ||
+                '://' || parts[2] ||
+                translate(parts[3], 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') ||
+                parts[4]
+            FROM parsed
+            WHERE parsed.id = m.id;
             """);
 
         // Una instalacion que ya sufrio el bug (#32) puede tener monitores con la misma URL
@@ -42,6 +63,12 @@ public partial class UniqueNormalizedMonitorUrl : Migration
             WHERE d.id = m.id AND d.rn > 1;
             """);
 
+        migrationBuilder.Sql(
+            """
+            UPDATE monitoring.monitors
+            SET normalized_url_hash = encode(sha256(convert_to(normalized_url, 'UTF8')), 'hex');
+            """);
+
         migrationBuilder.AlterColumn<string>(
             name: "normalized_url",
             schema: "monitoring",
@@ -54,11 +81,25 @@ public partial class UniqueNormalizedMonitorUrl : Migration
             oldMaxLength: 2048,
             oldNullable: true);
 
+        migrationBuilder.AlterColumn<string>(
+            name: "normalized_url_hash",
+            schema: "monitoring",
+            table: "monitors",
+            type: "character(64)",
+            fixedLength: true,
+            maxLength: 64,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "character(64)",
+            oldFixedLength: true,
+            oldMaxLength: 64,
+            oldNullable: true);
+
         migrationBuilder.CreateIndex(
             name: "ux_monitors_normalized_url",
             schema: "monitoring",
             table: "monitors",
-            column: "normalized_url",
+            column: "normalized_url_hash",
             unique: true);
     }
 
@@ -66,6 +107,11 @@ public partial class UniqueNormalizedMonitorUrl : Migration
     {
         migrationBuilder.DropIndex(
             name: "ux_monitors_normalized_url",
+            schema: "monitoring",
+            table: "monitors");
+
+        migrationBuilder.DropColumn(
+            name: "normalized_url_hash",
             schema: "monitoring",
             table: "monitors");
 

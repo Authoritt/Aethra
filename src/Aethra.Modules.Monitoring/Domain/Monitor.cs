@@ -1,6 +1,8 @@
 using Aethra.Modules.Monitoring.Domain.Events;
 using Aethra.Shared.Kernel.Domain;
 using Aethra.Shared.Kernel.Primitives;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Aethra.Modules.Monitoring.Domain;
 
@@ -28,6 +30,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
     public string Name { get; private set; }
     public string Url { get; private set; }
     public string NormalizedUrl { get; private set; }
+    public string NormalizedUrlHash { get; private set; }
     public MonitorHttpMethod HttpMethod { get; private set; }
 
     private List<int> _expectedStatusCodes = [];
@@ -75,6 +78,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         Name = name;
         Url = url;
         NormalizedUrl = NormalizeUrl(url);
+        NormalizedUrlHash = HashNormalizedUrl(NormalizedUrl);
         HttpMethod = method;
         _expectedStatusCodes = NormalizeExpected(expectedStatusCodes);
         IntervalSec = ClampInterval(intervalSec);
@@ -174,7 +178,8 @@ public sealed class Monitor : AggregateRoot<MonitorId>
                 throw new ArgumentException("Url debe ser absoluta http(s)://...", nameof(url));
             }
             Url = url.Trim();
-            NormalizedUrl = NormalizeUrl(url);
+            NormalizedUrl = NormalizeUrl(Url);
+            NormalizedUrlHash = HashNormalizedUrl(NormalizedUrl);
         }
         if (method is { } m)
         {
@@ -294,7 +299,60 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         => Math.Clamp(interval, MinIntervalSec, MaxIntervalSec);
 
     public static string NormalizeUrl(string url)
-        => url.Trim().TrimEnd('/').ToLowerInvariant();
+    {
+        var trimmed = url.Trim().TrimEnd('/');
+        var schemeSeparator = trimmed.IndexOf("://", StringComparison.Ordinal);
+        if (schemeSeparator < 0)
+        {
+            return trimmed;
+        }
+
+        var authorityStart = schemeSeparator + 3;
+        var authorityEnd = trimmed.IndexOfAny(['/', '?', '#'], authorityStart);
+        if (authorityEnd < 0)
+        {
+            authorityEnd = trimmed.Length;
+        }
+
+        var userInfoEnd = trimmed.LastIndexOf('@', authorityEnd - 1, authorityEnd - authorityStart);
+        var hostStart = userInfoEnd >= authorityStart ? userInfoEnd + 1 : authorityStart;
+        int hostEnd;
+        if (hostStart < authorityEnd && trimmed[hostStart] == '[')
+        {
+            var closingBracket = trimmed.IndexOf(']', hostStart + 1);
+            hostEnd = closingBracket >= 0 && closingBracket < authorityEnd
+                ? closingBracket + 1
+                : authorityEnd;
+        }
+        else
+        {
+            var portSeparator = trimmed.IndexOf(':', hostStart, authorityEnd - hostStart);
+            hostEnd = portSeparator >= 0 ? portSeparator : authorityEnd;
+        }
+
+        return string.Concat(
+            LowercaseAscii(trimmed.AsSpan(0, schemeSeparator)),
+            trimmed.AsSpan(schemeSeparator, hostStart - schemeSeparator),
+            LowercaseAscii(trimmed.AsSpan(hostStart, hostEnd - hostStart)),
+            trimmed.AsSpan(hostEnd));
+    }
+
+    public static string HashNormalizedUrl(string normalizedUrl)
+        => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedUrl)));
+
+    private static string LowercaseAscii(ReadOnlySpan<char> value)
+    {
+        return string.Create(value.Length, value.ToString(), static (destination, source) =>
+        {
+            for (var i = 0; i < source.Length; i++)
+            {
+                var character = source[i];
+                destination[i] = character is >= 'A' and <= 'Z'
+                    ? (char)(character + ('a' - 'A'))
+                    : character;
+            }
+        });
+    }
 
     private static int ClampTimeout(int timeout)
         => Math.Clamp(timeout, MinTimeoutMs, MaxTimeoutMs);
@@ -329,6 +387,7 @@ public sealed class Monitor : AggregateRoot<MonitorId>
         Name = string.Empty;
         Url = string.Empty;
         NormalizedUrl = string.Empty;
+        NormalizedUrlHash = string.Empty;
         _expectedStatusCodes = [];
     }
 }
