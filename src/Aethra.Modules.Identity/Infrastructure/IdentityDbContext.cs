@@ -1,5 +1,6 @@
 using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Domain.Totp;
+using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.Infrastructure.Configurations;
 using Aethra.Shared.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<TotpChallenge> TotpChallenges => Set<TotpChallenge>();
+    internal DbSet<AuthenticationThrottle> AuthenticationThrottles => Set<AuthenticationThrottle>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,5 +36,6 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
         modelBuilder.ApplyConfiguration(new RoleConfiguration());
         modelBuilder.ApplyConfiguration(new UserRoleConfiguration());
         modelBuilder.ApplyConfiguration(new TotpChallengeConfiguration());
+        modelBuilder.ApplyConfiguration(new AuthenticationThrottleConfiguration());
     }
 }

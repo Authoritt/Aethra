@@ -40,6 +40,7 @@ public static class IdentityModule
         services.AddScoped<IRoleRepository, EfRoleRepository>();
         services.AddScoped<EfUserStore>();
         services.AddScoped<IdentitySeeder>();
+        services.AddScoped<IdAuth.IAuthenticationAttemptLimiter, IdAuth.AuthenticationAttemptLimiter>();
 
         // F12.3: cross-module resolver para mapear PR.user.login → UserId.
         services.AddScoped<Aethra.Shared.Contracts.Identity.IGitHubUserResolver, EfGitHubUserResolver>();

@@ -32,6 +32,7 @@ public static class AuthEndpoints
             IRoleRepository roleRepo,
             SingleUserStore singleUserStore,
             ITotpChallengeTokens totpTokens,
+            IAuthenticationAttemptLimiter attemptLimiter,
             HttpContext http,
             IdentityDbContext db,
             ILoggerFactory loggerFactory,
@@ -73,7 +74,11 @@ public static class AuthEndpoints
             }
             else
             {
-                if (!singleUserStore.ValidateCredentials(req.Email, req.Password))
+                if (!await singleUserStore.ValidateCredentialsAsync(
+                        req.Email,
+                        req.Password,
+                        attemptLimiter,
+                        ct))
                 {
                     return Results.Json(new { error = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
                 }
