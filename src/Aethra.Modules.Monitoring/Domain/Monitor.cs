@@ -300,7 +300,21 @@ public sealed class Monitor : AggregateRoot<MonitorId>
 
     public static string NormalizeUrl(string url)
     {
-        var trimmed = url.Trim().TrimEnd('/');
+        var trimmed = url.Trim();
+        var suffixStart = trimmed.IndexOfAny(['?', '#']);
+        var pathEnd = suffixStart >= 0 ? suffixStart : trimmed.Length;
+        var normalizedPathEnd = pathEnd;
+        while (normalizedPathEnd > 0 && trimmed[normalizedPathEnd - 1] == '/')
+        {
+            normalizedPathEnd--;
+        }
+        if (normalizedPathEnd != pathEnd)
+        {
+            trimmed = string.Concat(
+                trimmed.AsSpan(0, normalizedPathEnd),
+                trimmed.AsSpan(pathEnd));
+        }
+
         var schemeSeparator = trimmed.IndexOf("://", StringComparison.Ordinal);
         if (schemeSeparator < 0)
         {

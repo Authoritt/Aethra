@@ -68,6 +68,32 @@ public sealed class MonitorUrlBackfillPostgreSqlTests(PostgreSqlFixture postgres
     }
 
     [Fact]
+    public async Task Backfill_keeps_distinct_trailing_query_values_as_unique_monitors()
+    {
+        var options = await postgres.CreateDatabaseOptionsAsync();
+        await using var db = new MonitoringDbContext(options);
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync(InitialMigration);
+        var slashId = MonitorId.New().ToString();
+        var emptyId = MonitorId.New().ToString();
+        const string slashUrl = "https://example.com/check?redirect=/";
+        const string emptyUrl = "https://example.com/check?redirect=";
+        var createdAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        await InsertLegacyMonitorAsync(db, slashId, "slash-query", slashUrl, createdAt);
+        await InsertLegacyMonitorAsync(db, emptyId, "empty-query", emptyUrl, createdAt.AddMinutes(1));
+        await migrator.MigrateAsync();
+        var logger = new CollectingLogger();
+
+        (await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, logger)).Should().Be(2);
+
+        var rows = await ReadBackfillValuesAsync(db);
+        AssertRuntimeKey(rows[slashId], slashUrl);
+        AssertRuntimeKey(rows[emptyId], emptyUrl);
+        rows.Values.Select(row => row.Key).Should().OnlyHaveUniqueItems();
+        logger.WarningMessages.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Startup_backfill_does_nothing_when_required_migration_is_not_applied()
     {
         var options = await postgres.CreateDatabaseOptionsAsync();
