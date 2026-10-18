@@ -47,6 +47,14 @@ internal sealed class TotpLoginVerifier(
         var initialUsedMask = (usedMask.CurrentValue, usedMask.OriginalValue, usedMask.IsModified);
         var initialUpdatedAt = (updatedAt.CurrentValue, updatedAt.OriginalValue, updatedAt.IsModified);
         var initialChallengeId = challenges.CurrentChallengeId;
+        var initialFailedAttempts = initialChallengeId is null
+            ? null
+            : await db.TotpChallenges
+                .AsNoTracking()
+                .Where(challenge => challenge.Id == initialChallengeId)
+                .Select(challenge => (int?)challenge.FailedAttempts)
+                .SingleOrDefaultAsync(ct)
+                .ConfigureAwait(false);
 
         var outcome = false;
         var strategy = db.Database.CreateExecutionStrategy();
@@ -68,32 +76,50 @@ internal sealed class TotpLoginVerifier(
             verifySucceeded: async (_, _, verificationCt) =>
             {
                 // Si CommitAsync falla despues de que PostgreSQL confirme, VerifyAndConsumeAsync no
-                // alcanza a devolver y `outcome` sigue en false. La mascara rastreada, en cambio, ya
-                // contiene el bit que intento consumir esta unidad y permite comprobar en BD sus dos
-                // efectos atomicos antes de decidir si hay que repetirla.
+                // alcanza a devolver y `outcome` sigue en false. Un codigo valido deja el nuevo bit
+                // en la mascara rastreada; uno invalido deja en BD el siguiente contador de fallos.
+                // Cualquiera de los dos confirma esta unidad sin repetir sus efectos.
                 var consumedRecoveryBit = usedMask.CurrentValue & ~initialUsedMask.CurrentValue;
-                if (consumedRecoveryBit == 0 || initialChallengeId is null)
+                if (initialChallengeId is null)
                 {
                     return new ExecutionResult<bool>(false, false);
                 }
 
-                var userId = user.Id;
-                var recoveryCodeWasConsumed = await db.Users
-                    .AsNoTracking()
-                    .AnyAsync(
-                        u => u.Id == userId
-                            && (u.TotpRecoveryCodesUsedMask & consumedRecoveryBit) != 0,
-                        verificationCt)
-                    .ConfigureAwait(false);
-                var challengeWasConsumed = await db.TotpChallenges
+                if (consumedRecoveryBit != 0)
+                {
+                    var userId = user.Id;
+                    var recoveryCodeWasConsumed = await db.Users
+                        .AsNoTracking()
+                        .AnyAsync(
+                            u => u.Id == userId
+                                && (u.TotpRecoveryCodesUsedMask & consumedRecoveryBit) != 0,
+                            verificationCt)
+                        .ConfigureAwait(false);
+                    var challengeWasConsumed = await db.TotpChallenges
+                        .AsNoTracking()
+                        .AnyAsync(
+                            challenge => challenge.Id == initialChallengeId
+                                && challenge.ConsumedAt != null,
+                            verificationCt)
+                        .ConfigureAwait(false);
+                    var commitSucceeded = recoveryCodeWasConsumed && challengeWasConsumed;
+                    return new ExecutionResult<bool>(commitSucceeded, commitSucceeded);
+                }
+
+                if (initialFailedAttempts is null
+                    || initialFailedAttempts >= TotpChallenge.MaxFailedAttempts)
+                {
+                    return new ExecutionResult<bool>(false, false);
+                }
+
+                var failedAttemptWasCommitted = await db.TotpChallenges
                     .AsNoTracking()
                     .AnyAsync(
                         challenge => challenge.Id == initialChallengeId
-                            && challenge.ConsumedAt != null,
+                            && challenge.FailedAttempts == initialFailedAttempts + 1,
                         verificationCt)
                     .ConfigureAwait(false);
-                var commitSucceeded = recoveryCodeWasConsumed && challengeWasConsumed;
-                return new ExecutionResult<bool>(commitSucceeded, commitSucceeded);
+                return new ExecutionResult<bool>(failedAttemptWasCommitted, false);
             },
             cancellationToken: ct).ConfigureAwait(false);
 

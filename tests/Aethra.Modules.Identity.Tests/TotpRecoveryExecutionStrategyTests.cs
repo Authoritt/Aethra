@@ -18,6 +18,7 @@ public sealed class TotpRecoveryExecutionStrategyTests(PostgreSql18Fixture postg
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
     private const string RecoveryCode = "ABCD2345";
+    private const string InvalidRecoveryCode = "JKLM2345";
 
     [Fact]
     public async Task Recovery_login_works_with_the_registered_retrying_execution_strategy()
@@ -74,6 +75,29 @@ public sealed class TotpRecoveryExecutionStrategyTests(PostgreSql18Fixture postg
 
         (await verifier.VerifyAsync(user, RecoveryCode, CancellationToken.None)).Should().BeTrue();
         interceptor.Failures.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Invalid_recovery_login_increments_failed_attempts_once_after_an_ambiguous_commit()
+    {
+        var interceptor = new AmbiguousCommitInterceptor();
+        var options = CreateRetryingOptions(interceptor);
+        await using var db = new IdentityDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        const string challengeId = "ambiguous-commit-invalid-recovery-login";
+        var (user, verifier) = await CreateRecoveryLoginAsync(db, challengeId);
+        interceptor.Arm();
+
+        (await verifier.VerifyAsync(user, InvalidRecoveryCode, CancellationToken.None)).Should().BeFalse();
+        interceptor.Failures.Should().Be(1);
+
+        var failedAttempts = await db.TotpChallenges
+            .AsNoTracking()
+            .Where(challenge => challenge.Id == challengeId)
+            .Select(challenge => challenge.FailedAttempts)
+            .SingleAsync();
+        failedAttempts.Should().Be(1);
     }
 
     private DbContextOptions<IdentityDbContext> CreateRetryingOptions(IInterceptor interceptor)
