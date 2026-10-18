@@ -270,6 +270,11 @@ if (applyMigrations)
     await app.Services.ApplyPendingMigrationsAsync();
 }
 
+// El pipeline gestionado aplica migraciones fuera del proceso y deja la bandera anterior en false.
+// Este backfill debe ejecutarse igualmente antes de aceptar escrituras. Varias instancias pueden
+// arrancar a la vez; el propio backfill se serializa con un advisory lock transaccional.
+await app.Services.ApplyMonitorUrlBackfillAsync();
+
 // Postura de autenticacion, declarada AL ARRANCAR y no cuando alguien entra.
 //
 // El log de /auth/login avisa cuando la rama de bootstrap SE TOMA. Eso deja un hueco:

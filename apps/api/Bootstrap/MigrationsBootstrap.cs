@@ -62,15 +62,25 @@ public static class MigrationsBootstrap
                 await ctx.Database.MigrateAsync().ConfigureAwait(false);
             }
 
-            if (ctx is MonitoringDbContext monitoringDb)
-            {
-                await MonitorUrlBackfill.BackfillAsync(monitoringDb, logger).ConfigureAwait(false);
-            }
         }
 
         // F11.1: tras migrar, asegurar los 3 roles builtin + el user admin si la BD está vacía.
         // Idempotente — si ya existe el admin solo se confirman los roles builtin.
         var seeder = sp.GetRequiredService<Aethra.Modules.Identity.Infrastructure.IdentitySeeder>();
         await seeder.SeedAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Completa las claves normalizadas de monitores después de que el pipeline externo o
+    /// este proceso haya aplicado la migración que las agrega.
+    /// </summary>
+    public static async Task ApplyMonitorUrlBackfillAsync(this IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Migrations");
+        var db = sp.GetRequiredService<MonitoringDbContext>();
+
+        await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, logger).ConfigureAwait(false);
     }
 }
