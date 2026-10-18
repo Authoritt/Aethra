@@ -7,6 +7,7 @@ using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Shared.Kernel.Time;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -142,9 +143,11 @@ public sealed class TotpChallengeSingleUseTests
         var clock = new FixedClock(Now);
 
         var plainLogin = new EfUserStore(
-            new StubUserRepository(withoutTotp), new AcceptingPasswordCodec(), clock);
+            new StubUserRepository(withoutTotp), new AcceptingPasswordCodec(), clock,
+            new AllowingAttemptLimiter(), NullLogger<EfUserStore>.Instance);
         var pendingTotpLogin = new EfUserStore(
-            new StubUserRepository(withTotp), new AcceptingPasswordCodec(), clock);
+            new StubUserRepository(withTotp), new AcceptingPasswordCodec(), clock,
+            new AllowingAttemptLimiter(), NullLogger<EfUserStore>.Instance);
 
         (await plainLogin.ValidateCredentialsAsync(
             withoutTotp.Email, "valid", CancellationToken.None))!.LastLoginAt.Should().Be(Now);
@@ -337,5 +340,15 @@ public sealed class TotpChallengeSingleUseTests
         public Task RegisterFailedAttemptAsync(
             string challengeId, DateTime utcNow, CancellationToken ct)
             => throw new NotSupportedException();
+    }
+
+    // #85 anadio el limitador al constructor; esta prueba es de #86 y no mide el limite.
+    private sealed class AllowingAttemptLimiter : IAuthenticationAttemptLimiter
+    {
+        public ValueTask<AuthenticationAttemptLease> AcquirePasswordAsync(string email, CancellationToken cancellationToken)
+            => ValueTask.FromResult(new AuthenticationAttemptLease(true, 1, DateTimeOffset.MaxValue));
+
+        public ValueTask ResetPasswordAsync(string email, CancellationToken cancellationToken)
+            => ValueTask.CompletedTask;
     }
 }

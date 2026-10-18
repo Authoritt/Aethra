@@ -38,4 +38,18 @@ public sealed class IdentityOptions
     /// un challenge emitido por otra.
     /// </summary>
     public string? TotpChallengeSigningKey { get; set; }
+
+    /// <summary>Presupuesto compartido de intentos para el paso de contrasena del login.</summary>
+    public AuthenticationRateLimitOptions RateLimit { get; set; } = new();
+}
+
+public sealed class AuthenticationRateLimitOptions
+{
+    /// <summary>Intentos de contrasena permitidos por cuenta dentro de la ventana.</summary>
+    public int PasswordAttemptLimit { get; set; } = 5;
+
+    /// <summary>
+    /// Ventana fija en segundos. Seguir intentando durante el bloqueo no la prolonga.
+    /// </summary>
+    public int PasswordWindowSeconds { get; set; } = 300;
 }

@@ -282,6 +282,37 @@ namespace Aethra.Modules.Identity.Infrastructure.Migrations
                     b.ToTable("user_roles", "identity");
                 });
 
+            modelBuilder.Entity("Aethra.Modules.Identity.Infrastructure.Authentication.AuthenticationThrottle", b =>
+                {
+                    b.Property<string>("PartitionKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("partition_key");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_count");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<DateTimeOffset>("WindowStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("window_started_at");
+
+                    b.HasKey("PartitionKey");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_authentication_throttles_expires_at");
+
+                    b.ToTable("authentication_throttles", "identity");
+                });
+
             modelBuilder.Entity("Aethra.Shared.Infrastructure.Outbox.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")

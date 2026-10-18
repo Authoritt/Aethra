@@ -1,6 +1,8 @@
 using Aethra.Modules.Identity.Domain;
+using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Shared.Kernel.Time;
+using Microsoft.Extensions.Logging;
 
 namespace Aethra.Modules.Identity.Infrastructure;
 
@@ -17,7 +19,9 @@ namespace Aethra.Modules.Identity.Infrastructure;
 public sealed class EfUserStore(
     IUserRepository users,
     IUserPasswordCodec passwords,
-    IClock clock)
+    IClock clock,
+    IAuthenticationAttemptLimiter attemptLimiter,
+    ILogger<EfUserStore> logger)
 {
     public sealed record AuthenticatedUser(User User, IReadOnlyList<string> RoleSlugs);
 
@@ -37,6 +41,14 @@ public sealed class EfUserStore(
         {
             return null;
         }
+        var lease = await attemptLimiter.AcquirePasswordAsync(email, ct).ConfigureAwait(false);
+        if (!lease.IsAllowed)
+        {
+            logger.LogWarning(
+                "Login rechazado antes de verificar password por bloqueo temporal hasta {ExpiresAt}",
+                lease.ExpiresAt);
+            return null;
+        }
         if (!passwords.Verify(password, user.PasswordHashCipher))
         {
             return null;
@@ -47,6 +59,7 @@ public sealed class EfUserStore(
         {
             user.MarkLogin(clock.UtcNow);
         }
+        await attemptLimiter.ResetPasswordAsync(email, ct).ConfigureAwait(false);
         return user;
     }
 
