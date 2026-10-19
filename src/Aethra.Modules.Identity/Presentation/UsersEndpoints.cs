@@ -1,6 +1,3 @@
-using System.Security.Claims;
-using Aethra.Modules.Identity.Infrastructure.Authentication;
-using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Modules.Identity.UseCases.Commands;
 using Aethra.Modules.Identity.UseCases.Queries;
 using Aethra.Shared.Kernel.Errors;
@@ -41,18 +38,9 @@ public static class UsersEndpoints
         users.MapPatch("/{userId}", async (
             string userId,
             [FromBody] UpdateUserRequest body,
-            ClaimsPrincipal caller,
-            IRoleRepository roleRepository,
             IMediator m,
             CancellationToken ct) =>
             {
-                var grantError = await ValidateRoleGrantAsync(
-                    caller, body.RoleSlugs, roleRepository, ct).ConfigureAwait(false);
-                if (grantError is not null)
-                {
-                    return MapError(grantError);
-                }
-
                 var r = await m.Send(
                     new UpdateUserCommand(
                         userId,
@@ -93,16 +81,9 @@ public static class UsersEndpoints
 
         roles.MapPost("/", async (
             [FromBody] CreateRoleRequest body,
-            ClaimsPrincipal caller,
             IMediator m,
             CancellationToken ct) =>
             {
-                var grantError = ScopeGrantAuthorization.Validate(caller, body.Scopes);
-                if (grantError is not null)
-                {
-                    return MapError(grantError);
-                }
-
                 var cmd = new CreateRoleCommand(body.Slug, body.DisplayName, body.Scopes);
                 var r = await m.Send(cmd, ct);
                 return r.IsSuccess
@@ -115,16 +96,9 @@ public static class UsersEndpoints
         roles.MapPatch("/{roleId}", async (
             string roleId,
             [FromBody] UpdateRoleRequest body,
-            ClaimsPrincipal caller,
             IMediator m,
             CancellationToken ct) =>
             {
-                var grantError = ScopeGrantAuthorization.Validate(caller, body.Scopes);
-                if (grantError is not null)
-                {
-                    return MapError(grantError);
-                }
-
                 var cmd = new UpdateRoleCommand(roleId, body.DisplayName, body.Scopes);
                 var r = await m.Send(cmd, ct);
                 return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
@@ -165,42 +139,6 @@ public static class UsersEndpoints
     public sealed record UpdateRoleRequest(
         string DisplayName,
         IReadOnlyList<string> Scopes);
-
-    private static async Task<Error?> ValidateRoleGrantAsync(
-        ClaimsPrincipal caller,
-        IReadOnlyList<string>? roleSlugs,
-        IRoleRepository roles,
-        CancellationToken cancellationToken)
-    {
-        if (roleSlugs is null)
-        {
-            return null;
-        }
-
-        var requestedSlugs = roleSlugs
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Select(s => s.Trim().ToLowerInvariant())
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-        if (requestedSlugs.Count == 0)
-        {
-            return null;
-        }
-
-        var grantedScopes = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var slug in requestedSlugs)
-        {
-            var role = await roles.FindBySlugAsync(slug, cancellationToken).ConfigureAwait(false);
-            if (role is null)
-            {
-                // El handler conserva el contrato de validación para roles inexistentes.
-                return null;
-            }
-            grantedScopes.UnionWith(role.Scopes);
-        }
-
-        return ScopeGrantAuthorization.Validate(caller, grantedScopes);
-    }
 
     private static IResult ToResult<T>(Result<T> r)
         => r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);

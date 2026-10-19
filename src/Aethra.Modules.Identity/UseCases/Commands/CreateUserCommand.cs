@@ -1,5 +1,6 @@
 using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure;
+using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Modules.Identity.UseCases.Dtos;
 using Aethra.Shared.Infrastructure.Cqrs;
@@ -34,7 +35,8 @@ internal sealed class CreateUserHandler(
     IUserRepository users,
     IRoleRepository roles,
     IUserPasswordCodec passwords,
-    IClock clock) : ICommandHandler<CreateUserCommand, CreatedUserDto>
+    IClock clock,
+    ICurrentPrincipalAccessor currentPrincipal) : ICommandHandler<CreateUserCommand, CreatedUserDto>
 {
     public async Task<Result<CreatedUserDto>> Handle(CreateUserCommand request, CancellationToken cancellationToken)
     {
@@ -62,6 +64,14 @@ internal sealed class CreateUserHandler(
                 return Error.Validation("user.role_not_found", $"Rol '{slug}' no existe.");
             }
             resolvedRoles.Add(role);
+        }
+
+        var grantError = ScopeGrantAuthorization.Validate(
+            currentPrincipal.Current,
+            resolvedRoles.SelectMany(role => role.Scopes).Distinct(StringComparer.Ordinal));
+        if (grantError is not null)
+        {
+            return grantError;
         }
 
         byte[] cipher;

@@ -13,12 +13,14 @@ internal static class ScopeGrantAuthorization
 {
     internal const string ForbiddenErrorCode = "authorization.scope_not_grantable";
 
-    internal static Error? Validate(ClaimsPrincipal caller, IEnumerable<string> grantedScopes)
+    internal static Error? Validate(ClaimsPrincipal? caller, IEnumerable<string>? grantedScopes)
     {
-        ArgumentNullException.ThrowIfNull(caller);
-        ArgumentNullException.ThrowIfNull(grantedScopes);
+        if (grantedScopes is null)
+        {
+            return null;
+        }
 
-        if (caller.Identity?.IsAuthenticated != true)
+        if (caller is null || caller.Identity?.IsAuthenticated != true)
         {
             return Forbidden();
         }
