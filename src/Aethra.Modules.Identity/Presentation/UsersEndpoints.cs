@@ -35,7 +35,11 @@ public static class UsersEndpoints
             .WithName("CreateUser")
             .RequireAuthorization("scope:users:write");
 
-        users.MapPatch("/{userId}", async (string userId, [FromBody] UpdateUserRequest body, IMediator m, CancellationToken ct) =>
+        users.MapPatch("/{userId}", async (
+            string userId,
+            [FromBody] UpdateUserRequest body,
+            IMediator m,
+            CancellationToken ct) =>
             {
                 var r = await m.Send(
                     new UpdateUserCommand(
@@ -75,7 +79,10 @@ public static class UsersEndpoints
             .WithName("ListRoles")
             .RequireAuthorization("scope:users:read");
 
-        roles.MapPost("/", async ([FromBody] CreateRoleRequest body, IMediator m, CancellationToken ct) =>
+        roles.MapPost("/", async (
+            [FromBody] CreateRoleRequest body,
+            IMediator m,
+            CancellationToken ct) =>
             {
                 var cmd = new CreateRoleCommand(body.Slug, body.DisplayName, body.Scopes);
                 var r = await m.Send(cmd, ct);
@@ -86,7 +93,11 @@ public static class UsersEndpoints
             .WithName("CreateRole")
             .RequireAuthorization("scope:users:write");
 
-        roles.MapPatch("/{roleId}", async (string roleId, [FromBody] UpdateRoleRequest body, IMediator m, CancellationToken ct) =>
+        roles.MapPatch("/{roleId}", async (
+            string roleId,
+            [FromBody] UpdateRoleRequest body,
+            IMediator m,
+            CancellationToken ct) =>
             {
                 var cmd = new UpdateRoleCommand(roleId, body.DisplayName, body.Scopes);
                 var r = await m.Send(cmd, ct);
