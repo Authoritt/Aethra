@@ -262,6 +262,14 @@ var app = builder.Build();
 // existen. Se ve viva y no lo está. Por eso existe la bandera explícita:
 // quien se autohospeda pone Aethra__ApplyMigrationsOnStart=true (el compose ya
 // lo hace) y quien tiene pipeline no cambia nada.
+//
+// Backfill de URLs de monitores (#32):
+// El pipeline gestionado aplica migraciones fuera del proceso y deja la bandera anterior
+// en false. Este backfill debe ejecutarse igualmente antes de aceptar escrituras. Varias
+// instancias pueden arrancar a la vez; el propio backfill se serializa con un advisory
+// lock transaccional. Por eso corre por defecto en cada arranque (default true). Entornos
+// o suites de pruebas sin base de datos (p. ej. AethraApiFactory) pueden omitirlo
+// configurando Aethra:MonitorUrlBackfillOnStart=false (o Aethra__MonitorUrlBackfillOnStart=false).
 // -----------------------------------------------------------------------------
 var applyMigrations = app.Environment.IsDevelopment()
     || app.Configuration.GetValue("Aethra:ApplyMigrationsOnStart", false);
@@ -270,10 +278,11 @@ if (applyMigrations)
     await app.Services.ApplyPendingMigrationsAsync();
 }
 
-// El pipeline gestionado aplica migraciones fuera del proceso y deja la bandera anterior en false.
-// Este backfill debe ejecutarse igualmente antes de aceptar escrituras. Varias instancias pueden
-// arrancar a la vez; el propio backfill se serializa con un advisory lock transaccional.
-await app.Services.ApplyMonitorUrlBackfillAsync();
+var applyMonitorBackfill = MigrationsBootstrap.ShouldApplyMonitorUrlBackfill(app.Configuration);
+if (applyMonitorBackfill)
+{
+    await app.Services.ApplyMonitorUrlBackfillAsync();
+}
 
 // Postura de autenticacion, declarada AL ARRANCAR y no cuando alguien entra.
 //
