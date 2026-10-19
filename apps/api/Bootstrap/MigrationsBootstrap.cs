@@ -12,8 +12,19 @@ using Aethra.Modules.Settings.Infrastructure;
 using Aethra.Modules.Vms.Infrastructure;
 using Aethra.Shared.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Aethra.Api.Bootstrap;
+
+/// <summary>
+/// Permite interceptar o sustituir la ejecución del backfill de URLs de monitores (p. ej. en pruebas).
+/// </summary>
+public interface IMonitorUrlBackfillStep
+{
+    Task ExecuteAsync(IServiceProvider services, CancellationToken cancellationToken = default);
+}
 
 /// <summary>
 /// Aplica migraciones al arrancar en Development. En producción se usa
@@ -70,17 +81,36 @@ public static class MigrationsBootstrap
         await seeder.SeedAsync().ConfigureAwait(false);
     }
 
+    public const string MonitorUrlBackfillConfigKey = "Aethra:MonitorUrlBackfillOnStart";
+    public const bool MonitorUrlBackfillDefault = true;
+
+    /// <summary>
+    /// Indica si se debe ejecutar el backfill de URLs de monitores al arrancar según la configuración.
+    /// Por defecto es true para producción gestionada; se desactiva explícitamente en tests sin BD.
+    /// </summary>
+    public static bool ShouldApplyMonitorUrlBackfill(IConfiguration configuration)
+        => configuration.GetValue(MonitorUrlBackfillConfigKey, MonitorUrlBackfillDefault);
+
     /// <summary>
     /// Completa las claves normalizadas de monitores después de que el pipeline externo o
     /// este proceso haya aplicado la migración que las agrega.
     /// </summary>
-    public static async Task ApplyMonitorUrlBackfillAsync(this IServiceProvider services)
+    public static async Task ApplyMonitorUrlBackfillAsync(
+        this IServiceProvider services,
+        CancellationToken cancellationToken = default)
     {
+        var step = services.GetService<IMonitorUrlBackfillStep>();
+        if (step is not null)
+        {
+            await step.ExecuteAsync(services, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         using var scope = services.CreateScope();
         var sp = scope.ServiceProvider;
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Migrations");
         var db = sp.GetRequiredService<MonitoringDbContext>();
 
-        await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, logger).ConfigureAwait(false);
+        await MonitorUrlBackfill.BackfillIfMigrationAppliedAsync(db, logger, cancellationToken).ConfigureAwait(false);
     }
 }
