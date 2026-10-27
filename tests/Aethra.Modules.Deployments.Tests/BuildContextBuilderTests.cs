@@ -17,6 +17,7 @@ namespace Aethra.Modules.Deployments.Tests;
 public sealed class BuildContextBuilderTests
 {
     // ---------- ApplyAccessToken ----------
+#pragma warning disable CS0618 // Type or member is obsolete
 
     [Fact]
     public void ApplyAccessToken_injects_token_into_https_url()
@@ -58,6 +59,7 @@ public sealed class BuildContextBuilderTests
         BuildContextBuilder.ApplyAccessToken("https://github.com/o/r", "a/b+c")
             .Should().Contain("x-access-token:a%2Fb%2Bc@");
     }
+#pragma warning restore CS0618
 
     // ---------- ResolvedShaSatisfiesRequest ----------
 
@@ -216,10 +218,36 @@ public sealed class BuildContextBuilderTests
     [InlineData("git@github.com:acme/app.git")]
     [InlineData("ssh://git@github.com/acme/app.git")]
     [InlineData("file:///tmp/repo.git")]
-    public void BuildGitAuthEnvironment_returns_null_for_non_http_urls(string url)
+    [InlineData("http://github.com/acme/app.git")]
+    public void BuildGitAuthEnvironment_returns_null_for_non_https_urls(string url)
     {
         BuildContextBuilder.BuildGitAuthEnvironment(url, "token123")
             .Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildGitAuthEnvironment_appends_to_inherited_git_config_count()
+    {
+        var existingEnv = new Dictionary<string, string>
+        {
+            ["GIT_CONFIG_COUNT"] = "2",
+            ["GIT_CONFIG_KEY_0"] = "http.sslVerify",
+            ["GIT_CONFIG_VALUE_0"] = "false",
+            ["GIT_CONFIG_KEY_1"] = "user.name",
+            ["GIT_CONFIG_VALUE_1"] = "ci-runner"
+        };
+
+        var env = BuildContextBuilder.BuildGitAuthEnvironment(
+            "https://github.com/acme/private-repo.git",
+            "ghp_token_abc",
+            existingEnv);
+
+        env.Should().NotBeNull();
+        env!["GIT_CONFIG_COUNT"].Should().Be("3");
+        env["GIT_CONFIG_KEY_2"].Should().Be("http.https://github.com/.extraHeader");
+        env["GIT_CONFIG_VALUE_2"].Should().StartWith("Authorization: Basic ");
+        env.ContainsKey("GIT_CONFIG_KEY_0").Should().BeFalse();
+        env.ContainsKey("GIT_CONFIG_KEY_1").Should().BeFalse();
     }
 
     [Fact]
@@ -357,31 +385,35 @@ public sealed class BuildContextBuilderTests
     }
 
     [Fact]
-    public async Task BuildAsync_with_real_local_repo_and_token_does_not_leak_token_to_argv()
+    public async Task BuildAsync_with_local_file_repo_ignores_token_and_does_not_set_git_config_auth()
     {
         const string dummyToken = "token_local_test_555";
         using var repo = TempRepo.Create();
 
-        var capturedArgLists = new List<IReadOnlyList<string>>();
+        var capturedStartInfos = new List<ProcessStartInfo>();
         var builder = new BuildContextBuilder(
             NullLogger<BuildContextBuilder>.Instance,
             async (psi, ct) =>
             {
-                capturedArgLists.Add(psi.ArgumentList.ToList());
+                capturedStartInfos.Add(psi);
                 return await BuildContextBuilder.DefaultGitRunner(psi, ct);
             });
 
         var result = await builder.BuildAsync(repo.Url, "main", null, "", dummyToken, CancellationToken.None);
 
         result.ResolvedSha.Should().Be(repo.MainSha);
-        capturedArgLists.Should().NotBeEmpty();
+        capturedStartInfos.Should().NotBeEmpty();
 
-        foreach (var args in capturedArgLists)
+        foreach (var psi in capturedStartInfos)
         {
-            foreach (var arg in args)
+            foreach (var arg in psi.ArgumentList)
             {
                 arg.Should().NotContain(dummyToken);
             }
+            psi.Arguments.Should().NotContain(dummyToken);
+            // Repos locales (file://): BuildGitAuthEnvironment devuelve null, no se inyecta GIT_CONFIG_*
+            psi.Environment.ContainsKey("GIT_CONFIG_KEY_0").Should().BeFalse();
+            psi.Environment.ContainsKey("GIT_CONFIG_VALUE_0").Should().BeFalse();
         }
     }
 

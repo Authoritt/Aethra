@@ -90,9 +90,9 @@ public sealed class BuildContextBuilder : IBuildContextBuilder
         try
         {
             // === Clone shallow del branch ===
-            // El log usa la URL LIMPIA; la URL con token (si el repo es privado) solo viaja en los
-            // args de git. El token queda en .git/config del workDir temporal, que se excluye del
-            // tar (PackContext) y se borra al final.
+            // El log usa la URL LIMPIA; el token de autenticación (si el repo es privado) se inyecta
+            // en memoria vía variables de entorno (GIT_CONFIG_*) sin viajar en argv ni persistirse en .git/config (Issue #81).
+            // El workDir temporal se excluye del tar (PackContext) y se borra al final.
             // Git solo acepta el shorthand en --branch: "refs/heads/x" haría fallar el clone y el
             // reintento caería al branch por defecto (bug 2026-10-05). Normalizamos aquí también
             // para que ningún llamante pueda reintroducirlo.
@@ -322,7 +322,7 @@ public sealed class BuildContextBuilder : IBuildContextBuilder
     /// credenciales en argv ni persistirlas en .git/config (Issue #81).
     /// Usa GIT_CONFIG_* para inyectar in-memory http.&lt;prefix&gt;.extraHeader con Basic auth.
     /// </summary>
-    internal static Dictionary<string, string>? BuildGitAuthEnvironment(string gitRepoUrl, string? accessToken)
+    internal static Dictionary<string, string>? BuildGitAuthEnvironment(string gitRepoUrl, string? accessToken, IReadOnlyDictionary<string, string>? baseEnvironment = null)
     {
         if (string.IsNullOrWhiteSpace(accessToken))
         {
@@ -334,8 +334,7 @@ public sealed class BuildContextBuilder : IBuildContextBuilder
             return null;
         }
 
-        if (!uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-            && !uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+        if (!uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
@@ -346,15 +345,23 @@ public sealed class BuildContextBuilder : IBuildContextBuilder
             return null;
         }
 
+        var countStr = baseEnvironment is not null
+            ? (baseEnvironment.TryGetValue("GIT_CONFIG_COUNT", out var cVal) ? cVal : null)
+            : Environment.GetEnvironmentVariable("GIT_CONFIG_COUNT");
+
+        var baseCount = int.TryParse(countStr, out var parsed) && parsed >= 0 ? parsed : 0;
+        var index = baseCount;
+        var newCount = baseCount + 1;
+
         var prefix = $"{uri.Scheme}://{uri.Authority}/";
         var rawAuth = $"x-access-token:{accessToken}";
         var base64Auth = Convert.ToBase64String(Encoding.UTF8.GetBytes(rawAuth));
 
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["GIT_CONFIG_COUNT"] = "1",
-            ["GIT_CONFIG_KEY_0"] = $"http.{prefix}.extraHeader",
-            ["GIT_CONFIG_VALUE_0"] = $"Authorization: Basic {base64Auth}",
+            ["GIT_CONFIG_COUNT"] = newCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            [$"GIT_CONFIG_KEY_{index}"] = $"http.{prefix}.extraHeader",
+            [$"GIT_CONFIG_VALUE_{index}"] = $"Authorization: Basic {base64Auth}",
         };
     }
 
@@ -366,14 +373,14 @@ public sealed class BuildContextBuilder : IBuildContextBuilder
     /// <summary>
     /// Inyecta un token de acceso en una URL HTTPS para clonar repos privados:
     /// <c>https://host/owner/repo</c> → <c>https://x-access-token:&lt;token&gt;@host/owner/repo</c>.
-    /// No toca URLs SSH ni URLs que ya traen credenciales (<c>user@host</c>). El token NUNCA se
-    /// loguea: solo viaja en los args de <c>git</c> y en <c>.git/config</c> del workDir temporal.
+    /// No toca URLs SSH ni URLs que ya traen credenciales (<c>user@host</c>).
     /// <para>
-    /// Helper heredado para compatibilidad y tests unitarios. En la ejecución de build, el token
-    /// se pasa vía variables de entorno in-memory (<see cref="BuildGitAuthEnvironment"/>) para
-    /// evitar exponer credenciales en los argumentos del proceso (argv) o en .git/config (Issue #81).
+    /// Helper heredado (obsoleto). En la ejecución de build, el token se pasa vía variables de entorno
+    /// in-memory (<see cref="BuildGitAuthEnvironment"/>) para evitar exponer credenciales en los
+    /// argumentos del proceso (argv) o en .git/config (Issue #81).
     /// </para>
     /// </summary>
+    [Obsolete("Legacy helper kept for backwards compatibility. Production builds pass tokens via BuildGitAuthEnvironment (GIT_CONFIG_*) to avoid argv and .git/config exposure (Issue #81).")]
     internal static string ApplyAccessToken(string repoUrl, string? accessToken)
     {
         if (string.IsNullOrWhiteSpace(accessToken)

@@ -193,7 +193,7 @@ public sealed class NativeDeployRunner(
             var requestedRef = !string.IsNullOrWhiteSpace(instance.TrackedRef) ? instance.TrackedRef! : template.Branch;
             var branch = GitRefs.ToBranchShorthand(requestedRef);
             // Repo privado: resolvemos el token de la credencial del template (si la hay) para que
-            // el clone autentique. El secreto nunca se loguea (solo viaja en los args de git).
+            // el clone autentique. El secreto nunca se loguea ni viaja en argv: se inyecta en memoria vía variables de entorno (Issue #81).
             var cloneToken = string.IsNullOrWhiteSpace(template.AccessTokenCredentialName)
                 ? null
                 : await credentialResolver.GetSecretAsync(template.AccessTokenCredentialName!, ct).ConfigureAwait(false);
