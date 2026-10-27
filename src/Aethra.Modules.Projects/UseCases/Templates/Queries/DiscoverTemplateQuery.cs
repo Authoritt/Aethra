@@ -6,6 +6,7 @@ using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Infrastructure.Http;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Results;
+using Aethra.Shared.Kernel.Security;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 
@@ -16,7 +17,11 @@ namespace Aethra.Modules.Projects.UseCases.Templates.Queries;
 /// Dockerfile, DockerCompose, Nixpacks. También sugiere puertos expuestos para prellenar la UI.
 /// No persiste nada: solo lee la raíz del repo y devuelve el diagnóstico al cliente.
 /// </summary>
-/// <param name="GitRepoUrl">URL del repo a inspeccionar (HTTPS o SSH).</param>
+/// <param name="GitRepoUrl">URL del repo a inspeccionar (HTTPS o SSH). Las URLs HTTP(S) con
+/// credenciales en el user-info (<c>https://user:token@host/repo</c>) están SOPORTADAS a propósito
+/// (#61): se usan tal cual para clonar, y toda salida —logs, errores devueltos, stderr de git— pasa
+/// por <see cref="Aethra.Shared.Kernel.Security.GitUrlRedactor"/>. Para repos privados es preferible
+/// la credencial de integración en vez de incrustarla en la URL.</param>
 /// <param name="Branch">Branch a clonar; null/empty para usar el default del repo.</param>
 public sealed record DiscoverTemplateQuery(string GitRepoUrl, string? Branch)
     : IQuery<TemplateDiscoverResult>;
@@ -111,11 +116,11 @@ internal sealed partial class DiscoverTemplateHandler(
             {
                 return hasBranch
                     ? Error.Validation("template.branch_not_found",
-                        $"No se pudo clonar la rama '{request.Branch!.Trim()}' del repo: {Trim(clone.StdErr)}. "
+                        $"No se pudo clonar la rama '{request.Branch!.Trim()}' del repo: {GitUrlRedactor.Redact(Trim(clone.StdErr))}. "
                         + "Comprueba que existe y que la credencial tiene acceso. No se inspecciona otra rama "
                         + "en su lugar: el resultado describiría código distinto del solicitado.")
                     : Error.Validation("template.discover_clone_failed",
-                        $"No se pudo clonar el repo: {Trim(clone.StdErr)}");
+                        $"No se pudo clonar el repo: {GitUrlRedactor.Redact(Trim(clone.StdErr))}");
             }
 
             // === Inspección de la raíz ===
@@ -156,7 +161,7 @@ internal sealed partial class DiscoverTemplateHandler(
 
             logger.LogInformation(
                 "Discover: repo={Repo} branch={Branch} → buildType={Type}, langs=[{Langs}], ports=[{Ports}]",
-                request.GitRepoUrl,
+                GitUrlRedactor.Redact(request.GitRepoUrl),
                 request.Branch ?? "(default)",
                 suggestedBuildType,
                 string.Join(',', detectedLanguages),
@@ -180,7 +185,7 @@ internal sealed partial class DiscoverTemplateHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Discover falló para repo {Repo}", request.GitRepoUrl);
+            logger.LogError(ex, "Discover falló para repo {Repo}", GitUrlRedactor.Redact(request.GitRepoUrl));
             return Error.Validation("template.discover_failed", ex.Message);
         }
         finally
