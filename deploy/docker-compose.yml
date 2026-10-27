@@ -78,6 +78,9 @@ services:
       # Without this the database stays empty forever while the API happily
       # answers requests — see the comment in apps/api/Program.cs.
       Aethra__ApplyMigrationsOnStart: "true"
+      # Wire the public UI origin into the API CORS policy (#87).
+      # Allows authenticated browser API requests for remote/LAN/public setups.
+      Cors__AllowedOrigins__0: ${AETHRA_PUBLIC_WEB_URL:-http://localhost:3000}
     ports:
       - "${AETHRA_API_PORT:-5080}:5080"
     volumes:
