@@ -148,6 +148,11 @@ namespace Aethra.Modules.Vms.Infrastructure.Migrations
                         .HasColumnType("bytea")
                         .HasColumnName("ssh_credentials_cipher");
 
+                    b.Property<string>("SshHostKeyFingerprint")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("ssh_host_key_fingerprint");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)

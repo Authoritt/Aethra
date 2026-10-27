@@ -31,5 +31,6 @@ internal static class VmMapper
         RuntimeSocketAccessible: v.RuntimeSocketAccessible,
         DataVolumePath: v.DataVolumePath,
         DataVolumeTotalBytes: v.DataVolumeTotalBytes,
-        DataVolumeAvailableBytes: v.DataVolumeAvailableBytes);
+        DataVolumeAvailableBytes: v.DataVolumeAvailableBytes,
+        SshHostKeyFingerprint: v.SshHostKeyFingerprint);
 }

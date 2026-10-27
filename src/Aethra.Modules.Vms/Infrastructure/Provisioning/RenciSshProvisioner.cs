@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using Aethra.Modules.Vms.Domain;
 using Aethra.Modules.Vms.Infrastructure.Security;
 using Aethra.Shared.Contracts.Containers;
 using Microsoft.Extensions.Logging;
@@ -12,7 +13,7 @@ namespace Aethra.Modules.Vms.Infrastructure.Provisioning;
 ///
 /// Flow:
 /// <list type="number">
-/// <item>Conectar via SSH con timeout corto (30s).</item>
+/// <item>Conectar via SSH con timeout corto (30s) y verificación estricta de la clave de host.</item>
 /// <item>Detectar arquitectura (<c>uname -m</c> → linux-x64 / linux-arm64).</item>
 /// <item>Detectar Docker/Podman; si falta y <c>InstallContainerRuntime</c>, instalarlo
 /// (apt-get o dnf según distro).</item>
@@ -24,8 +25,11 @@ namespace Aethra.Modules.Vms.Infrastructure.Provisioning;
 /// </summary>
 public sealed class RenciSshProvisioner(
     ISatelliteConnectionRegistry registry,
-    ILogger<RenciSshProvisioner> logger) : ISshProvisioner
+    ILogger<RenciSshProvisioner> logger,
+    ISshClientFactory? clientFactory = null) : ISshProvisioner
 {
+    private readonly ISshClientFactory _clientFactory = clientFactory ?? new DefaultSshClientFactory();
+
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan VerifyHandshakeTimeout = TimeSpan.FromSeconds(60);
@@ -49,24 +53,67 @@ public sealed class RenciSshProvisioner(
             return Fail(validation, $"Credenciales SSH inválidas: {validation}", progress);
         }
 
-        SshClient? client = null;
+        ISshClient? client = null;
         try
         {
             progress.Report($"Conectando a {credentials.User}@{credentials.Host}:{credentials.Port}…");
             var connectionInfo = BuildConnectionInfo(credentials);
-            client = new SshClient(connectionInfo);
+            client = _clientFactory.CreateClient(connectionInfo);
+
+            string? presentedFingerprint = null;
+            string? presentedKeyName = null;
+            bool hostKeyMatched = false;
+            bool hostKeyReceived = false;
+
+            client.HostKeyReceived += (sender, e) =>
+            {
+                hostKeyReceived = true;
+                presentedKeyName = e.HostKeyName;
+                presentedFingerprint = SshHostKeyHelper.FormatFingerprint(e.HostKey);
+
+                if (string.IsNullOrWhiteSpace(options.ExpectedHostKeyFingerprint))
+                {
+                    // GH-33: Sin huella confiable esperada/fijada, NO se confía ni se envían credenciales.
+                    e.CanTrust = false;
+                    hostKeyMatched = false;
+                    return;
+                }
+
+                if (SshHostKeyHelper.FingerprintsMatch(options.ExpectedHostKeyFingerprint, presentedFingerprint))
+                {
+                    e.CanTrust = true;
+                    hostKeyMatched = true;
+                }
+                else
+                {
+                    e.CanTrust = false;
+                    hostKeyMatched = false;
+                }
+            };
 
             try
             {
                 await client.ConnectAsync(cancellationToken);
             }
+            catch (SshConnectionException ex)
+            {
+                if (hostKeyReceived && !hostKeyMatched)
+                {
+                    if (string.IsNullOrWhiteSpace(options.ExpectedHostKeyFingerprint))
+                    {
+                        return Fail("ssh_host_key_untrusted",
+                            $"El host SSH presentó una clave '{presentedKeyName}' con huella '{presentedFingerprint}', pero no hay ninguna huella de host de confianza configurada ni proporcionada. Conexión rechazada por seguridad.", progress);
+                    }
+
+                    return Fail("ssh_host_key_mismatch",
+                        $"ALERTA DE SEGURIDAD: La huella de host SSH no coincide con la esperada. Esperada: '{SshHostKeyHelper.CanonicalDisplay(options.ExpectedHostKeyFingerprint)}', presentada: '{presentedFingerprint}'. Posible ataque de intermediario (MITM) o clave regenerada.", progress);
+                }
+
+                return Fail("ssh_connect_failed", $"No se pudo conectar al host SSH: {ex.Message}", progress);
+            }
             catch (SshAuthenticationException ex)
             {
                 return Fail("ssh_auth_failed", $"Autenticación SSH falló: {ex.Message}", progress);
-            }
-            catch (SshConnectionException ex)
-            {
-                return Fail("ssh_connect_failed", $"No se pudo conectar al host SSH: {ex.Message}", progress);
             }
             catch (SocketException ex)
             {
@@ -74,10 +121,34 @@ public sealed class RenciSshProvisioner(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                if (hostKeyReceived && !hostKeyMatched)
+                {
+                    if (string.IsNullOrWhiteSpace(options.ExpectedHostKeyFingerprint))
+                    {
+                        return Fail("ssh_host_key_untrusted",
+                            $"El host SSH presentó una clave '{presentedKeyName}' con huella '{presentedFingerprint}', pero no hay ninguna huella de host de confianza configurada ni proporcionada. Conexión rechazada por seguridad.", progress);
+                    }
+
+                    return Fail("ssh_host_key_mismatch",
+                        $"ALERTA DE SEGURIDAD: La huella de host SSH no coincide con la esperada. Esperada: '{SshHostKeyHelper.CanonicalDisplay(options.ExpectedHostKeyFingerprint)}', presentada: '{presentedFingerprint}'. Posible ataque de intermediario (MITM) o clave regenerada.", progress);
+                }
+
                 return Fail("ssh_connect_failed", $"Error conectando SSH: {ex.Message}", progress);
             }
 
-            progress.Report("SSH conectado.");
+            if (!hostKeyMatched)
+            {
+                if (string.IsNullOrWhiteSpace(options.ExpectedHostKeyFingerprint))
+                {
+                    return Fail("ssh_host_key_untrusted",
+                        $"El host SSH presentó una clave con huella '{presentedFingerprint}', pero no hay huella de confianza. Conexión rechazada.", progress);
+                }
+
+                return Fail("ssh_host_key_mismatch",
+                    $"ALERTA DE SEGURIDAD: La huella de host SSH no coincide con la esperada. Esperada: '{SshHostKeyHelper.CanonicalDisplay(options.ExpectedHostKeyFingerprint)}', presentada: '{presentedFingerprint}'.", progress);
+            }
+
+            progress.Report($"SSH conectado. Clave de host verificada ({presentedKeyName}): {presentedFingerprint}");
 
             // 1. Detectar arch
             var (archOk, archResult) = await RunAsync(client, "uname -m", progress, cancellationToken);
@@ -200,7 +271,7 @@ public sealed class RenciSshProvisioner(
             }
 
             progress.Report("Satélite conectado y registrado. Instalación completa.");
-            return new InstallResult(Success: true, ErrorCode: null, ErrorMessage: null, Log: string.Empty);
+            return new InstallResult(Success: true, ErrorCode: null, ErrorMessage: null, Log: string.Empty, VerifiedHostKeyFingerprint: presentedFingerprint);
         }
         catch (OperationCanceledException)
         {
@@ -243,7 +314,7 @@ public sealed class RenciSshProvisioner(
         return new PrivateKeyAuthenticationMethod(creds.User, keyFile);
     }
 
-    private async Task<(bool Success, string Log)> RunAsync(SshClient client, string command,
+    private async Task<(bool Success, string Log)> RunAsync(ISshClient client, string command,
         IProgress<string> progress, CancellationToken cancellationToken)
     {
         progress.Report($"$ {Trim(command)}");
@@ -270,7 +341,7 @@ public sealed class RenciSshProvisioner(
     }
 
     private static async Task<(string StdOut, string StdErr, int ExitCode)> ExecuteRawAsync(
-        SshClient client, string command, CancellationToken cancellationToken)
+        ISshClient client, string command, CancellationToken cancellationToken)
     {
         using var cmd = client.CreateCommand(command);
         cmd.CommandTimeout = CommandTimeout;
@@ -285,7 +356,7 @@ public sealed class RenciSshProvisioner(
     }
 
     private static async Task<(string StdOut, string StdErr, int ExitCode)> ExecuteAsync(
-        SshClient client, string command, CancellationToken cancellationToken)
+        ISshClient client, string command, CancellationToken cancellationToken)
         => await ExecuteRawAsync(client, command, cancellationToken);
 
     private async Task<bool> WaitForHandshakeAsync(string vmId, IProgress<string> progress,

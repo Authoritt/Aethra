@@ -16,7 +16,8 @@ public sealed record InstallStatusDto(
     string Status,
     DateTimeOffset? LastSeenAt,
     bool HasSavedCredentials,
-    IReadOnlyList<string> LastLogLines);
+    IReadOnlyList<string> LastLogLines,
+    string? SshHostKeyFingerprint = null);
 
 internal sealed class GetInstallStatusHandler(VmsDbContext db) : IQueryHandler<GetInstallStatusQuery, InstallStatusDto>
 {
@@ -45,6 +46,7 @@ internal sealed class GetInstallStatusHandler(VmsDbContext db) : IQueryHandler<G
             Status: vm.InstallStatus.ToString(),
             LastSeenAt: vm.LastSeenAt,
             HasSavedCredentials: vm.SshCredentialsCipher is { Length: > 0 },
-            LastLogLines: lastLines);
+            LastLogLines: lastLines,
+            SshHostKeyFingerprint: vm.SshHostKeyFingerprint);
     }
 }
