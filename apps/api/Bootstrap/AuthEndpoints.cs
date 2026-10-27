@@ -31,20 +31,21 @@ public static class AuthEndpoints
             EfUserStore userStore,
             IRoleRepository roleRepo,
             SingleUserStore singleUserStore,
+            BootstrapAuthenticationService bootstrapAuthentication,
             ITotpChallengeTokens totpTokens,
-            IAuthenticationAttemptLimiter attemptLimiter,
             HttpContext http,
             IdentityDbContext db,
-            ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
             // F11.1: si hay users en BD, validar contra EfUserStore. Si está vacía,
             // fallback a SingleUserStore (bootstrap inicial). Tras login con fallback
             // emitimos claims equivalentes a admin para que el primer login pueda crear users.
             var hasUsers = await userStore.CountAsync(ct) > 0;
+            var bootstrapOutcome = await bootstrapAuthentication.AuthenticateAsync(
+                hasUsers, req.Email, req.Password, ct);
 
             ClaimsIdentity identity;
-            if (hasUsers)
+            if (bootstrapOutcome == BootstrapAuthenticationOutcome.UsePersistedUsers)
             {
                 var user = await userStore.ValidateCredentialsAsync(req.Email, req.Password, ct);
                 if (user is null)
@@ -74,11 +75,13 @@ public static class AuthEndpoints
             }
             else
             {
-                if (!await singleUserStore.ValidateCredentialsAsync(
-                        req.Email,
-                        req.Password,
-                        attemptLimiter,
-                        ct))
+                if (bootstrapOutcome == BootstrapAuthenticationOutcome.Disabled)
+                {
+                    return Results.Json(
+                        new { error = "bootstrap_login_disabled" },
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+                if (bootstrapOutcome != BootstrapAuthenticationOutcome.Succeeded)
                 {
                     return Results.Json(new { error = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
                 }
@@ -88,13 +91,6 @@ public static class AuthEndpoints
                 // que la tabla de users esta vacia cuando no deberia -- y hasta ahora eso
                 // ocurria en silencio. Un fallback que nadie observa ejecutarse no se distingue
                 // de uno que se ejecuta siempre. Ver issue #21.
-                loggerFactory.CreateLogger("Aethra.Auth.Bootstrap").LogWarning(
-                    "Login por CREDENCIAL DE BOOTSTRAP para {Email}: la tabla de users esta vacia, "
-                    + "asi que se conceden claims de admin desde configuracion. Si esto no es una "
-                    + "instalacion nueva, el sembrador no corrio (Aethra__ApplyMigrationsOnStart) y "
-                    + "la credencial semilla sigue viva.",
-                    singleUserStore.AdminEmail);
-
                 // Bootstrap: el usuario admin del config aún no existe en BD. Emitimos claims
                 // con role admin para permitir que llame /api/identity/users y cree users reales.
                 identity = new ClaimsIdentity(

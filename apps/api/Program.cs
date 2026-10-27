@@ -278,11 +278,15 @@ app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Aethra.Cors")
 // o suites de pruebas sin base de datos (p. ej. AethraApiFactory) pueden omitirlo
 // configurando Aethra:MonitorUrlBackfillOnStart=false (o Aethra__MonitorUrlBackfillOnStart=false).
 // -----------------------------------------------------------------------------
-var applyMigrations = app.Environment.IsDevelopment()
-    || app.Configuration.GetValue("Aethra:ApplyMigrationsOnStart", false);
+var applyMigrations = app.Configuration.GetValue<bool?>("Aethra:ApplyMigrationsOnStart")
+    ?? app.Environment.IsDevelopment();
 if (applyMigrations)
 {
     await app.Services.ApplyPendingMigrationsAsync();
+}
+else if (MigrationsBootstrap.ShouldSeedIdentity(app.Configuration))
+{
+    await app.Services.SeedIdentityAsync();
 }
 
 var applyMonitorBackfill = MigrationsBootstrap.ShouldApplyMonitorUrlBackfill(app.Configuration);
