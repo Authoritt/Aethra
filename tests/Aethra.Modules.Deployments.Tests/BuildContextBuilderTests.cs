@@ -1,4 +1,5 @@
 using Aethra.Modules.Deployments.Infrastructure.Build;
+using System.Text;
 using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO.Compression;
@@ -16,6 +17,7 @@ namespace Aethra.Modules.Deployments.Tests;
 public sealed class BuildContextBuilderTests
 {
     // ---------- ApplyAccessToken ----------
+#pragma warning disable CS0618 // Type or member is obsolete
 
     [Fact]
     public void ApplyAccessToken_injects_token_into_https_url()
@@ -57,6 +59,7 @@ public sealed class BuildContextBuilderTests
         BuildContextBuilder.ApplyAccessToken("https://github.com/o/r", "a/b+c")
             .Should().Contain("x-access-token:a%2Fb%2Bc@");
     }
+#pragma warning restore CS0618
 
     // ---------- ResolvedShaSatisfiesRequest ----------
 
@@ -173,6 +176,245 @@ public sealed class BuildContextBuilderTests
         var result = await Builder().BuildAsync(repo.Url, "v1.0", null, "", null, CancellationToken.None);
         result.ResolvedSha.Should().Be(repo.BranchSha);
         TarContent(result.TarGz, "marker.txt").Should().Be("rama-x");
+    }
+
+    // ---------- Issue #81: Git access token kept out of argv and config ----------
+
+    [Fact]
+    public void BuildGitAuthEnvironment_injects_scoped_authorization_header_for_https()
+    {
+        var env = BuildContextBuilder.BuildGitAuthEnvironment("https://github.com/acme/private-repo.git", "ghp_secret_123");
+
+        env.Should().NotBeNull();
+        env!["GIT_CONFIG_COUNT"].Should().Be("1");
+        env["GIT_CONFIG_KEY_0"].Should().Be("http.https://github.com/.extraHeader");
+        env["GIT_CONFIG_VALUE_0"].Should().StartWith("Authorization: Basic ");
+
+        var b64 = env["GIT_CONFIG_VALUE_0"]["Authorization: Basic ".Length..];
+        var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+        decoded.Should().Be("x-access-token:ghp_secret_123");
+    }
+
+    [Fact]
+    public void BuildGitAuthEnvironment_preserves_custom_port_in_authority_prefix()
+    {
+        var env = BuildContextBuilder.BuildGitAuthEnvironment("https://gitlab.example.com:8443/acme/app.git", "token456");
+
+        env.Should().NotBeNull();
+        env!["GIT_CONFIG_KEY_0"].Should().Be("http.https://gitlab.example.com:8443/.extraHeader");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void BuildGitAuthEnvironment_returns_null_when_token_is_missing(string? token)
+    {
+        BuildContextBuilder.BuildGitAuthEnvironment("https://github.com/acme/app.git", token)
+            .Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("git@github.com:acme/app.git")]
+    [InlineData("ssh://git@github.com/acme/app.git")]
+    [InlineData("file:///tmp/repo.git")]
+    [InlineData("http://github.com/acme/app.git")]
+    public void BuildGitAuthEnvironment_returns_null_for_non_https_urls(string url)
+    {
+        BuildContextBuilder.BuildGitAuthEnvironment(url, "token123")
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildGitAuthEnvironment_appends_to_inherited_git_config_count()
+    {
+        var existingEnv = new Dictionary<string, string>
+        {
+            ["GIT_CONFIG_COUNT"] = "2",
+            ["GIT_CONFIG_KEY_0"] = "http.sslVerify",
+            ["GIT_CONFIG_VALUE_0"] = "false",
+            ["GIT_CONFIG_KEY_1"] = "user.name",
+            ["GIT_CONFIG_VALUE_1"] = "ci-runner"
+        };
+
+        var env = BuildContextBuilder.BuildGitAuthEnvironment(
+            "https://github.com/acme/private-repo.git",
+            "ghp_token_abc",
+            existingEnv);
+
+        env.Should().NotBeNull();
+        env!["GIT_CONFIG_COUNT"].Should().Be("3");
+        env["GIT_CONFIG_KEY_2"].Should().Be("http.https://github.com/.extraHeader");
+        env["GIT_CONFIG_VALUE_2"].Should().StartWith("Authorization: Basic ");
+        env.ContainsKey("GIT_CONFIG_KEY_0").Should().BeFalse();
+        env.ContainsKey("GIT_CONFIG_KEY_1").Should().BeFalse();
+    }
+
+    [Fact]
+    public void BuildGitAuthEnvironment_returns_null_when_url_already_has_credentials()
+    {
+        BuildContextBuilder.BuildGitAuthEnvironment("https://user:pass@github.com/acme/app.git", "token123")
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public async Task BuildAsync_with_access_token_does_not_expose_token_in_process_arguments()
+    {
+        const string secretToken = "ghp_super_secret_pat_987654321";
+        const string repoUrl = "https://github.com/acme/private-repo.git";
+        const string testSha = "a9f88cb1234567890abcdef1234567890abcdef12";
+
+        var capturedStartInfos = new List<ProcessStartInfo>();
+        var builder = new BuildContextBuilder(
+            NullLogger<BuildContextBuilder>.Instance,
+            (psi, _) =>
+            {
+                capturedStartInfos.Add(psi);
+                var cmd = psi.ArgumentList.Count > 0 ? psi.ArgumentList[0] : "";
+                return cmd switch
+                {
+                    "clone" => Task.FromResult((0, "", "")),
+                    "rev-parse" => Task.FromResult((0, $"{testSha}\n", "")),
+                    _ => Task.FromResult((0, "", ""))
+                };
+            });
+
+        var result = await builder.BuildAsync(
+            repoUrl,
+            branch: "main",
+            gitSha: testSha,
+            baseDirectory: "",
+            accessToken: secretToken,
+            CancellationToken.None);
+
+        result.ResolvedSha.Should().Be(testSha);
+        capturedStartInfos.Should().NotBeEmpty();
+
+        // Verificamos que NINGÚN argumento de NINGÚN proceso git hijo contenga el token
+        foreach (var psi in capturedStartInfos)
+        {
+            foreach (var arg in psi.ArgumentList)
+            {
+                arg.Should().NotContain(secretToken);
+                arg.Should().NotContain(Uri.EscapeDataString(secretToken));
+                arg.Should().NotContain("x-access-token");
+            }
+            psi.Arguments.Should().NotContain(secretToken);
+        }
+
+        // Inspeccionamos la invocación del clone
+        var clonePsi = capturedStartInfos.First(p => p.ArgumentList.Contains("clone"));
+        clonePsi.ArgumentList.Should().Contain(repoUrl);
+        clonePsi.Environment["GIT_CONFIG_COUNT"].Should().Be("1");
+        clonePsi.Environment["GIT_CONFIG_KEY_0"].Should().Be("http.https://github.com/.extraHeader");
+        clonePsi.Environment["GIT_CONFIG_VALUE_0"].Should().Contain(
+            Convert.ToBase64String(Encoding.UTF8.GetBytes($"x-access-token:{secretToken}")));
+
+        // El log no debe contener el token
+        foreach (var logLine in result.Log)
+        {
+            logLine.Should().NotContain(secretToken);
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_with_access_token_passes_auth_to_fetch_without_argv_exposure()
+    {
+        const string secretToken = "ghp_fetch_secret_token_abc";
+        const string repoUrl = "https://github.com/acme/private-repo.git";
+        const string cloneHeadSha = "1111111111111111111111111111111111111111";
+        const string requestedSha = "2222222222222222222222222222222222222222";
+
+        var capturedStartInfos = new List<ProcessStartInfo>();
+        var revParseCount = 0;
+        var builder = new BuildContextBuilder(
+            NullLogger<BuildContextBuilder>.Instance,
+            (psi, _) =>
+            {
+                capturedStartInfos.Add(psi);
+                var cmd = psi.ArgumentList.Count > 0 ? psi.ArgumentList[0] : "";
+                return cmd switch
+                {
+                    "clone" => Task.FromResult((0, "", "")),
+                    "rev-parse" => Task.FromResult((0, $"{((++revParseCount == 1) ? cloneHeadSha : requestedSha)}\n", "")),
+                    "fetch" => Task.FromResult((0, "", "")),
+                    "checkout" => Task.FromResult((0, "", "")),
+                    _ => Task.FromResult((0, "", ""))
+                };
+            });
+
+        var result = await builder.BuildAsync(
+            repoUrl,
+            branch: "main",
+            gitSha: requestedSha,
+            baseDirectory: "",
+            accessToken: secretToken,
+            CancellationToken.None);
+
+        result.ResolvedSha.Should().Be(requestedSha);
+
+        var fetchPsi = capturedStartInfos.FirstOrDefault(p => p.ArgumentList.Contains("fetch"));
+        fetchPsi.Should().NotBeNull();
+        foreach (var arg in fetchPsi!.ArgumentList)
+        {
+            arg.Should().NotContain(secretToken);
+        }
+        fetchPsi.Environment["GIT_CONFIG_COUNT"].Should().Be("1");
+        fetchPsi.Environment["GIT_CONFIG_KEY_0"].Should().Be("http.https://github.com/.extraHeader");
+    }
+
+    [Fact]
+    public async Task BuildAsync_with_access_token_on_clone_failure_redacts_token_from_exception()
+    {
+        const string secretToken = "secret_error_token_999";
+        var builder = new BuildContextBuilder(
+            NullLogger<BuildContextBuilder>.Instance,
+            (_, _) => Task.FromResult((128, "", $"fatal: authentication failed for token {secretToken}")));
+
+        var act = () => builder.BuildAsync(
+            "https://github.com/acme/private-repo.git",
+            branch: "main",
+            gitSha: null,
+            baseDirectory: "",
+            accessToken: secretToken,
+            CancellationToken.None);
+
+        var ex = await act.Should().ThrowAsync<InvalidOperationException>();
+        ex.Which.Message.Should().NotContain(secretToken);
+        ex.Which.Message.Should().Contain("***");
+    }
+
+    [Fact]
+    public async Task BuildAsync_with_local_file_repo_ignores_token_and_does_not_set_git_config_auth()
+    {
+        const string dummyToken = "token_local_test_555";
+        using var repo = TempRepo.Create();
+
+        var capturedStartInfos = new List<ProcessStartInfo>();
+        var builder = new BuildContextBuilder(
+            NullLogger<BuildContextBuilder>.Instance,
+            async (psi, ct) =>
+            {
+                capturedStartInfos.Add(psi);
+                return await BuildContextBuilder.DefaultGitRunner(psi, ct);
+            });
+
+        var result = await builder.BuildAsync(repo.Url, "main", null, "", dummyToken, CancellationToken.None);
+
+        result.ResolvedSha.Should().Be(repo.MainSha);
+        capturedStartInfos.Should().NotBeEmpty();
+
+        foreach (var psi in capturedStartInfos)
+        {
+            foreach (var arg in psi.ArgumentList)
+            {
+                arg.Should().NotContain(dummyToken);
+            }
+            psi.Arguments.Should().NotContain(dummyToken);
+            // Repos locales (file://): BuildGitAuthEnvironment devuelve null, no se inyecta GIT_CONFIG_*
+            psi.Environment.ContainsKey("GIT_CONFIG_KEY_0").Should().BeFalse();
+            psi.Environment.ContainsKey("GIT_CONFIG_VALUE_0").Should().BeFalse();
+        }
     }
 
     private static BuildContextBuilder Builder() => new(NullLogger<BuildContextBuilder>.Instance);

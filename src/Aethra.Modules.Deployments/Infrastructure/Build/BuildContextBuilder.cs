@@ -55,9 +55,24 @@ public interface IBuildContextBuilder
 /// y soporta shallow clone, que es más rápido para el caso típico. Requiere <c>git</c> en el PATH
 /// del proceso central (la imagen Docker del central lo instala).
 /// </summary>
-public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : IBuildContextBuilder
+public sealed class BuildContextBuilder : IBuildContextBuilder
 {
     private static readonly TimeSpan GitTimeout = TimeSpan.FromMinutes(5);
+    private readonly ILogger<BuildContextBuilder> _logger;
+    private readonly Func<ProcessStartInfo, CancellationToken, Task<(int ExitCode, string StdOut, string StdErr)>>? _gitRunner;
+
+    public BuildContextBuilder(ILogger<BuildContextBuilder> logger)
+        : this(logger, gitRunner: null)
+    {
+    }
+
+    internal BuildContextBuilder(
+        ILogger<BuildContextBuilder> logger,
+        Func<ProcessStartInfo, CancellationToken, Task<(int ExitCode, string StdOut, string StdErr)>>? gitRunner)
+    {
+        _logger = logger;
+        _gitRunner = gitRunner;
+    }
 
     public async Task<BuildContextResult> BuildAsync(
         string gitRepoUrl,
@@ -75,22 +90,22 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
         try
         {
             // === Clone shallow del branch ===
-            // El log usa la URL LIMPIA; la URL con token (si el repo es privado) solo viaja en los
-            // args de git. El token queda en .git/config del workDir temporal, que se excluye del
-            // tar (PackContext) y se borra al final.
+            // El log usa la URL LIMPIA; el token de autenticación (si el repo es privado) se inyecta
+            // en memoria vía variables de entorno (GIT_CONFIG_*) sin viajar en argv ni persistirse en .git/config (Issue #81).
+            // El workDir temporal se excluye del tar (PackContext) y se borra al final.
             // Git solo acepta el shorthand en --branch: "refs/heads/x" haría fallar el clone y el
             // reintento caería al branch por defecto (bug 2026-10-05). Normalizamos aquí también
             // para que ningún llamante pueda reintroducirlo.
             var requestedRef = branch;
             branch = GitRefs.ToBranchShorthand(branch);
             log.Add($"Clonando {GitUrlRedactor.Redact(gitRepoUrl)} (ref pedido={requestedRef}, branch={branch})...");
-            var cloneUrl = ApplyAccessToken(gitRepoUrl, accessToken);
+            var authEnv = BuildGitAuthEnvironment(gitRepoUrl, accessToken);
             var hasBranch = !string.IsNullOrWhiteSpace(branch);
             string[] cloneArgs = hasBranch
-                ? ["clone", "--depth", "1", "--branch", branch, "--single-branch", cloneUrl, workDir]
-                : ["clone", "--depth", "1", cloneUrl, workDir];
+                ? ["clone", "--depth", "1", "--branch", branch, "--single-branch", gitRepoUrl, workDir]
+                : ["clone", "--depth", "1", gitRepoUrl, workDir];
 
-            var clone = await RunGitAsync(cloneArgs, workingDir: null, ct).ConfigureAwait(false);
+            var clone = await RunGitAsync(cloneArgs, workingDir: null, authEnv, ct).ConfigureAwait(false);
             if (clone.ExitCode != 0)
             {
                 // El clone con --branch falla si el ref no es branch/tag o no existe. NUNCA se
@@ -105,17 +120,17 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
                 }
                 Directory.Delete(workDir, recursive: true);
                 Directory.CreateDirectory(workDir);
-                var retry = await RunGitAsync(["clone", "--depth", "1", cloneUrl, workDir], null, ct)
+                var retry = await RunGitAsync(["clone", "--depth", "1", gitRepoUrl, workDir], workingDir: null, authEnv, ct)
                     .ConfigureAwait(false);
                 if (retry.ExitCode != 0)
                 {
                     throw new InvalidOperationException(
                         $"git clone falló: {GitUrlRedactor.Redact(Trim(retry.StdErr.Length > 0 ? retry.StdErr : clone.StdErr), accessToken)}");
                 }
-                var fetchRef = await RunGitAsync(["fetch", "--depth", "1", "origin", branch], workDir, ct)
+                var fetchRef = await RunGitAsync(["fetch", "--depth", "1", "origin", branch], workDir, authEnv, ct)
                     .ConfigureAwait(false);
                 var checkoutRef = fetchRef.ExitCode == 0
-                    ? await RunGitAsync(["checkout", "--detach", "FETCH_HEAD"], workDir, ct).ConfigureAwait(false)
+                    ? await RunGitAsync(["checkout", "--detach", "FETCH_HEAD"], workDir, environment: null, ct).ConfigureAwait(false)
                     : fetchRef;
                 if (checkoutRef.ExitCode != 0)
                 {
@@ -140,14 +155,14 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
             // respuesta equivocada. Si no se puede materializar, la build falla.
             if (!string.IsNullOrWhiteSpace(gitSha))
             {
-                var head = await RunGitAsync(["rev-parse", "HEAD"], workDir, ct).ConfigureAwait(false);
+                var head = await RunGitAsync(["rev-parse", "HEAD"], workDir, environment: null, ct).ConfigureAwait(false);
                 var currentSha = head.StdOut.Trim();
                 if (!string.Equals(currentSha, gitSha, StringComparison.OrdinalIgnoreCase))
                 {
                     // El clone shallow puede no contener el commit: lo traemos puntualmente.
-                    var fetch = await RunGitAsync(["fetch", "--depth", "1", "origin", gitSha!], workDir, ct)
+                    var fetch = await RunGitAsync(["fetch", "--depth", "1", "origin", gitSha!], workDir, authEnv, ct)
                         .ConfigureAwait(false);
-                    var checkout = await RunGitAsync(["checkout", "--detach", gitSha!], workDir, ct)
+                    var checkout = await RunGitAsync(["checkout", "--detach", gitSha!], workDir, environment: null, ct)
                         .ConfigureAwait(false);
                     if (checkout.ExitCode != 0)
                     {
@@ -161,7 +176,7 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
                 }
             }
 
-            var resolved = await RunGitAsync(["rev-parse", "HEAD"], workDir, ct).ConfigureAwait(false);
+            var resolved = await RunGitAsync(["rev-parse", "HEAD"], workDir, environment: null, ct).ConfigureAwait(false);
             var resolvedSha = resolved.StdOut.Trim();
 
             // Cinturón y tirantes: que el checkout devuelva 0 no garantiza que HEAD sea lo pedido.
@@ -224,7 +239,10 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
 
     /// <summary>Ejecuta <c>git</c> con los argumentos dados y captura stdout/stderr.</summary>
     private async Task<(int ExitCode, string StdOut, string StdErr)> RunGitAsync(
-        string[] args, string? workingDir, CancellationToken ct)
+        string[] args,
+        string? workingDir,
+        IReadOnlyDictionary<string, string>? environment,
+        CancellationToken ct)
     {
         var psi = new ProcessStartInfo("git")
         {
@@ -240,6 +258,24 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
         }
         // Evita prompts interactivos de credenciales que colgarían el proceso.
         psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
+
+        if (environment is not null)
+        {
+            foreach (var (k, v) in environment)
+            {
+                psi.Environment[k] = v;
+            }
+        }
+
+        return _gitRunner is not null
+            ? await _gitRunner(psi, ct).ConfigureAwait(false)
+            : await DefaultGitRunner(psi, ct).ConfigureAwait(false);
+    }
+
+    internal static async Task<(int ExitCode, string StdOut, string StdErr)> DefaultGitRunner(
+        ProcessStartInfo psi,
+        CancellationToken ct)
+    {
 
         using var proc = new Process { StartInfo = psi };
         var stdout = new StringBuilder();
@@ -269,7 +305,8 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             TryKill(proc);
-            throw new TimeoutException($"git {args[0]} excedió {GitTimeout.TotalMinutes:0} min.");
+            var cmd = psi.ArgumentList.Count > 0 ? psi.ArgumentList[0] : "git";
+            throw new TimeoutException($"git {cmd} excedió {GitTimeout.TotalMinutes:0} min.");
         }
         catch (OperationCanceledException)
         {
@@ -280,6 +317,54 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
         return (proc.ExitCode, stdout.ToString(), stderr.ToString());
     }
 
+    /// <summary>
+    /// Configura las variables de entorno de git para autenticación HTTPS por token sin exponer
+    /// credenciales en argv ni persistirlas en .git/config (Issue #81).
+    /// Usa GIT_CONFIG_* para inyectar in-memory http.&lt;prefix&gt;.extraHeader con Basic auth.
+    /// </summary>
+    internal static Dictionary<string, string>? BuildGitAuthEnvironment(string gitRepoUrl, string? accessToken, IReadOnlyDictionary<string, string>? baseEnvironment = null)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return null;
+        }
+
+        if (!Uri.TryCreate(gitRepoUrl, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        if (!uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrEmpty(uri.UserInfo))
+        {
+            // La URL ya contiene credenciales (p.ej. user:pass@host) — no duplicar.
+            return null;
+        }
+
+        var countStr = baseEnvironment is not null
+            ? (baseEnvironment.TryGetValue("GIT_CONFIG_COUNT", out var cVal) ? cVal : null)
+            : Environment.GetEnvironmentVariable("GIT_CONFIG_COUNT");
+
+        var baseCount = int.TryParse(countStr, out var parsed) && parsed >= 0 ? parsed : 0;
+        var index = baseCount;
+        var newCount = baseCount + 1;
+
+        var prefix = $"{uri.Scheme}://{uri.Authority}/";
+        var rawAuth = $"x-access-token:{accessToken}";
+        var base64Auth = Convert.ToBase64String(Encoding.UTF8.GetBytes(rawAuth));
+
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["GIT_CONFIG_COUNT"] = newCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            [$"GIT_CONFIG_KEY_{index}"] = $"http.{prefix}.extraHeader",
+            [$"GIT_CONFIG_VALUE_{index}"] = $"Authorization: Basic {base64Auth}",
+        };
+    }
+
     private static void TryKill(Process proc)
     {
         try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
@@ -288,9 +373,14 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
     /// <summary>
     /// Inyecta un token de acceso en una URL HTTPS para clonar repos privados:
     /// <c>https://host/owner/repo</c> → <c>https://x-access-token:&lt;token&gt;@host/owner/repo</c>.
-    /// No toca URLs SSH ni URLs que ya traen credenciales (<c>user@host</c>). El token NUNCA se
-    /// loguea: solo viaja en los args de <c>git</c> y en <c>.git/config</c> del workDir temporal.
+    /// No toca URLs SSH ni URLs que ya traen credenciales (<c>user@host</c>).
+    /// <para>
+    /// Helper heredado (obsoleto). En la ejecución de build, el token se pasa vía variables de entorno
+    /// in-memory (<see cref="BuildGitAuthEnvironment"/>) para evitar exponer credenciales en los
+    /// argumentos del proceso (argv) o en .git/config (Issue #81).
+    /// </para>
     /// </summary>
+    [Obsolete("Legacy helper kept for backwards compatibility. Production builds pass tokens via BuildGitAuthEnvironment (GIT_CONFIG_*) to avoid argv and .git/config exposure (Issue #81).")]
     internal static string ApplyAccessToken(string repoUrl, string? accessToken)
     {
         if (string.IsNullOrWhiteSpace(accessToken)
@@ -361,7 +451,7 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "No se pudo limpiar el contexto de build temporal {Dir}", dir);
+            _logger.LogWarning(ex, "No se pudo limpiar el contexto de build temporal {Dir}", dir);
         }
     }
 }
