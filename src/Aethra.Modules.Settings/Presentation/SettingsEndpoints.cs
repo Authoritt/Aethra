@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Aethra.Modules.Settings.Domain;
 using Aethra.Modules.Settings.UseCases.BaseDomains.Commands;
 using Aethra.Modules.Settings.UseCases.BaseDomains.Queries;
@@ -12,6 +13,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Logging;
 
 namespace Aethra.Modules.Settings.Presentation;
 
@@ -19,10 +21,10 @@ public static class SettingsEndpoints
 {
     /// <summary>
     /// Nombre de la policy que el host registra en <c>apps/api/Program.cs</c> para
-    /// endpoints que SOLO deben aceptar autenticación por cookie (no API keys).
+    /// credenciales de integración: SOLO cookie de un administrador (no API keys).
     /// Duplicado intencionalmente para no acoplar este módulo a internals del host.
     /// </summary>
-    private const string CookieOnlyPolicy = "CookieOnly";
+    private const string IntegrationCredentialAdminPolicy = "IntegrationCredentialAdmin";
 
     public static IEndpointRouteBuilder MapSettingsEndpoints(this IEndpointRouteBuilder app)
     {
@@ -33,20 +35,25 @@ public static class SettingsEndpoints
     }
 
     // ----------------------------------------------------------------------------
-    // Integraciones (credenciales externas). SOLO cookie auth — una API key no debe
-    // poder leer/crear credenciales que la API key misma podría usar.
+    // Integraciones (credenciales externas). SOLO administradores por cookie — una API key
+    // ni un usuario ordinario pueden leer o mutar credenciales de automatización.
     // ----------------------------------------------------------------------------
     private static void MapIntegrationsEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/settings/integrations")
             .WithTags("Settings")
-            .RequireAuthorization(CookieOnlyPolicy);
+            .RequireAuthorization(IntegrationCredentialAdminPolicy);
 
         group.MapGet("/", async (IMediator m, CancellationToken ct) =>
                 ToResult(await m.Send(new ListIntegrationCredentialsQuery(), ct)))
             .WithName("ListIntegrationCredentials");
 
-        group.MapPost("/", async ([FromBody] CreateIntegrationCredentialRequest body, IMediator m, CancellationToken ct) =>
+        group.MapPost("/", async (
+            [FromBody] CreateIntegrationCredentialRequest body,
+            HttpContext http,
+            IMediator m,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
         {
             var cmd = new CreateIntegrationCredentialCommand(
                 body.Name,
@@ -56,29 +63,52 @@ public static class SettingsEndpoints
                 body.Metadata,
                 body.Description);
             var r = await m.Send(cmd, ct);
-            return r.IsSuccess
-                ? Results.Created($"/api/settings/integrations/{r.Value.Id}", r.Value)
-                : MapError(r.Error);
+            if (r.IsFailure)
+            {
+                return MapError(r.Error);
+            }
+
+            AuditCredentialMutation(http, loggerFactory, "created", r.Value.Id);
+            return Results.Created($"/api/settings/integrations/{r.Value.Id}", r.Value);
         }).WithName("CreateIntegrationCredential");
 
-        group.MapDelete("/{credentialId}", async (string credentialId, IMediator m, CancellationToken ct) =>
+        group.MapDelete("/{credentialId}", async (
+            string credentialId,
+            HttpContext http,
+            IMediator m,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
         {
             var r = await m.Send(new DeleteIntegrationCredentialCommand(credentialId), ct);
-            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+            if (r.IsFailure)
+            {
+                return MapError(r.Error);
+            }
+
+            AuditCredentialMutation(http, loggerFactory, "deleted", credentialId);
+            return Results.NoContent();
         }).WithName("DeleteIntegrationCredential");
 
         group.MapPost("/{credentialId}/rotate", async (
             string credentialId,
             [FromBody] RotateIntegrationCredentialRequest body,
+            HttpContext http,
             IMediator m,
+            ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
             var r = await m.Send(new RotateIntegrationCredentialCommand(credentialId, body.NewPlainValue), ct);
-            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+            if (r.IsFailure)
+            {
+                return MapError(r.Error);
+            }
+
+            AuditCredentialMutation(http, loggerFactory, "rotated", credentialId);
+            return Results.NoContent();
         }).WithName("RotateIntegrationCredential");
     }
 
-    // Scopes para domains/environments. Integrations sigue requiriendo CookieOnly aparte.
+    // Scopes para domains/environments. Integrations usa su policy cookie+admin aparte.
     private const string ScopeSettingsRead = "scope:settings:read";
     private const string ScopeSettingsWrite = "scope:settings:write";
 
@@ -202,6 +232,23 @@ public static class SettingsEndpoints
 
     private static IResult ToResult<T>(Result<T> r)
         => r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
+
+    private static void AuditCredentialMutation(
+        HttpContext http,
+        ILoggerFactory loggerFactory,
+        string action,
+        string credentialId)
+    {
+        var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? http.User.Identity?.Name
+            ?? "unknown";
+        loggerFactory.CreateLogger("Aethra.Settings.IntegrationCredentials.Audit")
+            .LogInformation(
+                "Integration credential {CredentialAction} by actor {ActorId}: {CredentialId}",
+                action,
+                actorId,
+                credentialId);
+    }
 
     private static IResult MapError(Error e) => e.Type switch
     {

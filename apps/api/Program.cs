@@ -5,6 +5,7 @@ using Aethra.Api.Hubs;
 using Aethra.Modules.Cloudflare;
 using Aethra.Modules.Deployments;
 using Aethra.Modules.Identity;
+using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Mcp;
 using Aethra.Modules.Metrics;
 using Aethra.Modules.Monitoring;
@@ -200,6 +201,12 @@ builder.Services.AddAuthorization(opts =>
     opts.AddPolicy("CookieOnly", p => p
         .AddAuthenticationSchemes(AuthSchemes.Cookie)
         .RequireAuthenticatedUser());
+    // Integration credentials control production automation. Keep API keys excluded and
+    // require the built-in Identity administrator role for every operation in this surface.
+    opts.AddPolicy("IntegrationCredentialAdmin", p => p
+        .AddAuthenticationSchemes(AuthSchemes.Cookie)
+        .RequireAuthenticatedUser()
+        .RequireRole(Role.AdminSlug));
     opts.AddApiKeyScopePolicies();
     // OT-012 (H2): /openapi solo para admin, sea cual sea el entorno.
     opts.AddOpenApiAdminPolicy();
