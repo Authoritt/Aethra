@@ -33,7 +33,7 @@ public static class RoutesEndpoints
                 body.PathPrefix,
                 body.OperationalOwnerType,
                 body.OperationalOwnerId,
-                body.Origin ?? "manual");
+                "manual");
             var r = await mediator.Send(cmd, ct);
             return r.IsSuccess ? Results.Created($"/api/proxy/routes/{r.Value.Id}", r.Value) : MapError(r.Error);
         })
@@ -65,8 +65,7 @@ public static class RoutesEndpoints
         bool TlsEnabled,
         string? PathPrefix = null,
         string? OperationalOwnerType = null,
-        string? OperationalOwnerId = null,
-        string? Origin = null);
+        string? OperationalOwnerId = null);
 
     public sealed record UpdateRouteRequest(string BackendUrl, bool TlsEnabled);
 
