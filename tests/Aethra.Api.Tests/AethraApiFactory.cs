@@ -49,6 +49,7 @@ public class AethraApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Panel__LocalPeers__0", BridgeGateway);
         Environment.SetEnvironmentVariable("Panel__LoginRateLimit__PermitLimit", "3");
         Environment.SetEnvironmentVariable("Panel__LoginRateLimit__WindowSeconds", "600");
+        Environment.SetEnvironmentVariable("Aethra__MonitorUrlBackfillOnStart", "false");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
