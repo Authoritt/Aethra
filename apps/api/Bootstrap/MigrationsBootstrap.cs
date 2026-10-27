@@ -27,6 +27,14 @@ public interface IMonitorUrlBackfillStep
 }
 
 /// <summary>
+/// Permite interceptar o sustituir la ejecución del sembrado de identidad (p. ej. en pruebas).
+/// </summary>
+public interface IIdentitySeedStep
+{
+    Task ExecuteAsync(IServiceProvider services, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
 /// Aplica migraciones al arrancar en Development. En producción se usa
 /// <c>dotnet ef database update</c> explícito durante el deploy.
 ///
@@ -72,13 +80,42 @@ public static class MigrationsBootstrap
                     ctx.GetType().Name, pending.Count, string.Join(", ", pending));
                 await ctx.Database.MigrateAsync().ConfigureAwait(false);
             }
-
         }
 
-        // F11.1: tras migrar, asegurar los 3 roles builtin + el user admin si la BD está vacía.
+        // F11.1 / Issue #21: tras migrar, asegurar los 3 roles builtin + el user admin si la BD está vacía.
         // Idempotente — si ya existe el admin solo se confirman los roles builtin.
+        await services.SeedIdentityAsync().ConfigureAwait(false);
+    }
+
+    public const string SeedIdentityConfigKey = "Aethra:SeedIdentityOnStart";
+    public const bool SeedIdentityDefault = false;
+
+    /// <summary>
+    /// Indica si se debe ejecutar el sembrado de identidad al arrancar cuando las migraciones no corren en el proceso.
+    /// Por defecto es false; en despliegues con migraciones externas gestionadas permite asegurar los roles builtin y el admin.
+    /// </summary>
+    public static bool ShouldSeedIdentity(IConfiguration configuration)
+        => configuration.GetValue(SeedIdentityConfigKey, SeedIdentityDefault);
+
+    /// <summary>
+    /// Asegura los roles builtin y el usuario admin inicial si la BD está vacía.
+    /// Desacoplado de la ejecución de migraciones automáticas.
+    /// </summary>
+    public static async Task SeedIdentityAsync(
+        this IServiceProvider services,
+        CancellationToken cancellationToken = default)
+    {
+        var step = services.GetService<IIdentitySeedStep>();
+        if (step is not null)
+        {
+            await step.ExecuteAsync(services, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        using var scope = services.CreateScope();
+        var sp = scope.ServiceProvider;
         var seeder = sp.GetRequiredService<Aethra.Modules.Identity.Infrastructure.IdentitySeeder>();
-        await seeder.SeedAsync().ConfigureAwait(false);
+        await seeder.SeedAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public const string MonitorUrlBackfillConfigKey = "Aethra:MonitorUrlBackfillOnStart";
