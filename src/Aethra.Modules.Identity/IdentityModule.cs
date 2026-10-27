@@ -26,6 +26,8 @@ public static class IdentityModule
     {
         services.Configure<IdentityOptions>(configuration.GetSection("Identity"));
         services.AddSingleton<SingleUserStore>();
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentPrincipalAccessor, CurrentPrincipalAccessor>();
 
         var conn = configuration.GetConnectionString("Aethra")
             ?? throw new InvalidOperationException("ConnectionStrings:Aethra no configurado.");

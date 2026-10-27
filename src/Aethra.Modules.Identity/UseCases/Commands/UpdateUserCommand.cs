@@ -1,6 +1,7 @@
 using Aethra.Modules.Identity.Domain;
 using Microsoft.EntityFrameworkCore;
 using Aethra.Modules.Identity.Infrastructure;
+using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Kernel.Errors;
@@ -21,7 +22,8 @@ internal sealed class UpdateUserHandler(
     IdentityDbContext db,
     IUserRepository users,
     IRoleRepository roles,
-    IClock clock) : ICommandHandler<UpdateUserCommand>
+    IClock clock,
+    ICurrentPrincipalAccessor currentPrincipal) : ICommandHandler<UpdateUserCommand>
 {
     public async Task<Result> Handle(UpdateUserCommand request, CancellationToken cancellationToken)
     {
@@ -89,7 +91,7 @@ internal sealed class UpdateUserHandler(
                 return Error.Validation("user.no_roles", "El usuario debe tener al menos un rol.");
             }
 
-            resolvedIds = new List<RoleId>(requestedSlugs.Count);
+            var resolvedRoles = new List<Role>(requestedSlugs.Count);
             foreach (var slug in requestedSlugs)
             {
                 var role = await roles.FindBySlugAsync(slug, cancellationToken).ConfigureAwait(false);
@@ -97,8 +99,18 @@ internal sealed class UpdateUserHandler(
                 {
                     return Error.Validation("user.role_not_found", $"Rol '{slug}' no existe.");
                 }
-                resolvedIds.Add(role.Id);
+                resolvedRoles.Add(role);
             }
+
+            var grantError = ScopeGrantAuthorization.Validate(
+                currentPrincipal.Current,
+                resolvedRoles.SelectMany(role => role.Scopes).Distinct(StringComparer.Ordinal));
+            if (grantError is not null)
+            {
+                return grantError;
+            }
+
+            resolvedIds = [.. resolvedRoles.Select(role => role.Id)];
         }
 
         var adminRole = resolvedIds is null

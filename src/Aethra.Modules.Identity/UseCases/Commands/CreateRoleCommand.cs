@@ -1,5 +1,6 @@
 using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure;
+using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Modules.Identity.UseCases.Dtos;
 using Aethra.Shared.Infrastructure.Cqrs;
@@ -28,10 +29,17 @@ public sealed class CreateRoleValidator : AbstractValidator<CreateRoleCommand>
 internal sealed class CreateRoleHandler(
     IdentityDbContext db,
     IRoleRepository roles,
-    IClock clock) : ICommandHandler<CreateRoleCommand, CreatedRoleDto>
+    IClock clock,
+    ICurrentPrincipalAccessor currentPrincipal) : ICommandHandler<CreateRoleCommand, CreatedRoleDto>
 {
     public async Task<Result<CreatedRoleDto>> Handle(CreateRoleCommand request, CancellationToken cancellationToken)
     {
+        var grantError = ScopeGrantAuthorization.Validate(currentPrincipal.Current, request.Scopes);
+        if (grantError is not null)
+        {
+            return grantError;
+        }
+
         var normalizedSlug = request.Slug.Trim().ToLowerInvariant();
         var existing = await roles.FindBySlugAsync(normalizedSlug, cancellationToken).ConfigureAwait(false);
         if (existing is not null)

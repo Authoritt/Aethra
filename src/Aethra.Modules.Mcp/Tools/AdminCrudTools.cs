@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Cloudflare.UseCases.Tunnels.Commands;
 using Aethra.Modules.Identity.UseCases.Commands;
 using Aethra.Modules.Mcp.Security;
@@ -21,7 +22,10 @@ namespace Aethra.Modules.Mcp.Tools;
 /// Scope <c>projects:write</c> salvo update_service (<c>services:write</c>).
 /// </summary>
 [McpServerToolType]
-public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
+public sealed class AdminCrudTools(
+    IMediator mediator,
+    IMcpCallerContext caller,
+    ICurrentPrincipalAccessor currentPrincipal)
 {
     /// <summary>
     /// Relee la Instance despues de escribirla y proyecta lo que quedo GUARDADO.
@@ -398,6 +402,7 @@ public sealed class AdminCrudTools(IMediator mediator, IMcpCallerContext caller)
         {
             return McpResponses.InsufficientScope(McpScopes.UsersWrite);
         }
+        using var grantContext = currentPrincipal.UseScopes(caller.Scopes);
         var r = await mediator.Send(new UpdateRoleCommand(roleId, displayName, scopes), ct).ConfigureAwait(false);
         return r.IsSuccess ? McpResponses.Ok(new { role_id = roleId, updated = true }) : McpResponses.FromError(r.Error);
     }

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.UseCases.Commands;
 using Aethra.Modules.Identity.UseCases.Queries;
 using Aethra.Modules.Mcp.Security;
@@ -21,7 +22,10 @@ namespace Aethra.Modules.Mcp.Tools;
 /// </para>
 /// </summary>
 [McpServerToolType]
-public sealed class IdentityTools(IMediator mediator, IMcpCallerContext caller)
+public sealed class IdentityTools(
+    IMediator mediator,
+    IMcpCallerContext caller,
+    ICurrentPrincipalAccessor currentPrincipal)
 {
     [McpServerTool(Name = "aethra_create_user", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Crea un user con un set inicial de roles. El password se hashea con Argon2 + DataProtection. " +
@@ -49,6 +53,7 @@ public sealed class IdentityTools(IMediator mediator, IMcpCallerContext caller)
                     SuggestedArgs: new { email, password = "***", role_slugs = roleSlugs, display_name = displayName })]);
         }
 
+        using var grantContext = currentPrincipal.UseScopes(caller.Scopes);
         var result = await mediator.Send(
             new CreateUserCommand(email, password, displayName, roleSlugs), ct).ConfigureAwait(false);
         if (!result.IsSuccess)
@@ -121,6 +126,7 @@ public sealed class IdentityTools(IMediator mediator, IMcpCallerContext caller)
                     SuggestedArgs: new { user_id = userId, role_slug = roleSlug })]);
         }
 
+        using var grantContext = currentPrincipal.UseScopes(caller.Scopes);
         var result = await mediator.Send(
             new UpdateUserCommand(userId, DisplayName: null, RoleSlugs: newSlugs), ct).ConfigureAwait(false);
         if (!result.IsSuccess)
@@ -204,6 +210,7 @@ public sealed class IdentityTools(IMediator mediator, IMcpCallerContext caller)
                 wouldCall: "POST /api/identity/roles",
                 plan: new { slug, displayName, scopes });
         }
+        using var grantContext = currentPrincipal.UseScopes(caller.Scopes);
         var result = await mediator.Send(
             new CreateRoleCommand(slug, displayName, scopes), ct).ConfigureAwait(false);
         if (!result.IsSuccess)

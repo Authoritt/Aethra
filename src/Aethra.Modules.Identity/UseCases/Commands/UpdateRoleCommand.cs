@@ -1,5 +1,6 @@
 using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure;
+using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Kernel.Errors;
@@ -31,10 +32,17 @@ public sealed class UpdateRoleValidator : AbstractValidator<UpdateRoleCommand>
 internal sealed class UpdateRoleHandler(
     IdentityDbContext db,
     IRoleRepository roles,
-    IClock clock) : ICommandHandler<UpdateRoleCommand>
+    IClock clock,
+    ICurrentPrincipalAccessor currentPrincipal) : ICommandHandler<UpdateRoleCommand>
 {
     public async Task<Result> Handle(UpdateRoleCommand request, CancellationToken cancellationToken)
     {
+        var grantError = ScopeGrantAuthorization.Validate(currentPrincipal.Current, request.Scopes);
+        if (grantError is not null)
+        {
+            return grantError;
+        }
+
         if (!AethraId.TryParse(request.RoleId, out var parsed) || parsed.Value.Prefix != "rol")
         {
             return Error.NotFound("role.not_found", $"Role '{request.RoleId}' no existe.");
