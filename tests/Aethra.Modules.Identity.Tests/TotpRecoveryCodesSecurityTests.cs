@@ -208,6 +208,57 @@ public sealed class TotpRecoveryCodesSecurityTests(PostgreSql18Fixture postgres)
     }
 
     [Fact]
+    public async Task Lazy_migration_is_persisted_in_the_database_not_only_in_memory()
+    {
+        await using var db = await CreateDatabaseAsync();
+        var (codec, clock) = CreateHelpers();
+        var user = User.Create($"{Guid.NewGuid():N}@example.com", [1], "Legacy persisted", Now);
+        user.BeginTotpEnrollment(codec.Protect(TotpSeed), Now);
+        user.CompleteTotpEnrollment(codec.Protect(RecoveryCodes.Pack(["ABCD2345", "EFGH6789"])), Now);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        (await TotpVerifier.VerifyAsync(user, "ABCD2345", codec, db, clock, CancellationToken.None))
+            .Should().BeTrue();
+
+        await using var fresh = await CreateDatabaseAsync();
+        var stored = await fresh.Users.AsNoTracking().SingleAsync(u => u.Id == user.Id);
+        RecoveryCodes.IsHashed(stored.TotpRecoveryCodesCipher).Should().BeTrue();
+        stored.TotpRecoveryCodesUsedMask.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Lazy_migration_never_overwrites_codes_regenerated_in_the_meantime()
+    {
+        await using var db = await CreateDatabaseAsync();
+        var (codec, clock) = CreateHelpers();
+        var user = User.Create($"{Guid.NewGuid():N}@example.com", [1], "Legacy racing", Now);
+        user.BeginTotpEnrollment(codec.Protect(TotpSeed), Now);
+        user.CompleteTotpEnrollment(codec.Protect(RecoveryCodes.Pack(["ABCD2345", "EFGH6789"])), Now);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        // Mientras el login tiene cargado el payload legacy, el usuario regenera sus códigos
+        // desde otra petición: la máscara vuelve a 0 y el payload cambia.
+        var regenerated = RecoveryCodes.Hash(["JKLM2345", "NPQR6789"]);
+        await using (var other = await CreateDatabaseAsync())
+        {
+            var same = await other.Users.SingleAsync(u => u.Id == user.Id);
+            same.RotateRecoveryCodes(regenerated, Now);
+            await other.SaveChangesAsync();
+        }
+
+        (await TotpVerifier.VerifyAsync(user, "ABCD2345", codec, db, clock, CancellationToken.None))
+            .Should().BeFalse("el código viejo fue revocado al regenerar");
+
+        await using var fresh = await CreateDatabaseAsync();
+        var stored = await fresh.Users.AsNoTracking().SingleAsync(u => u.Id == user.Id);
+        stored.TotpRecoveryCodesCipher.Should().Equal(regenerated,
+            "los hashes de los códigos viejos no pueden pisar los recién regenerados");
+        stored.TotpRecoveryCodesUsedMask.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Backfill_idempotently_converts_legacy_users_to_one_way_hashes()
     {
         await using var db = await CreateDatabaseAsync();

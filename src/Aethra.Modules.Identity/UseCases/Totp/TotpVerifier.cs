@@ -84,15 +84,20 @@ internal static class TotpVerifier
         }
         catch (CryptographicException)
         {
-            unpackedBytes = user.TotpRecoveryCodesCipher;
+            // Sin las claves no hay códigos que comparar. Tratar el ciphertext como texto plano
+            // podría hashear basura encima de los códigos reales del usuario.
+            return false;
         }
 
         var legacyCodes = RecoveryCodes.Unpack(unpackedBytes);
         var legacyIndex = RecoveryCodes.FindMatchingLegacyCodeIndex(code, legacyCodes, user.TotpRecoveryCodesUsedMask);
         if (legacyIndex >= 0)
         {
-            // Migración perezosa: hashear los códigos legacy y persistirlos de forma atómica con el consumo
-            var migratedHashes = RecoveryCodes.Hash(legacyCodes);
+            // Migración perezosa: hashear los códigos legacy y persistirlos de forma atómica con el
+            // consumo. Si algún elemento no tiene forma de código, se consume sin migrar.
+            var migratedHashes = legacyCodes.All(RecoveryCodes.LooksLikeRecoveryCode)
+                ? RecoveryCodes.Hash(legacyCodes)
+                : null;
             return await ConsumeAtomicallyAsync(user, legacyIndex, db, clock, ct, migratedHashes).ConfigureAwait(false);
         }
         return false;
@@ -121,13 +126,19 @@ internal static class TotpVerifier
         var bit = 1 << index;
         var now = clock.UtcNow;
         var userId = user.Id;
+        // Al migrar, el UPDATE exige además que el payload siga siendo el que se leyó: si el
+        // usuario regeneró sus códigos mientras se calculaban los hashes (la máscara vuelve a 0),
+        // escribir los hashes de los códigos viejos encima resucitaría códigos revocados.
+        var readPayload = user.TotpRecoveryCodesCipher;
 
         int affected;
         if (db.Database.IsRelational())
         {
             affected = newHashedPayload is not null
                 ? await db.Users
-                    .Where(u => u.Id == userId && (u.TotpRecoveryCodesUsedMask & bit) == 0)
+                    .Where(u => u.Id == userId
+                        && (u.TotpRecoveryCodesUsedMask & bit) == 0
+                        && u.TotpRecoveryCodesCipher == readPayload)
                     .ExecuteUpdateAsync(
                         setters => setters
                             .SetProperty(u => u.TotpRecoveryCodesUsedMask, u => u.TotpRecoveryCodesUsedMask | bit)
