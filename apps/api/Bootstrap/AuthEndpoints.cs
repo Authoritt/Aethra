@@ -99,6 +99,7 @@ public static class AuthEndpoints
                     new Claim(ClaimTypes.Name, singleUserStore.AdminEmail),
                     new Claim(ClaimTypes.Role, Role.AdminSlug),
                     new Claim(ApiKeyAuthSchemes.ScopeClaim, ApiKey.AdminScope),
+                    new Claim(AuthSchemes.BootstrapClaim, "true"),
                 ], AuthSchemes.Cookie);
             }
 

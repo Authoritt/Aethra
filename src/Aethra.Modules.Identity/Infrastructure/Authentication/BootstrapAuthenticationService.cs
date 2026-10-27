@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -21,11 +20,10 @@ public sealed class BootstrapAuthenticationService(
     SingleUserStore singleUserStore,
     IAuthenticationAttemptLimiter attemptLimiter,
     IOptions<IdentityOptions> options,
-    ILogger<BootstrapAuthenticationService> logger,
-    IHostEnvironment? environment = null)
+    ILogger<BootstrapAuthenticationService> logger)
 {
     public bool IsBootstrapEnabled =>
-        options.Value.AllowBootstrapLogin || (environment?.IsDevelopment() == true);
+        options.Value.AllowBootstrapLogin;
 
     public async ValueTask<BootstrapAuthenticationOutcome> AuthenticateAsync(
         bool hasPersistedUsers,

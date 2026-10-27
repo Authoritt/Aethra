@@ -3,14 +3,21 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading.RateLimiting;
 using Aethra.Api.Bootstrap;
 using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure;
 using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
+using Aethra.Shared.Contracts.Authentication;
+using Aethra.Shared.Kernel.Time;
 using FluentAssertions;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -26,10 +33,11 @@ namespace Aethra.Api.Tests;
 /// 1. Despliegue en producción con migraciones externas y tabla de usuarios vacía (comportamiento seguro por defecto: 503).
 /// 2. Habilitación explícita mediante Identity:AllowBootstrapLogin=true cuando la tabla está vacía.
 /// 3. Rechazo de credenciales incorrectas en la rama bootstrap (401).
-/// 4. Modo Development: habilitación por defecto cuando no hay usuarios.
-/// 5. Rechazo inmediato de credenciales bootstrap una vez existe un admin persistido en BD (cierre del ciclo de vida).
-/// 6. Desacoplamiento de IdentitySeeder respecto a ApplyMigrationsOnStart (Aethra:SeedIdentityOnStart).
-/// 7. Garantía de auditoría/logs sin filtración de contraseñas o secretos.
+/// 4. Modo Development: con bandera ausente/false → 503 bootstrap_login_disabled (B1).
+/// 5. Rechazo inmediato de credenciales bootstrap una vez existe un admin persistido en BD.
+/// 6. Inmediata invalidación de sesión/cookie activa de bootstrap en cuanto existe el primer usuario persistido (M2).
+/// 7. Desacoplamiento de IdentitySeeder respecto a ApplyMigrationsOnStart (Aethra:SeedIdentityOnStart).
+/// 8. Garantía de auditoría/logs sin filtración de contraseñas o secretos.
 /// </summary>
 public sealed class BootstrapAuthenticationTests
 {
@@ -114,28 +122,51 @@ public sealed class BootstrapAuthenticationTests
     }
 
     [Fact]
-    public async Task Development_environment_enables_bootstrap_login_by_default_when_empty()
+    public async Task Development_environment_with_flag_absent_returns_503_bootstrap_login_disabled()
     {
-        using var factory = new BootstrapAuthTestFactory(
-            Environments.Development,
-            new Dictionary<string, string?>
-            {
-                ["Aethra:ApplyMigrationsOnStart"] = "false", // pruebas sin BD local
-                ["Identity:AdminPasswordSeed"] = "dev-seed-password-123",
-            });
-        using var client = factory.CreateClient(new() { AllowAutoRedirect = false });
+        // B1: Demuestra que en Development con la bandera ausente/false, el login bootstrap
+        // responde 503 bootstrap_login_disabled (no habilitado por defecto).
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development });
+        builder.WebHost.UseTestServer();
+        builder.Logging.ClearProviders();
 
-        var response = await PostLoginAsync(client, AdminEmail, "dev-seed-password-123");
+        builder.Services.AddRouting();
+        builder.Services.AddAuthentication(AuthSchemes.Cookie)
+            .AddCookie(AuthSchemes.Cookie, _ => { });
+        builder.Services.Configure<IdentityOptions>(_ => { });
+        builder.Services.AddSingleton<SingleUserStore>();
+        builder.Services.AddScoped<BootstrapAuthenticationService>();
+        builder.Services.AddScoped<IUserRepository, TestUserRepository>();
+        builder.Services.AddScoped<IUserPasswordCodec, StubPasswordCodec>();
+        builder.Services.AddScoped<IClock, SystemClock>();
+        builder.Services.AddScoped<IAuthenticationAttemptLimiter, TestAttemptLimiter>();
+        builder.Services.AddScoped<EfUserStore>();
+        builder.Services.AddScoped<IRoleRepository, StubRoleRepository>();
+        builder.Services.AddSingleton<ITotpChallengeTokens, StubTotpChallengeTokens>();
+        builder.Services.AddDbContext<IdentityDbContext>(o =>
+            o.UseNpgsql("Host=127.0.0.1;Port=1;Database=none;Username=none;Password=none"));
+        builder.Services.AddRateLimiter(o =>
+            o.AddPolicy(LoginRateLimiting.PolicyName, _ => RateLimitPartition.GetNoLimiter("test")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK,
-            "en Development el login bootstrap debe estar habilitado por defecto cuando no hay usuarios");
+        var app = builder.Build();
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseRateLimiter();
+        app.MapAuthEndpoints();
+        await app.StartAsync();
 
-        response.Headers.Should().ContainKey("Set-Cookie");
-        var cookie = response.Headers.GetValues("Set-Cookie").FirstOrDefault();
-        cookie.Should().NotBeNull().And.Contain("aethra.sid");
+        using var client = app.GetTestClient();
+        using var response = await client.PostAsync("/auth/login", new StringContent(
+            JsonSerializer.Serialize(new { email = AdminEmail, password = "dev-seed-password-123" }),
+            Encoding.UTF8, "application/json"));
 
-        factory.CapturedLogs.Entries.Should().Contain(e => e.EventId.Id == 2100 && e.EventId.Name == "BootstrapLoginAttempted");
-        factory.CapturedLogs.Entries.Should().Contain(e => e.EventId.Id == 2103 && e.EventId.Name == "BootstrapLoginSucceeded");
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable,
+            "en entorno Development con bandera ausente/false, el login bootstrap debe responder 503 bootstrap_login_disabled");
+
+        var body = await response.Content.ReadAsStringAsync();
+        var json = JsonNode.Parse(body);
+        json?["error"]?.GetValue<string>().Should().Be("bootstrap_login_disabled");
     }
 
     [Fact]
@@ -173,6 +204,63 @@ public sealed class BootstrapAuthenticationTests
         // Al haber usuarios en BD, el servicio de bootstrap devuelve UsePersistedUsers sin intentar la rama bootstrap
         factory.CapturedLogs.Entries.Should().NotContain(e => e.EventId.Id == 2100,
             "no debe intentarse la rama de bootstrap cuando ya existen usuarios persistidos");
+    }
+
+    [Fact]
+    public async Task Bootstrap_session_cookie_does_not_survive_creation_of_first_persisted_user()
+    {
+        // M2: Regresión — una sesión (cookie) obtenida por bootstrap NO debe sobrevivir a la existencia del primer usuario.
+        // OnValidatePrincipal debe invalidar la identidad (RejectPrincipal + SignOut) en cuanto identity.users ya tiene filas.
+        using var factory = new BootstrapAuthTestFactory(
+            "Testing",
+            new Dictionary<string, string?>
+            {
+                ["Identity:AllowBootstrapLogin"] = "true",
+                ["Identity:AdminPasswordSeed"] = BootstrapPassword,
+            });
+
+        using var client = factory.CreateClient(new() { AllowAutoRedirect = false });
+
+        // 1. Login vía bootstrap cuando no hay usuarios
+        var loginResponse = await PostLoginAsync(client, AdminEmail, BootstrapPassword);
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        loginResponse.Headers.Should().ContainKey("Set-Cookie");
+        var cookieHeader = loginResponse.Headers.GetValues("Set-Cookie").First();
+        var cookieValue = cookieHeader.Split(';')[0]; // "aethra.sid=..."
+
+        // 2. Mientras no haya usuarios, la cookie es válida y accede a un recurso protegido (/openapi/v1.json requiere AdminScope)
+        using var requestBefore = new HttpRequestMessage(HttpMethod.Get, "/openapi/v1.json");
+        requestBefore.Headers.Host = AethraApiFactory.PanelHost;
+        requestBefore.Headers.Add("Cookie", cookieValue);
+
+        var responseBefore = await client.SendAsync(requestBefore);
+        responseBefore.StatusCode.Should().Be(HttpStatusCode.OK,
+            "mientras la tabla de usuarios esté vacía, la sesión bootstrap es válida");
+
+        // 3. Crear el primer usuario persistido en el repositorio
+        var codec = factory.Services.GetRequiredService<IUserPasswordCodec>();
+        var firstUser = User.Create(
+            AdminEmail,
+            codec.HashAndProtect("real-persisted-password-99"),
+            displayName: "Admin Real",
+            DateTimeOffset.UtcNow);
+        factory.UserRepository.Add(firstUser);
+        (await factory.UserRepository.CountAsync(CancellationToken.None)).Should().Be(1);
+
+        // 4. La SIGUIENTE petición con la MISMA cookie bootstrap debe ser rechazada por OnValidatePrincipal
+        using var requestAfter = new HttpRequestMessage(HttpMethod.Get, "/openapi/v1.json");
+        requestAfter.Headers.Host = AethraApiFactory.PanelHost;
+        requestAfter.Headers.Add("Cookie", cookieValue);
+
+        var responseAfter = await client.SendAsync(requestAfter);
+        responseAfter.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
+            "una vez creado el primer usuario, la sesión de bootstrap debe ser invalidada inmediatamente por OnValidatePrincipal");
+
+        // 5. Debe emitir cabecera de Set-Cookie expirando aethra.sid (SignOut)
+        responseAfter.Headers.Should().ContainKey("Set-Cookie");
+        var expiredCookie = responseAfter.Headers.GetValues("Set-Cookie").First();
+        expiredCookie.Should().Contain("aethra.sid=");
     }
 
     [Fact]
@@ -295,7 +383,7 @@ public sealed class BootstrapAuthenticationTests
         public CaptureBootstrapLogsProvider CapturedLogs { get; } = new();
 
         public BootstrapAuthTestFactory(
-            string environment,
+            string environment = "Testing",
             Dictionary<string, string?>? configuration = null)
         {
             _environment = environment;
@@ -360,6 +448,28 @@ public sealed class BootstrapAuthenticationTests
 
         public Task<int> CountAsync(CancellationToken ct)
             => Task.FromResult(_users.Count);
+    }
+
+    private sealed class StubPasswordCodec : IUserPasswordCodec
+    {
+        public byte[] HashAndProtect(string plainPassword) => Encoding.UTF8.GetBytes(plainPassword);
+        public bool Verify(string plainPassword, byte[] storedCipher) => true;
+    }
+
+    private sealed class StubRoleRepository : IRoleRepository
+    {
+        public Task<Role?> FindBySlugAsync(string slug, CancellationToken ct) => Task.FromResult<Role?>(null);
+        public Task<Role?> GetByIdAsync(RoleId id, CancellationToken ct) => Task.FromResult<Role?>(null);
+        public Task<IReadOnlyList<Role>> ListByIdsAsync(IReadOnlyCollection<RoleId> ids, CancellationToken ct) => Task.FromResult<IReadOnlyList<Role>>([]);
+        public Task<IReadOnlyList<Role>> ListAllAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<Role>>([]);
+        public Task<int> CountAsync(CancellationToken ct) => Task.FromResult(0);
+    }
+
+    private sealed class StubTotpChallengeTokens : ITotpChallengeTokens
+    {
+        public string Issue(string userId) => Guid.NewGuid().ToString("N");
+        public string? ValidateAndGetUserId(string token) => null;
+        public string? GetLastValidationError() => null;
     }
 
     private sealed class CaptureBootstrapLogsProvider : ILoggerProvider

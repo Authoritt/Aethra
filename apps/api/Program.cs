@@ -17,6 +17,7 @@ using Aethra.Modules.Proxy.Presentation;
 using Aethra.Modules.Services;
 using Aethra.Modules.Settings;
 using Aethra.Modules.Identity.Infrastructure.Authentication;
+using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Modules.Vms;
 using Aethra.Modules.Vms.Authentication;
 using Aethra.Shared.Infrastructure.Outbox;
@@ -178,6 +179,18 @@ builder.Services
             ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return Task.CompletedTask;
         };
+        options.Events.OnValidatePrincipal = async ctx =>
+        {
+            if (ctx.Principal?.HasClaim(c => c.Type == AuthSchemes.BootstrapClaim && c.Value == "true") == true)
+            {
+                var userRepo = ctx.HttpContext.RequestServices.GetService<IUserRepository>();
+                if (userRepo is not null && await userRepo.CountAsync(ctx.HttpContext.RequestAborted) > 0)
+                {
+                    ctx.RejectPrincipal();
+                    await ctx.HttpContext.SignOutAsync(AuthSchemes.Cookie);
+                }
+            }
+        };
     })
     .AddScheme<SatelliteTokenAuthOptions, SatelliteTokenAuthHandler>(
         SatelliteAuthSchemes.TokenHeader, _ => { })
@@ -278,8 +291,8 @@ app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Aethra.Cors")
 // o suites de pruebas sin base de datos (p. ej. AethraApiFactory) pueden omitirlo
 // configurando Aethra:MonitorUrlBackfillOnStart=false (o Aethra__MonitorUrlBackfillOnStart=false).
 // -----------------------------------------------------------------------------
-var applyMigrations = app.Configuration.GetValue<bool?>("Aethra:ApplyMigrationsOnStart")
-    ?? app.Environment.IsDevelopment();
+var applyMigrations = app.Environment.IsDevelopment()
+    || app.Configuration.GetValue("Aethra:ApplyMigrationsOnStart", false);
 if (applyMigrations)
 {
     await app.Services.ApplyPendingMigrationsAsync();

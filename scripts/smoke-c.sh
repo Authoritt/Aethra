@@ -30,7 +30,7 @@ psql -U postgres -h localhost -d postgres -c "DROP DATABASE IF EXISTS aethra;" 2
 psql -U postgres -h localhost -d postgres -c "CREATE DATABASE aethra OWNER aethra;" 2>&1 | tee -a "$OUT"
 
 step "2. Arrancar central"
-( cd "$ROOT/apps/api" && ASPNETCORE_URLS=http://localhost:5080 ASPNETCORE_ENVIRONMENT=Development dotnet run --no-launch-profile > "$API_LOG" 2>&1 ) &
+( cd "$ROOT/apps/api" && ASPNETCORE_URLS=http://localhost:5080 ASPNETCORE_ENVIRONMENT=Development Identity__AllowBootstrapLogin=true dotnet run --no-launch-profile > "$API_LOG" 2>&1 ) &
 API_PID=$!
 echo "PID central=$API_PID" | tee -a "$OUT"
 

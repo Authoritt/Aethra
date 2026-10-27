@@ -2,10 +2,8 @@ using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure;
 using Aethra.Modules.Identity.Infrastructure.Authentication;
 using FluentAssertions;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using NSubstitute;
 using Xunit;
 
 namespace Aethra.Modules.Identity.Tests;
@@ -18,7 +16,7 @@ public sealed class BootstrapAuthenticationServiceTests
     [Fact]
     public async Task When_persisted_users_exist_outcome_is_always_UsePersistedUsers()
     {
-        var (service, logger) = CreateService(allowBootstrap: true, isDevelopment: false);
+        var (service, logger) = CreateService(allowBootstrap: true);
 
         var outcome = await service.AuthenticateAsync(
             hasPersistedUsers: true,
@@ -34,7 +32,7 @@ public sealed class BootstrapAuthenticationServiceTests
     [Fact]
     public async Task When_no_persisted_users_and_bootstrap_disabled_outcome_is_Disabled()
     {
-        var (service, logger) = CreateService(allowBootstrap: false, isDevelopment: false);
+        var (service, logger) = CreateService(allowBootstrap: false);
 
         var outcome = await service.AuthenticateAsync(
             hasPersistedUsers: false,
@@ -52,7 +50,7 @@ public sealed class BootstrapAuthenticationServiceTests
     [Fact]
     public async Task When_no_persisted_users_and_bootstrap_enabled_with_wrong_password_outcome_is_InvalidCredentials()
     {
-        var (service, logger) = CreateService(allowBootstrap: true, isDevelopment: false);
+        var (service, logger) = CreateService(allowBootstrap: true);
 
         var outcome = await service.AuthenticateAsync(
             hasPersistedUsers: false,
@@ -70,7 +68,7 @@ public sealed class BootstrapAuthenticationServiceTests
     [Fact]
     public async Task When_no_persisted_users_and_bootstrap_enabled_with_correct_password_outcome_is_Succeeded()
     {
-        var (service, logger) = CreateService(allowBootstrap: true, isDevelopment: false);
+        var (service, logger) = CreateService(allowBootstrap: true);
 
         var outcome = await service.AuthenticateAsync(
             hasPersistedUsers: false,
@@ -86,11 +84,11 @@ public sealed class BootstrapAuthenticationServiceTests
     }
 
     [Fact]
-    public async Task Development_environment_enables_bootstrap_by_default()
+    public async Task Development_environment_disables_bootstrap_when_flag_is_absent_or_false()
     {
-        var (service, logger) = CreateService(allowBootstrap: false, isDevelopment: true);
+        var (service, logger) = CreateService(allowBootstrap: false);
 
-        service.IsBootstrapEnabled.Should().BeTrue();
+        service.IsBootstrapEnabled.Should().BeFalse();
 
         var outcome = await service.AuthenticateAsync(
             hasPersistedUsers: false,
@@ -98,15 +96,15 @@ public sealed class BootstrapAuthenticationServiceTests
             password: AdminPassword,
             cancellationToken: CancellationToken.None);
 
-        outcome.Should().Be(BootstrapAuthenticationOutcome.Succeeded);
+        outcome.Should().Be(BootstrapAuthenticationOutcome.Disabled);
         logger.LoggedEvents.Should().Contain(e => e.Id == 2100 && e.Name == "BootstrapLoginAttempted");
-        logger.LoggedEvents.Should().Contain(e => e.Id == 2103 && e.Name == "BootstrapLoginSucceeded");
+        logger.LoggedEvents.Should().Contain(e => e.Id == 2101 && e.Name == "BootstrapLoginRejected");
     }
 
     [Fact]
     public async Task Production_environment_disables_bootstrap_by_default()
     {
-        var (service, logger) = CreateService(allowBootstrap: false, isDevelopment: false);
+        var (service, logger) = CreateService(allowBootstrap: false);
 
         service.IsBootstrapEnabled.Should().BeFalse();
 
@@ -123,7 +121,7 @@ public sealed class BootstrapAuthenticationServiceTests
     [Fact]
     public async Task Password_null_returns_InvalidCredentials_when_bootstrap_is_enabled()
     {
-        var (service, logger) = CreateService(allowBootstrap: true, isDevelopment: false);
+        var (service, logger) = CreateService(allowBootstrap: true);
 
         var outcome = await service.AuthenticateAsync(
             hasPersistedUsers: false,
@@ -137,7 +135,7 @@ public sealed class BootstrapAuthenticationServiceTests
     }
 
     private static (BootstrapAuthenticationService Service, RecordingLogger<BootstrapAuthenticationService> Logger)
-        CreateService(bool allowBootstrap, bool isDevelopment)
+        CreateService(bool allowBootstrap)
     {
         var options = Options.Create(new IdentityOptions
         {
@@ -149,10 +147,8 @@ public sealed class BootstrapAuthenticationServiceTests
         var store = new SingleUserStore(options);
         var limiter = new PassThroughAttemptLimiter();
         var logger = new RecordingLogger<BootstrapAuthenticationService>();
-        var env = Substitute.For<IHostEnvironment>();
-        env.EnvironmentName.Returns(isDevelopment ? Environments.Development : Environments.Production);
 
-        var service = new BootstrapAuthenticationService(store, limiter, options, logger, env);
+        var service = new BootstrapAuthenticationService(store, limiter, options, logger);
         return (service, logger);
     }
 
