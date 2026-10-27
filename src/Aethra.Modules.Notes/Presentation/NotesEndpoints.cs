@@ -7,11 +7,13 @@ using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Ids;
 using Aethra.Shared.Kernel.Results;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Aethra.Modules.Notes.Presentation;
 
@@ -40,6 +42,7 @@ public static class NotesEndpoints
     // Pinned-facts comparten dominio con notes (se almacenan/leen vinculados a la misma jerarquía).
     private const string ScopeRead = "scope:notes:read";
     private const string ScopeWrite = "scope:notes:write";
+    private const string SecretRevealAuditCategory = "Aethra.Security.PinnedFactReveal";
 
     public static IEndpointRouteBuilder MapNotesEndpoints(this IEndpointRouteBuilder app)
     {
@@ -219,6 +222,9 @@ public static class NotesEndpoints
             [FromQuery(Name = "scope_type")] string scopeType,
             [FromQuery(Name = "scope_id")] string scopeId,
             [FromQuery(Name = "reveal")] bool? reveal,
+            HttpContext httpContext,
+            IAuthorizationService authorization,
+            ILoggerFactory loggerFactory,
             IMediator mediator,
             CancellationToken ct) =>
         {
@@ -226,7 +232,33 @@ public static class NotesEndpoints
             {
                 return Results.UnprocessableEntity(new { code = "pinned_fact.invalid_scope", message = $"scope_type inválido: '{scopeType}'." });
             }
-            var q = new ListPinnedFactsQuery(scope, scopeId, reveal ?? false);
+
+            var includeSecretValues = reveal ?? false;
+            if (includeSecretValues)
+            {
+                var logger = loggerFactory.CreateLogger(SecretRevealAuditCategory);
+                var revealAuthorization = await authorization.AuthorizeAsync(
+                    httpContext.User,
+                    resource: null,
+                    policyName: ScopeWrite);
+                if (!revealAuthorization.Succeeded)
+                {
+                    logger.LogWarning(
+                        "Pinned fact secret reveal denied for {ScopeType}:{ScopeId} via {AuthenticationType}",
+                        scopeType,
+                        scopeId,
+                        httpContext.User.Identity?.AuthenticationType ?? "unknown");
+                    return Results.Forbid();
+                }
+
+                logger.LogInformation(
+                    "Pinned fact secret reveal authorized for {ScopeType}:{ScopeId} via {AuthenticationType}",
+                    scopeType,
+                    scopeId,
+                    httpContext.User.Identity?.AuthenticationType ?? "unknown");
+            }
+
+            var q = new ListPinnedFactsQuery(scope, scopeId, includeSecretValues);
             return ToResult(await mediator.Send(q, ct));
         })
         .RequireAuthorization(ScopeRead)

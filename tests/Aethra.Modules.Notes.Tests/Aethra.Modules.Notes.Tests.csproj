@@ -3,6 +3,8 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- Mvc.Testing 10.0.x requiere Hosting 10.0.7, por encima del pin transitivo central. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
     <Description>Unit tests del dominio del módulo Notes (Note + NoteImage): validación,
 change-detection de UpdateBody, idempotencia de Pin/Unpin, attach/detach de imágenes.</Description>
   </PropertyGroup>
@@ -12,10 +14,13 @@ change-detection de UpdateBody, idempotencia de Pin/Unpin, attach/detach de imá
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="NSubstitute" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Aethra.Modules.Notes\Aethra.Modules.Notes.csproj" />
+    <ProjectReference Include="..\..\src\Aethra.Modules.Identity\Aethra.Modules.Identity.csproj" />
   </ItemGroup>
 
 </Project>
