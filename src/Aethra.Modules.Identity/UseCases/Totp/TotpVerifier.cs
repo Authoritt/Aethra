@@ -11,8 +11,9 @@ namespace Aethra.Modules.Identity.UseCases.Totp;
 /// F12.1B — helper para validar un codigo entrante. Acepta:
 /// <list type="bullet">
 ///   <item>6 digitos numericos → valida como TOTP RFC 6238.</item>
-///   <item>8 chars alfanumericos (formato recovery) → valida contra los 10 cifrados; si OK,
-///   marca el bit usado en el bitmask del user (one-shot).</item>
+///   <item>8 chars alfanumericos (formato recovery) → valida contra los 10 hashes one-way (Argon2id)
+///   o contra el formato legacy cifrado con migración perezosa a hash; si OK, marca el bit usado
+///   en el bitmask del user (one-shot).</item>
 /// </list>
 /// El metodo NO hace SaveChangesAsync — el caller decide cuando persistir (ej. en login flow
 /// el codigo verificado puede invalidar otros estados).
@@ -58,31 +59,49 @@ internal static class TotpVerifier
         User user, string code, ITotpSecretCodec codec,
         IdentityDbContext db, IClock clock, CancellationToken ct)
     {
-        if (user.TotpRecoveryCodesCipher is null) { return false; }
-        try
+        if (user.TotpRecoveryCodesCipher is null || user.TotpRecoveryCodesCipher.Length == 0)
         {
-            var packed = codec.Unprotect(user.TotpRecoveryCodesCipher);
-            var codes = RecoveryCodes.Unpack(packed);
-            var normalized = RecoveryCodes.Normalize(code);
-            for (var i = 0; i < codes.Count; i++)
+            return false;
+        }
+
+        // Formato nuevo: hashes one-way (Argon2id) sin cifrado reversible
+        if (RecoveryCodes.IsHashed(user.TotpRecoveryCodesCipher))
+        {
+            var hashes = RecoveryCodes.UnpackHashes(user.TotpRecoveryCodesCipher);
+            var index = RecoveryCodes.FindMatchingCodeIndex(code, hashes, user.TotpRecoveryCodesUsedMask);
+            if (index >= 0)
             {
-                if (RecoveryCodes.IsUsed(user.TotpRecoveryCodesUsedMask, i)) { continue; }
-                if (string.Equals(codes[i], normalized, StringComparison.Ordinal))
-                {
-                    return await ConsumeAtomicallyAsync(user, i, db, clock, ct).ConfigureAwait(false);
-                }
+                return await ConsumeAtomicallyAsync(user, index, db, clock, ct).ConfigureAwait(false);
             }
             return false;
         }
+
+        // Formato legacy: bundle cifrado reversible con DataProtection (o texto plano en tests passthrough)
+        byte[] unpackedBytes;
+        try
+        {
+            unpackedBytes = codec.Unprotect(user.TotpRecoveryCodesCipher);
+        }
         catch (CryptographicException)
         {
-            return false;
+            unpackedBytes = user.TotpRecoveryCodesCipher;
         }
+
+        var legacyCodes = RecoveryCodes.Unpack(unpackedBytes);
+        var legacyIndex = RecoveryCodes.FindMatchingLegacyCodeIndex(code, legacyCodes, user.TotpRecoveryCodesUsedMask);
+        if (legacyIndex >= 0)
+        {
+            // Migración perezosa: hashear los códigos legacy y persistirlos de forma atómica con el consumo
+            var migratedHashes = RecoveryCodes.Hash(legacyCodes);
+            return await ConsumeAtomicallyAsync(user, legacyIndex, db, clock, ct, migratedHashes).ConfigureAwait(false);
+        }
+        return false;
     }
 
     /// <summary>
     /// Marca el código de recuperación como usado con un <b>UPDATE condicional</b>, y devuelve si
-    /// esta petición fue la que lo consumió.
+    /// esta petición fue la que lo consumió. Opcionalmente migra el payload a hashes one-way
+    /// en la misma sentencia si <paramref name="newHashedPayload"/> no es null.
     ///
     /// <para>Un código de recuperación es de un solo uso: es el sustituto del segundo factor cuando
     /// el usuario pierde el dispositivo. La versión anterior leía la máscara, buscaba el bit libre,
@@ -97,20 +116,48 @@ internal static class TotpVerifier
     /// serialización, y el número de filas afectadas es la respuesta.</para>
     /// </summary>
     private static async Task<bool> ConsumeAtomicallyAsync(
-        User user, int index, IdentityDbContext db, IClock clock, CancellationToken ct)
+        User user, int index, IdentityDbContext db, IClock clock, CancellationToken ct, byte[]? newHashedPayload = null)
     {
         var bit = 1 << index;
         var now = clock.UtcNow;
         var userId = user.Id;
 
-        var affected = await db.Users
-            .Where(u => u.Id == userId && (u.TotpRecoveryCodesUsedMask & bit) == 0)
-            .ExecuteUpdateAsync(
-                setters => setters
-                    .SetProperty(u => u.TotpRecoveryCodesUsedMask, u => u.TotpRecoveryCodesUsedMask | bit)
-                    .SetProperty(u => u.UpdatedAt, now),
-                ct)
-            .ConfigureAwait(false);
+        int affected;
+        if (db.Database.IsRelational())
+        {
+            affected = newHashedPayload is not null
+                ? await db.Users
+                    .Where(u => u.Id == userId && (u.TotpRecoveryCodesUsedMask & bit) == 0)
+                    .ExecuteUpdateAsync(
+                        setters => setters
+                            .SetProperty(u => u.TotpRecoveryCodesUsedMask, u => u.TotpRecoveryCodesUsedMask | bit)
+                            .SetProperty(u => u.TotpRecoveryCodesCipher, newHashedPayload)
+                            .SetProperty(u => u.UpdatedAt, now),
+                        ct)
+                    .ConfigureAwait(false)
+                : await db.Users
+                    .Where(u => u.Id == userId && (u.TotpRecoveryCodesUsedMask & bit) == 0)
+                    .ExecuteUpdateAsync(
+                        setters => setters
+                            .SetProperty(u => u.TotpRecoveryCodesUsedMask, u => u.TotpRecoveryCodesUsedMask | bit)
+                            .SetProperty(u => u.UpdatedAt, now),
+                        ct)
+                    .ConfigureAwait(false);
+        }
+        else
+        {
+            if ((user.TotpRecoveryCodesUsedMask & bit) != 0)
+            {
+                return false;
+            }
+            user.ConsumeRecoveryCode(index, now);
+            if (newHashedPayload is not null)
+            {
+                db.Entry(user).Property(u => u.TotpRecoveryCodesCipher).CurrentValue = newHashedPayload;
+            }
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            affected = 1;
+        }
 
         if (affected == 0)
         {
@@ -130,6 +177,10 @@ internal static class TotpVerifier
         // pueda fallar debe decidir si el login se acepta.
         var entry = db.Entry(user);
         SyncTracked(entry.Property(u => u.TotpRecoveryCodesUsedMask), user.TotpRecoveryCodesUsedMask | bit);
+        if (newHashedPayload is not null)
+        {
+            SyncTracked(entry.Property(u => u.TotpRecoveryCodesCipher), newHashedPayload);
+        }
         SyncTracked(entry.Property(u => u.UpdatedAt), now);
         return true;
 

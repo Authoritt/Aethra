@@ -79,6 +79,11 @@ public static class MigrationsBootstrap
         // Idempotente — si ya existe el admin solo se confirman los roles builtin.
         var seeder = sp.GetRequiredService<Aethra.Modules.Identity.Infrastructure.IdentitySeeder>();
         await seeder.SeedAsync().ConfigureAwait(false);
+
+        // GH #91: migrar códigos de recuperación legacy (cifrado reversible) a hashes one-way (Argon2id).
+        var identityDb = sp.GetRequiredService<IdentityDbContext>();
+        var codec = sp.GetRequiredService<ITotpSecretCodec>();
+        await RecoveryCodesHashBackfill.BackfillAsync(identityDb, codec, logger).ConfigureAwait(false);
     }
 
     public const string MonitorUrlBackfillConfigKey = "Aethra:MonitorUrlBackfillOnStart";

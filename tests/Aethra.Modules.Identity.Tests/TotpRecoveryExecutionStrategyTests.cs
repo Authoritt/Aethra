@@ -48,6 +48,33 @@ public sealed class TotpRecoveryExecutionStrategyTests(PostgreSql18Fixture postg
     }
 
     [Fact]
+    public async Task Recovery_login_works_with_new_hashed_payload_format()
+    {
+        var options = new DbContextOptionsBuilder<IdentityDbContext>()
+            .UseNpgsql(postgres.ConnectionString, npgsql =>
+                npgsql.EnableRetryOnFailure(3, TimeSpan.FromSeconds(2), errorCodesToAdd: null))
+            .Options;
+        await using var db = new IdentityDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var user = User.Create($"{Guid.NewGuid():N}@example.com", [1], null, Now);
+        user.BeginTotpEnrollment("12345678901234567890"u8.ToArray(), Now);
+        user.CompleteTotpEnrollment(RecoveryCodes.Hash([RecoveryCode]), Now);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var clock = new FixedClock(Now);
+        var store = new TotpChallengeStore(new EfTotpChallengePersistence(db), clock);
+        const string challengeId = "hashed-recovery-login";
+        store.Create(challengeId, user.Id.ToString());
+        store.TrySelectActive(challengeId, user.Id.ToString()).Should().BeTrue();
+
+        var verifier = new TotpLoginVerifier(db, new PassthroughCodec(), clock, store);
+
+        (await verifier.VerifyAsync(user, RecoveryCode, CancellationToken.None)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Recovery_login_retries_when_consuming_the_code_fails_transiently()
     {
         var interceptor = new TransientRecoveryUpdateInterceptor();

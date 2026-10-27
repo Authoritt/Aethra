@@ -1,3 +1,4 @@
+using System.Text;
 using Aethra.Modules.Identity.Domain.Totp;
 using FluentAssertions;
 using Xunit;
@@ -6,8 +7,8 @@ namespace Aethra.Modules.Identity.Tests;
 
 /// <summary>
 /// <see cref="RecoveryCodes"/> respalda el 2FA: 10 códigos one-shot. Cubrimos generación/formato,
-/// el round-trip Pack/Unpack que preserva el orden (el bit index del bitmask depende de él) y —
-/// lo crítico para seguridad — el bitmask de uso: un código usado NO puede reutilizarse.
+/// el round-trip Pack/Unpack legacy, el hashing one-way (Argon2id), verificación segura y el
+/// bitmask de uso: un código usado NO puede reutilizarse.
 /// </summary>
 public sealed class RecoveryCodesTests
 {
@@ -126,5 +127,85 @@ public sealed class RecoveryCodesTests
 
         RecoveryCodes.RemainingCount(mask).Should().Be(0);
         RecoveryCodes.FormatRemainingFraction(mask).Should().Be("0/10");
+    }
+
+    // ---------- GH #91: One-way hashing tests ----------
+
+    [Fact]
+    public void Hash_produces_hashed_payload_with_header_and_cannot_be_unpacked_as_plain()
+    {
+        var codes = new[] { "ABCD2345", "EFGH6789" };
+        var hashed = RecoveryCodes.Hash(codes);
+
+        RecoveryCodes.IsHashed(hashed).Should().BeTrue();
+        var unpackedPlain = RecoveryCodes.Unpack(hashed);
+        // The first line is the header, not a code
+        unpackedPlain[0].Should().Be("AETHRA-RCH-V1");
+
+        // The hashes should be valid Argon2id hashes
+        var hashes = RecoveryCodes.UnpackHashes(hashed);
+        hashes.Should().HaveCount(2);
+        hashes.Should().OnlyContain(h => h.StartsWith("$argon2id$v=19$m=65536,t=4,p=2$", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Stored_hashes_do_not_contain_plaintext_codes()
+    {
+        var codes = new[] { "ABCD2345", "EFGH6789" };
+        var hashed = RecoveryCodes.Hash(codes);
+        var rawText = Encoding.UTF8.GetString(hashed);
+
+        foreach (var code in codes)
+        {
+            rawText.Should().NotContain(code);
+        }
+    }
+
+    [Fact]
+    public void IsHashed_rejects_legacy_packed_payload()
+    {
+        var legacy = RecoveryCodes.Pack(["ABCD2345", "EFGH6789"]);
+        RecoveryCodes.IsHashed(legacy).Should().BeFalse();
+        RecoveryCodes.IsHashed(null).Should().BeFalse();
+        RecoveryCodes.IsHashed([]).Should().BeFalse();
+    }
+
+    [Fact]
+    public void FindMatchingCodeIndex_finds_correct_index_and_respects_used_mask()
+    {
+        var codes = new[] { "ABCD2345", "EFGH6789", "JKLM2345" };
+        var hashed = RecoveryCodes.Hash(codes);
+        var hashes = RecoveryCodes.UnpackHashes(hashed);
+
+        // Matching code at index 1
+        RecoveryCodes.FindMatchingCodeIndex("EFGH6789", hashes, usedMask: 0).Should().Be(1);
+
+        // If index 1 is already used (bit 1 << 1 = 2)
+        RecoveryCodes.FindMatchingCodeIndex("EFGH6789", hashes, usedMask: 2).Should().Be(-1);
+
+        // Index 0 still works
+        RecoveryCodes.FindMatchingCodeIndex("ABCD2345", hashes, usedMask: 2).Should().Be(0);
+
+        // Wrong code returns -1
+        RecoveryCodes.FindMatchingCodeIndex("WXYZ2345", hashes, usedMask: 0).Should().Be(-1);
+    }
+
+    [Fact]
+    public void FindMatchingCodeIndex_normalizes_case_and_whitespace()
+    {
+        var codes = new[] { "ABCD2345" };
+        var hashes = RecoveryCodes.UnpackHashes(RecoveryCodes.Hash(codes));
+
+        RecoveryCodes.FindMatchingCodeIndex("  abcd2345  ", hashes, usedMask: 0).Should().Be(0);
+    }
+
+    [Fact]
+    public void FindMatchingLegacyCodeIndex_finds_correct_index_and_respects_mask()
+    {
+        var codes = new[] { "ABCD2345", "EFGH6789" };
+
+        RecoveryCodes.FindMatchingLegacyCodeIndex("efgh6789", codes, usedMask: 0).Should().Be(1);
+        RecoveryCodes.FindMatchingLegacyCodeIndex("efgh6789", codes, usedMask: 2).Should().Be(-1);
+        RecoveryCodes.FindMatchingLegacyCodeIndex("WXYZ2345", codes, usedMask: 0).Should().Be(-1);
     }
 }
