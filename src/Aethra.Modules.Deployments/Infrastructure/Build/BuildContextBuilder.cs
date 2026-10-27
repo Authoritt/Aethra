@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Text;
+using Aethra.Shared.Kernel.Security;
 using Microsoft.Extensions.Logging;
 
 namespace Aethra.Modules.Deployments.Infrastructure.Build;
@@ -82,7 +83,7 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
             // para que ningún llamante pueda reintroducirlo.
             var requestedRef = branch;
             branch = GitRefs.ToBranchShorthand(branch);
-            log.Add($"Clonando {gitRepoUrl} (ref pedido={requestedRef}, branch={branch})...");
+            log.Add($"Clonando {GitUrlRedactor.Redact(gitRepoUrl)} (ref pedido={requestedRef}, branch={branch})...");
             var cloneUrl = ApplyAccessToken(gitRepoUrl, accessToken);
             var hasBranch = !string.IsNullOrWhiteSpace(branch);
             string[] cloneArgs = hasBranch
@@ -100,7 +101,7 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
                 if (!hasBranch)
                 {
                     throw new InvalidOperationException(
-                        $"git clone falló: {Redact(Trim(clone.StdErr), accessToken)}");
+                        $"git clone falló: {GitUrlRedactor.Redact(Trim(clone.StdErr), accessToken)}");
                 }
                 Directory.Delete(workDir, recursive: true);
                 Directory.CreateDirectory(workDir);
@@ -109,7 +110,7 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
                 if (retry.ExitCode != 0)
                 {
                     throw new InvalidOperationException(
-                        $"git clone falló: {Redact(Trim(retry.StdErr.Length > 0 ? retry.StdErr : clone.StdErr), accessToken)}");
+                        $"git clone falló: {GitUrlRedactor.Redact(Trim(retry.StdErr.Length > 0 ? retry.StdErr : clone.StdErr), accessToken)}");
                 }
                 var fetchRef = await RunGitAsync(["fetch", "--depth", "1", "origin", branch], workDir, ct)
                     .ConfigureAwait(false);
@@ -119,8 +120,8 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
                 if (checkoutRef.ExitCode != 0)
                 {
                     throw new InvalidOperationException(
-                        $"ref_not_found: el ref '{requestedRef}' no existe en {gitRepoUrl} "
-                        + $"({Redact(Trim(fetchRef.StdErr.Length > 0 ? fetchRef.StdErr : checkoutRef.StdErr), accessToken)}). "
+                        $"ref_not_found: el ref '{requestedRef}' no existe en {GitUrlRedactor.Redact(gitRepoUrl)} "
+                        + $"({GitUrlRedactor.Redact(Trim(fetchRef.StdErr.Length > 0 ? fetchRef.StdErr : checkoutRef.StdErr), accessToken)}). "
                         + "La build se aborta: construir otro ref (p. ej. el branch por defecto) produciría un artefacto equivocado.");
                 }
                 log.Add($"Ref '{branch}' resuelto por fetch + checkout (no era branch/tag clonable directamente).");
@@ -153,7 +154,7 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
                         var detail = Trim(checkout.StdErr.Length > 0 ? checkout.StdErr : fetch.StdErr);
                         throw new InvalidOperationException(
                             $"No se pudo hacer checkout del commit {Short(gitSha!)} solicitado en el branch "
-                            + $"{branch}: {Redact(detail, accessToken)}. La build se aborta: empaquetar el HEAD "
+                            + $"{branch}: {GitUrlRedactor.Redact(detail, accessToken)}. La build se aborta: empaquetar el HEAD "
                             + "del branch produciría un artefacto con código distinto del commit pedido.");
                     }
                     log.Add($"Checkout commit {Short(gitSha!)} OK.");
@@ -305,21 +306,6 @@ public sealed class BuildContextBuilder(ILogger<BuildContextBuilder> logger) : I
             return repoUrl; // ya trae credenciales — no duplicar
         }
         return $"https://x-access-token:{Uri.EscapeDataString(accessToken)}@{rest}";
-    }
-
-    /// <summary>
-    /// Defensa en profundidad: elimina el token (crudo y url-encoded) de un texto antes de
-    /// loguearlo o propagarlo en una excepción, por si <c>git</c> lo eco en stderr.
-    /// </summary>
-    internal static string Redact(string text, string? accessToken)
-    {
-        if (string.IsNullOrEmpty(accessToken))
-        {
-            return text;
-        }
-        return text
-            .Replace(accessToken, "***", StringComparison.Ordinal)
-            .Replace(Uri.EscapeDataString(accessToken), "***", StringComparison.Ordinal);
     }
 
     private static string Short(string sha) => sha.Length >= 7 ? sha[..7] : sha;

@@ -4,6 +4,7 @@ using Aethra.Shared.Contracts.Deployments;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Contracts.Settings;
 using Aethra.Shared.Infrastructure.Outbox;
+using Aethra.Shared.Kernel.Security;
 using Aethra.Shared.Kernel.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -77,7 +78,7 @@ public sealed class BuildOrchestrator(
             // === Clone ===
             build.Transition(BuildStatus.Cloning, clock.UtcNow);
             build.AppendLog(BuildLogLevel.Info, "cloning",
-                $"Clonando {template.GitRepoUrl}@{build.GitRef} (sha solicitado={build.GitSha})",
+                $"Clonando {GitUrlRedactor.Redact(template.GitRepoUrl)}@{build.GitRef} (sha solicitado={build.GitSha})",
                 clock.UtcNow);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
 

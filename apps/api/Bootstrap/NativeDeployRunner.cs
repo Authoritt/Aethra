@@ -21,6 +21,7 @@ using Aethra.Shared.Contracts.Containers;
 using Aethra.Shared.Contracts.Projects;
 using Aethra.Shared.Contracts.Settings;
 using Aethra.Shared.Kernel.Results;
+using Aethra.Shared.Kernel.Security;
 using Aethra.Shared.Kernel.Time;
 using MediatR;
 using Microsoft.Extensions.Configuration;
@@ -199,7 +200,7 @@ public sealed class NativeDeployRunner(
             gitCtx = await buildContext.BuildAsync(template.GitRepoUrl, branch, null, template.BaseDirectory ?? string.Empty, cloneToken, ct)
                 .ConfigureAwait(false);
             shortSha = gitCtx.ResolvedSha.Length >= 7 ? gitCtx.ResolvedSha[..7] : gitCtx.ResolvedSha;
-            log.LogInformation("native-deploy {Inst}: contexto git {Repo} ref pedido={Requested} (rama={Branch}) → resuelto {Sha}", instance.Slug, template.GitRepoUrl, requestedRef, branch, shortSha);
+            log.LogInformation("native-deploy {Inst}: contexto git {Repo} ref pedido={Requested} (rama={Branch}) → resuelto {Sha}", instance.Slug, GitUrlRedactor.Redact(template.GitRepoUrl), requestedRef, branch, shortSha);
         }
 
         deployment.Transition(DeploymentStatus.Starting, clock.UtcNow);

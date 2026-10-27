@@ -5,6 +5,7 @@ using Aethra.Modules.Deployments.Webhooks;
 using Aethra.Shared.Contracts.Deployments;
 using Aethra.Shared.Contracts.Identity;
 using Aethra.Shared.Contracts.Projects;
+using Aethra.Shared.Kernel.Security;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -194,7 +195,7 @@ public static class WebhookEndpoints
         if (matchingTemplates.Count == 0)
         {
             logger.LogInformation("Webhook push para repo sin Templates registrados: {Repo} @ {Branch}",
-                payload.Repository.CloneUrl, payload.Branch);
+                GitUrlRedactor.Redact(payload.Repository.CloneUrl ?? string.Empty), payload.Branch);
             // OT-012 (H3): la misma respuesta que una firma invalida. Antes era 200
             // {matched_templates:0} vs 401, un oraculo anonimo de que repo+rama tiene Template.
             return Results.Unauthorized();
@@ -330,7 +331,8 @@ public static class WebhookEndpoints
         }
         if (matchingTemplates.Count == 0)
         {
-            logger.LogInformation("PR webhook para repo sin Templates: {Repo}", payload.Repository.CloneUrl);
+            logger.LogInformation("PR webhook para repo sin Templates: {Repo}",
+                GitUrlRedactor.Redact(payload.Repository.CloneUrl ?? string.Empty));
             // OT-012 (H3): misma respuesta que firma invalida (sin oraculo de Templates).
             return Results.Unauthorized();
         }
