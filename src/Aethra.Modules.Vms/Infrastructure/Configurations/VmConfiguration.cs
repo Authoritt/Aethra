@@ -54,6 +54,7 @@ internal sealed class VmConfiguration : IEntityTypeConfiguration<Vm>
 
         // F11.4 — campos de instalación remota del satélite.
         builder.Property(v => v.SshCredentialsCipher).HasColumnName("ssh_credentials_cipher");
+        builder.Property(v => v.SshHostKeyFingerprint).HasColumnName("ssh_host_key_fingerprint").HasMaxLength(128);
         builder.Property(v => v.InstallStatus)
             .HasColumnName("install_status")
             .HasConversion<string>()

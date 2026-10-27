@@ -47,6 +47,12 @@ public sealed class Vm : AggregateRoot<VmId>
     /// El plaintext es un JSON con <c>{ host, port, user, authMethod, value }</c>.
     /// </summary>
     public byte[]? SshCredentialsCipher { get; private set; }
+    /// <summary>
+    /// GH-33 — Huella SHA-256 de la clave pública del host SSH (formato <c>SHA256:&lt;base64&gt;</c>).
+    /// Nullable: las VMs ya aprovisionadas antes de esta mitigación conservan null hasta su próxima
+    /// verificación o rotación explícita. Sin huella confiable NO se envían credenciales ni comandos.
+    /// </summary>
+    public string? SshHostKeyFingerprint { get; private set; }
     /// <summary>Estado de instalación del satélite. Default <see cref="InstallStatus.NotInstalled"/>.</summary>
     public InstallStatus InstallStatus { get; private set; }
     /// <summary>Último heartbeat del satélite (handshake o métricas). Lo usa el provisioner para verificar éxito.</summary>
@@ -171,6 +177,34 @@ public sealed class Vm : AggregateRoot<VmId>
     {
         SshCredentialsCipher = cipher;
         UpdatedAt = now;
+    }
+
+    /// <summary>Establece o fija la huella confiable de host SSH.</summary>
+    public void SetSshHostKeyFingerprint(string? fingerprint, DateTimeOffset now)
+    {
+        var canonical = SshHostKeyHelper.Normalize(fingerprint);
+        if (string.Equals(SshHostKeyFingerprint, canonical, StringComparison.Ordinal))
+        {
+            return;
+        }
+        SshHostKeyFingerprint = canonical;
+        UpdatedAt = now;
+        if (canonical is not null)
+        {
+            AppendInstallLog($"[{now:HH:mm:ss}] host_key_pinned fingerprint={canonical}");
+        }
+    }
+
+    /// <summary>Rotación explícita de la huella de host SSH por el operador.</summary>
+    public void RotateSshHostKeyFingerprint(string newFingerprint, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newFingerprint);
+        var canonical = SshHostKeyHelper.Normalize(newFingerprint)
+            ?? throw new ArgumentException("Huella SSH inválida.", nameof(newFingerprint));
+        var old = SshHostKeyFingerprint ?? "(ninguna)";
+        SshHostKeyFingerprint = canonical;
+        UpdatedAt = now;
+        AppendInstallLog($"[{now:HH:mm:ss}] host_key_rotated old={old} new={canonical}");
     }
 
     /// <summary>Cambia el <see cref="InstallStatus"/> y deja constancia en el log.</summary>

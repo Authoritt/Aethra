@@ -17,6 +17,7 @@ namespace Aethra.Modules.Vms;
 /// - DbContext + outbox dispatcher.
 /// - <see cref="Authentication.SatelliteTokenAuthHandler"/> para autenticar conexiones SignalR del satélite.
 /// - F11.4: codec SSH (DataProtection) + provisioner SSH.NET + cola in-memory + BackgroundService dispatcher.
+/// - GH-33: factoría SSH + sondeo y verificación de huella de host.
 /// </summary>
 public static class VmsModule
 {
@@ -27,7 +28,9 @@ public static class VmsModule
         services.AddAethraModuleDbContext<VmsDbContext>(conn);
         services.AddScoped<Authentication.ISatelliteAuthenticator, Authentication.DbSatelliteAuthenticator>();
 
-        // F11.4 — Auto-install via SSH.
+        // F11.4 & GH-33 — Auto-install via SSH y verificación de clave de host.
+        services.AddSingleton<ISshClientFactory, DefaultSshClientFactory>();
+        services.AddScoped<ISshHostKeyProber, RenciSshHostKeyProber>();
         services.AddSingleton<ISshCredentialsCodec, DataProtectionSshCredentialsCodec>();
         services.AddSingleton<IInstallationJobQueue, InMemoryInstallationJobQueue>();
         services.AddScoped<ISshProvisioner, RenciSshProvisioner>();

@@ -26,4 +26,5 @@ public sealed record VmDto(
     bool? RuntimeSocketAccessible = null,
     string? DataVolumePath = null,
     long? DataVolumeTotalBytes = null,
-    long? DataVolumeAvailableBytes = null);
+    long? DataVolumeAvailableBytes = null,
+    string? SshHostKeyFingerprint = null);

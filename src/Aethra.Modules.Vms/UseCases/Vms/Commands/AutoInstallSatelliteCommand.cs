@@ -17,17 +17,20 @@ namespace Aethra.Modules.Vms.UseCases.Vms.Commands;
 /// Input SSH para auto-install. Vive aquí en lugar de en Domain para que el frontend pueda
 /// mappearlo 1:1 sin tocar el dominio. <see cref="AuthMethod"/> = "key" | "password";
 /// <see cref="Value"/> es el contenido PEM o la contraseña.
+/// <see cref="ExpectedHostKeyFingerprint"/> es la huella SHA256 esperada de la clave de host SSH.
 /// </summary>
 public sealed record SshCredentialsInput(
     string Host,
     int Port,
     string User,
     string AuthMethod,
-    string Value);
+    string Value,
+    string? ExpectedHostKeyFingerprint = null);
 
 /// <summary>
 /// Auto-instala el satélite en la VM identificada por <see cref="VmId"/>:
 /// <list type="bullet">
+/// <item>Verifica que la huella SHA256 esperada del host coincida con la registrada o sea provista explícitamente.</item>
 /// <item>Si <see cref="Credentials"/> no es null, cifra y persiste para futuros reinstalls.</item>
 /// <item>Marca <c>InstallStatus = Installing</c> y encola el job en <see cref="IInstallationJobQueue"/>.</item>
 /// <item>Si <see cref="DryRun"/> es true, no encola — solo devuelve el plan.</item>
@@ -38,7 +41,9 @@ public sealed record AutoInstallSatelliteCommand(
     SshCredentialsInput? Credentials,
     bool InstallContainerRuntime,
     string ContainerRuntime,
-    bool DryRun = false) : ICommand<AutoInstallSatelliteResult>;
+    bool DryRun = false,
+    string? ExpectedHostKeyFingerprint = null,
+    bool RotateHostKey = false) : ICommand<AutoInstallSatelliteResult>;
 
 public sealed record AutoInstallSatelliteResult(
     string VmId,
@@ -56,6 +61,15 @@ public sealed class AutoInstallSatelliteValidator : AbstractValidator<AutoInstal
         RuleFor(c => c.ContainerRuntime)
             .Must(r => r is "docker" or "podman")
             .WithMessage("ContainerRuntime debe ser 'docker' o 'podman'.");
+        RuleFor(c => c.ExpectedHostKeyFingerprint)
+            .Must(fp => fp is null || SshHostKeyHelper.IsValidFingerprint(fp))
+            .WithMessage("ExpectedHostKeyFingerprint no tiene un formato válido de huella SHA256 (SHA256:<base64>).");
+        When(c => c.Credentials is not null, () =>
+        {
+            RuleFor(c => c.Credentials!.ExpectedHostKeyFingerprint)
+                .Must(fp => fp is null || SshHostKeyHelper.IsValidFingerprint(fp))
+                .WithMessage("Credentials.ExpectedHostKeyFingerprint no tiene un formato válido de huella SHA256.");
+        });
         When(c => c.Credentials is not null && !c.DryRun, () =>
         {
             RuleFor(c => c.Credentials!.Host).NotEmpty();
@@ -90,6 +104,36 @@ internal sealed class AutoInstallSatelliteHandler(
         if (vm is null)
         {
             return Error.NotFound("vm.not_found", $"No existe la VM '{request.VmId}'.");
+        }
+
+        // GH-33: Determinar huella esperada confiable
+        var expectedFp = request.ExpectedHostKeyFingerprint ?? request.Credentials?.ExpectedHostKeyFingerprint;
+        string effectiveFingerprint;
+
+        if (vm.SshHostKeyFingerprint is not null)
+        {
+            if (expectedFp is not null && !SshHostKeyHelper.FingerprintsMatch(vm.SshHostKeyFingerprint, expectedFp))
+            {
+                if (!request.RotateHostKey)
+                {
+                    return Error.Conflict("ssh.host_key_mismatch",
+                        $"La huella SSH esperada '{SshHostKeyHelper.CanonicalDisplay(expectedFp)}' no coincide con la huella ya registrada '{vm.SshHostKeyFingerprint}'. Si desea rotar la huella, indique rotateHostKey=true.");
+                }
+                effectiveFingerprint = expectedFp;
+            }
+            else
+            {
+                effectiveFingerprint = expectedFp ?? vm.SshHostKeyFingerprint;
+            }
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(expectedFp))
+            {
+                return Error.Validation("ssh.host_key_required",
+                    "Se requiere la huella SHA256 esperada del host SSH (expectedHostKeyFingerprint) para aprovisionar. Pruebe el host primero con /ssh/probe o use aethra_probe_vm_host_key.");
+            }
+            effectiveFingerprint = expectedFp;
         }
 
         // Resolver credenciales: del request, o las persistidas previamente.
@@ -127,7 +171,8 @@ internal sealed class AutoInstallSatelliteHandler(
             CentralUrl: centralUrl,
             TokenPlaintext: token,
             ContainerRuntime: request.ContainerRuntime,
-            InstallContainerRuntime: request.InstallContainerRuntime);
+            InstallContainerRuntime: request.InstallContainerRuntime,
+            ExpectedHostKeyFingerprint: effectiveFingerprint);
 
         if (request.DryRun)
         {
@@ -195,7 +240,7 @@ internal static class ScriptBuilder
     public static string BuildPlan(SshCredentials creds, InstallOptions opts)
     {
         return string.Join('\n',
-            $"1. Conectar SSH a {creds.User}@{creds.Host}:{creds.Port} (auth={creds.AuthMethod})",
+            $"1. Conectar SSH a {creds.User}@{creds.Host}:{creds.Port} (auth={creds.AuthMethod}, host_key={SshHostKeyHelper.CanonicalDisplay(opts.ExpectedHostKeyFingerprint)})",
             "2. Detectar arquitectura (uname -m)",
             $"3. Detectar / instalar {opts.ContainerRuntime}" + (opts.InstallContainerRuntime ? " (con install)" : " (sin install)"),
             $"4. Descargar binario desde {opts.CentralUrl}/api/satellite/binary",
