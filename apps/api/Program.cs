@@ -237,16 +237,16 @@ builder.Services.AddReverseProxy();
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy => policy
-        .WithOrigins("http://localhost:3000", "http://localhost:5173")
-        .AllowAnyHeader()
-        .AllowAnyMethod()
-        .AllowCredentials());
-});
+// F87: Política CORS con orígenes configurables y validados al arrancar.
+builder.Services.AddAethraCors(builder.Configuration);
 
 var app = builder.Build();
+
+// Valida orígenes CORS y fuerza la resolución de opciones al arrancar.
+_ = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>>().Value;
+var effectiveCorsOrigins = CorsBootstrap.ResolveAndValidateAllowedOrigins(app.Configuration);
+app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Aethra.Cors")
+    .LogInformation("ARRANQUE: orígenes CORS permitidos: {Origins}", string.Join(", ", effectiveCorsOrigins));
 
 // -----------------------------------------------------------------------------
 // Migraciones EF — deben correr antes de que cualquier provider singleton (YARP)
