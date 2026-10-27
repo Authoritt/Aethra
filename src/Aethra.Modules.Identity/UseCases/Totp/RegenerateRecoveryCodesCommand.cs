@@ -13,6 +13,7 @@ namespace Aethra.Modules.Identity.UseCases.Totp;
 /// <summary>
 /// F12.1B — regenera los 10 recovery codes. Requiere code TOTP valido. Los codigos previos
 /// quedan inutilizables (bitmask se resetea pero el set entero cambia tambien).
+/// GH #91: Se persisten como hashes one-way (Argon2id).
 /// </summary>
 public sealed record RegenerateRecoveryCodesCommand(string UserId, string Code)
     : ICommand<RegenerateRecoveryCodesResultDto>;
@@ -50,9 +51,8 @@ internal sealed class RegenerateRecoveryCodesHandler(
         }
 
         var codes = RecoveryCodes.Generate();
-        var packed = RecoveryCodes.Pack(codes);
-        var cipher = codec.Protect(packed);
-        user.RotateRecoveryCodes(cipher, clock.UtcNow);
+        var hashedPayload = RecoveryCodes.Hash(codes);
+        user.RotateRecoveryCodes(hashedPayload, clock.UtcNow);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
         return new RegenerateRecoveryCodesResultDto(codes);

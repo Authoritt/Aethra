@@ -14,6 +14,7 @@ namespace Aethra.Modules.Identity.UseCases.Totp;
 /// F12.1B — segundo paso del enrollment: el user envia un codigo TOTP generado por su app
 /// para confirmar que escaneo bien el QR. Si valida, activa 2FA y genera/devuelve los 10
 /// recovery codes (UNICA vez que se muestran en plaintext).
+/// GH #91: Se persisten como hashes one-way (Argon2id).
 /// </summary>
 public sealed record VerifyTotpEnrollmentCommand(string UserId, string Code) : ICommand<TotpEnableResultDto>;
 
@@ -53,12 +54,11 @@ internal sealed class VerifyTotpEnrollmentHandler(
             return Error.Validation("totp.invalid_code", "Codigo TOTP invalido.");
         }
 
-        // Generamos 10 recovery codes en plaintext, los packeamos, ciframos y persistimos.
+        // Generamos 10 recovery codes en plaintext, los hasheamos con Argon2id y persistimos los hashes one-way.
         var codes = RecoveryCodes.Generate();
-        var packed = RecoveryCodes.Pack(codes);
-        var packedCipher = codec.Protect(packed);
+        var hashedPayload = RecoveryCodes.Hash(codes);
 
-        user.CompleteTotpEnrollment(packedCipher, clock.UtcNow);
+        user.CompleteTotpEnrollment(hashedPayload, clock.UtcNow);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
         return new TotpEnableResultDto(true, codes);

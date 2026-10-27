@@ -44,8 +44,10 @@ internal sealed class TotpLoginVerifier(
         var entry = db.Entry(user);
         var usedMask = entry.Property(u => u.TotpRecoveryCodesUsedMask);
         var updatedAt = entry.Property(u => u.UpdatedAt);
+        var recoveryCipher = entry.Property(u => u.TotpRecoveryCodesCipher);
         var initialUsedMask = (usedMask.CurrentValue, usedMask.OriginalValue, usedMask.IsModified);
         var initialUpdatedAt = (updatedAt.CurrentValue, updatedAt.OriginalValue, updatedAt.IsModified);
+        var initialRecoveryCipher = (recoveryCipher.CurrentValue, recoveryCipher.OriginalValue, recoveryCipher.IsModified);
         var initialChallengeId = challenges.CurrentChallengeId;
         var initialFailedAttempts = initialChallengeId is null
             ? null
@@ -65,6 +67,7 @@ internal sealed class TotpLoginVerifier(
                 outcome = false;
                 RestoreTracked(usedMask, initialUsedMask);
                 RestoreTracked(updatedAt, initialUpdatedAt);
+                RestoreTracked(recoveryCipher, initialRecoveryCipher);
                 challenges.RestoreCurrent(initialChallengeId);
 
                 await using var transaction = await db.Database.BeginTransactionAsync(operationCt)
