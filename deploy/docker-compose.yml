@@ -65,6 +65,7 @@ services:
       ConnectionStrings__Aethra: "Host=postgres;Port=5432;Database=aethra;Username=aethra;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}"
       Identity__AdminEmail: ${AETHRA_ADMIN_EMAIL:-admin@aethra.local}
       Identity__AdminPasswordSeed: ${AETHRA_ADMIN_PASSWORD:?set AETHRA_ADMIN_PASSWORD in deploy/.env}
+      Identity__AllowBootstrapLogin: ${AETHRA_ALLOW_BOOTSTRAP_LOGIN:-false}
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       # Required. TlsOptions is validated with ValidateOnStart, so an empty
       # AccountEmail aborts the process before it serves anything — and the value

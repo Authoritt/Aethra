@@ -11,6 +11,14 @@ public sealed class IdentityOptions
     public string AdminEmail { get; set; } = "admin@aethra.local";
 
     /// <summary>
+    /// Habilita de forma explicita la credencial de bootstrap cuando aun no existe ningun
+    /// usuario persistido. El default es <see langword="false"/> para que una instalacion con
+    /// migraciones externas no exponga un admin permanente por tener la tabla vacia.
+    /// En cuanto existe un usuario, la ruta bootstrap queda cerrada aunque esta bandera siga activa.
+    /// </summary>
+    public bool AllowBootstrapLogin { get; set; }
+
+    /// <summary>
     /// Si esta presente, se trata como password en texto plano que se hashea en memoria
     /// al arranque. Recomendado: settear via variable de entorno
     /// <c>Identity__AdminPasswordSeed</c> en primer arranque y removerla despues.
