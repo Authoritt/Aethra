@@ -39,7 +39,16 @@ En esta topología, un reverse proxy o túnel (como Cloudflare Tunnel, Nginx, Ca
 ```dotenv
 AETHRA_PUBLIC_API_URL=https://aethra.example.com
 AETHRA_PUBLIC_WEB_URL=https://aethra.example.com
-Panel__Hosts__0=aethra.example.com
+```
+
+El host del panel NO se lee de `deploy/.env`: el compose no lo pasa al contenedor. Añádelo en
+`services.api.environment` de `deploy/docker-compose.yml` (o en un `docker-compose.override.yml`);
+sin él, los endpoints del panel responden en cualquier hostname que llegue a la API:
+```yaml
+services:
+  api:
+    environment:
+      Panel__Hosts__0: aethra.example.com
 ```
 
 ### Ventajas
