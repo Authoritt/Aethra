@@ -13,6 +13,7 @@ de InstallLog y la idempotencia de SetAcceptsPreviews.</Description>
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" VersionOverride="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>
