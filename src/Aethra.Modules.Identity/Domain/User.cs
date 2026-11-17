@@ -260,8 +260,10 @@ public sealed class User : AggregateRoot<UserId>
         {
             return;
         }
+        // #82: los cambios de roles NO rotan el security stamp. CookieSessionValidator reconstruye
+        // roles y scopes desde la BD en cada validacion: quitar un rol quita su permiso (403) sin
+        // cerrar la sesion entera, y un ReplaceRoles sin cambios no echa a nadie.
         _roles.Add(new UserRole(Id, roleId, now));
-        RotateSecurityStamp();
         UpdatedAt = now;
     }
 
@@ -273,7 +275,6 @@ public sealed class User : AggregateRoot<UserId>
             return;
         }
         _roles.Remove(existing);
-        RotateSecurityStamp();
         UpdatedAt = now;
     }
 
@@ -289,7 +290,6 @@ public sealed class User : AggregateRoot<UserId>
                 _roles.Add(new UserRole(Id, rid, now));
             }
         }
-        RotateSecurityStamp();
         UpdatedAt = now;
     }
 

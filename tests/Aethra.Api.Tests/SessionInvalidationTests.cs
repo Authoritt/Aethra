@@ -8,10 +8,13 @@ using Aethra.Modules.Identity.Domain;
 using Aethra.Modules.Identity.Infrastructure;
 using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.Infrastructure.Persistence;
+using Aethra.Modules.Identity.UseCases.Totp;
 using Aethra.Shared.Contracts.Authentication;
 using Aethra.Shared.Kernel.Ids;
+using Aethra.Shared.Kernel.Results;
 using Aethra.Shared.Kernel.Time;
 using FluentAssertions;
+using MediatR;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Hosting;
@@ -224,6 +227,94 @@ public sealed class SessionInvalidationTests
     }
 
     [Fact]
+    public async Task Removing_a_role_from_user_drops_its_scope_with_403_but_keeps_the_session()
+    {
+        var userRepo = new TestUserRepository();
+        var roleRepo = new TestRoleRepository();
+        using var factory = new SessionAuthTestFactory(userRepo, roleRepo);
+        using var client = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = false });
+
+        var adminRole = Role.CreateSystem(Role.AdminSlug, "Admin", [ApiKey.AdminScope], Now);
+        var readerRole = Role.CreateCustom("reader", "Reader", ["notes:read"], Now);
+        roleRepo.Add(adminRole);
+        roleRepo.Add(readerRole);
+
+        var codec = factory.Services.GetRequiredService<IUserPasswordCodec>();
+        var user = User.Create("two-roles@example.com", codec.HashAndProtect(Password), "Two roles", Now);
+        user.AssignRole(adminRole.Id, Now);
+        user.AssignRole(readerRole.Id, Now);
+        userRepo.Add(user);
+
+        var cookie = await LoginAndGetCookieAsync(client, "two-roles@example.com", Password);
+        (await SendAuthenticatedGetAsync(client, "/openapi/v1.json", cookie)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Quitar el rol admin al USUARIO (no cambiar el rol): pierde '*' pero conserva la sesion.
+        user.UnassignRole(adminRole.Id, Now.AddMinutes(5));
+
+        var resForbidden = await SendAuthenticatedGetAsync(client, "/openapi/v1.json", cookie);
+        resForbidden.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "quitar un rol quita su permiso, no cierra la sesion (los cambios de roles no rotan el stamp)");
+        resForbidden.Headers.Should().ContainKey("Set-Cookie", "debe renovar la cookie con los roles vigentes");
+        var renewedCookie = resForbidden.Headers.GetValues("Set-Cookie").First().Split(';')[0];
+
+        (await SendAuthenticatedGetAsync(client, "/dashboard", renewedCookie)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Enabling_totp_reissues_own_cookie_and_invalidates_other_sessions()
+    {
+        var userRepo = new TestUserRepository();
+        var roleRepo = new TestRoleRepository();
+        using var factory = new SessionAuthTestFactory(userRepo, roleRepo, configureServices: services =>
+        {
+            services.RemoveAll<IRequestHandler<VerifyTotpEnrollmentCommand, Result<TotpEnableResultDto>>>();
+            services.AddTransient<IRequestHandler<VerifyTotpEnrollmentCommand, Result<TotpEnableResultDto>>, FakeVerifyTotpHandler>();
+        });
+        using var client = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = false });
+
+        var (user, _) = CreateUserWithAdminRole(factory, userRepo, roleRepo, "totp-on@example.com");
+        user.BeginTotpEnrollment([9, 9, 9], Now);
+
+        var ownCookie = await LoginAndGetCookieAsync(client, "totp-on@example.com", Password);
+        var otherCookie = await LoginAndGetCookieAsync(client, "totp-on@example.com", Password);
+
+        var res = await SendAuthenticatedPostAsync(client, "/api/identity/me/totp/verify", ownCookie, new { code = "123456" });
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        user.TotpEnabled.Should().BeTrue();
+        res.Headers.Should().ContainKey("Set-Cookie", "activar 2FA rota el stamp: la sesion propia se re-emite");
+        var reissued = res.Headers.GetValues("Set-Cookie").First().Split(';')[0];
+
+        (await SendAuthenticatedGetAsync(client, "/openapi/v1.json", reissued)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await SendAuthenticatedGetAsync(client, "/openapi/v1.json", otherCookie)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Disabling_totp_reissues_own_cookie_and_invalidates_other_sessions()
+    {
+        var userRepo = new TestUserRepository();
+        var roleRepo = new TestRoleRepository();
+        using var factory = new SessionAuthTestFactory(userRepo, roleRepo, configureServices: services =>
+        {
+            services.RemoveAll<IRequestHandler<DisableTotpCommand, Result>>();
+            services.AddTransient<IRequestHandler<DisableTotpCommand, Result>, FakeDisableTotpHandler>();
+        });
+        using var client = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = false });
+
+        var (_, _) = CreateUserWithAdminRole(factory, userRepo, roleRepo, "totp-off@example.com");
+
+        var ownCookie = await LoginAndGetCookieAsync(client, "totp-off@example.com", Password);
+        var otherCookie = await LoginAndGetCookieAsync(client, "totp-off@example.com", Password);
+
+        var res = await SendAuthenticatedPostAsync(client, "/api/identity/me/totp/disable", ownCookie, new { code = "123456" });
+        res.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        res.Headers.Should().ContainKey("Set-Cookie", "desactivar 2FA rota el stamp: la sesion propia se re-emite");
+        var reissued = res.Headers.GetValues("Set-Cookie").First().Split(';')[0];
+
+        (await SendAuthenticatedGetAsync(client, "/openapi/v1.json", reissued)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await SendAuthenticatedGetAsync(client, "/openapi/v1.json", otherCookie)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task SessionValidationIntervalSeconds_skips_db_lookup_within_window()
     {
         var userRepo = new TestUserRepository();
@@ -311,6 +402,22 @@ public sealed class SessionInvalidationTests
         return await client.SendAsync(req);
     }
 
+    private static async Task<HttpResponseMessage> SendAuthenticatedPostAsync(
+        HttpClient client,
+        string uri,
+        string cookieValue,
+        object body)
+    {
+        using var content = new StringContent(
+            JsonSerializer.Serialize(body),
+            Encoding.UTF8,
+            "application/json");
+        using var req = new HttpRequestMessage(HttpMethod.Post, uri) { Content = content };
+        req.Headers.Host = AethraApiFactory.PanelHost;
+        req.Headers.Add("Cookie", cookieValue);
+        return await client.SendAsync(req);
+    }
+
     private static async Task<HttpResponseMessage> SendAuthenticatedPatchAsync(
         HttpClient client,
         string uri,
@@ -333,17 +440,20 @@ public sealed class SessionInvalidationTests
         private readonly TestRoleRepository _roleRepo;
         private readonly IClock? _clock;
         private readonly Dictionary<string, string?> _configuration;
+        private readonly Action<IServiceCollection>? _configureServices;
 
         public SessionAuthTestFactory(
             TestUserRepository userRepo,
             TestRoleRepository roleRepo,
             IClock? clock = null,
-            Dictionary<string, string?>? configuration = null)
+            Dictionary<string, string?>? configuration = null,
+            Action<IServiceCollection>? configureServices = null)
         {
             _userRepo = userRepo;
             _roleRepo = roleRepo;
             _clock = clock;
             _configuration = configuration ?? [];
+            _configureServices = configureServices;
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -375,7 +485,35 @@ public sealed class SessionInvalidationTests
                     services.RemoveAll<IClock>();
                     services.AddSingleton<IClock>(_clock);
                 }
+
+                _configureServices?.Invoke(services);
             });
+        }
+    }
+
+    // Sustitutos de los handlers TOTP (los reales usan IdentityDbContext, que esta fabrica no tiene):
+    // aplican el MISMO metodo de dominio, que es el que rota el stamp.
+    private sealed class FakeVerifyTotpHandler(IUserRepository users)
+        : IRequestHandler<VerifyTotpEnrollmentCommand, Result<TotpEnableResultDto>>
+    {
+        public async Task<Result<TotpEnableResultDto>> Handle(VerifyTotpEnrollmentCommand request, CancellationToken ct)
+        {
+            AethraId.TryParse(request.UserId, out var id).Should().BeTrue();
+            var user = await users.GetByIdAsync(new UserId(id!.Value), ct);
+            user!.CompleteTotpEnrollment([1, 2, 3], DateTimeOffset.UtcNow);
+            return Result.Success(new TotpEnableResultDto(true, ["recovery-1"]));
+        }
+    }
+
+    private sealed class FakeDisableTotpHandler(IUserRepository users)
+        : IRequestHandler<DisableTotpCommand, Result>
+    {
+        public async Task<Result> Handle(DisableTotpCommand request, CancellationToken ct)
+        {
+            AethraId.TryParse(request.UserId, out var id).Should().BeTrue();
+            var user = await users.GetByIdAsync(new UserId(id!.Value), ct);
+            user!.DisableTotp(DateTimeOffset.UtcNow);
+            return Result.Success();
         }
     }
 

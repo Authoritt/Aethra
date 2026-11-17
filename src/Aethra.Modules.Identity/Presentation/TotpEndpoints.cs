@@ -1,5 +1,8 @@
 using System.Security.Claims;
+using Aethra.Modules.Identity.Domain;
+using Aethra.Modules.Identity.Infrastructure.Authentication;
 using Aethra.Modules.Identity.UseCases.Totp;
+using Aethra.Shared.Kernel.Ids;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Results;
 using MediatR;
@@ -54,9 +57,14 @@ public static class TotpEndpoints
                 return Results.Json(new { error = "not_authenticated" }, statusCode: 401);
             }
             var r = await m.Send(new VerifyTotpEnrollmentCommand(uid, body.Code), ct);
-            return r.IsSuccess
-                ? Results.Ok(new { enabled = r.Value.Enabled, recovery_codes = r.Value.RecoveryCodes })
-                : MapError(r.Error);
+            if (!r.IsSuccess)
+            {
+                return MapError(r.Error);
+            }
+            // #82: activar 2FA rota el security stamp (cierra las demas sesiones); la de este
+            // usuario se re-emite para no echarlo mientras ve sus recovery codes.
+            await ReissueOwnCookieAsync(http, uid, ct);
+            return Results.Ok(new { enabled = r.Value.Enabled, recovery_codes = r.Value.RecoveryCodes });
         })
         .WithName("VerifyTotpEnrollment");
 
@@ -70,7 +78,13 @@ public static class TotpEndpoints
                 return Results.Json(new { error = "not_authenticated" }, statusCode: 401);
             }
             var r = await m.Send(new DisableTotpCommand(uid, body.Code), ct);
-            return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
+            if (!r.IsSuccess)
+            {
+                return MapError(r.Error);
+            }
+            // #82: desactivar 2FA tambien rota el stamp; mismo criterio que /verify.
+            await ReissueOwnCookieAsync(http, uid, ct);
+            return Results.NoContent();
         })
         .WithName("DisableTotp");
 
@@ -91,6 +105,14 @@ public static class TotpEndpoints
         .WithName("RegenerateRecoveryCodes");
 
         return app;
+    }
+
+    private static async Task ReissueOwnCookieAsync(HttpContext http, string uid, CancellationToken ct)
+    {
+        if (AethraId.TryParse(uid, out var parsed) && parsed.Value.Prefix == "usr")
+        {
+            await SessionCookieReissuer.ReissueAsync(http, new UserId(parsed.Value), ct);
+        }
     }
 
     public sealed record VerifyTotpRequest(string Code);

@@ -49,38 +49,20 @@ public sealed class UserSecurityStampDomainTests
     }
 
     [Fact]
-    public void AssignRole_and_UnassignRole_rotate_security_stamp()
+    public void Role_changes_do_not_rotate_security_stamp()
     {
+        // Los cambios de roles los aplica CookieSessionValidator reconstruyendo roles y scopes desde
+        // la BD: no hace falta (ni conviene) cerrar la sesion entera.
         var user = User.Create("alice@example.com", [1, 2, 3], "Alice", Now);
         var initialStamp = user.SecurityStamp;
         var roleId = RoleId.New();
 
         user.AssignRole(roleId, Now.AddMinutes(1));
-        var assignedStamp = user.SecurityStamp;
-        assignedStamp.Should().NotBe(initialStamp);
+        user.UnassignRole(roleId, Now.AddMinutes(2));
+        user.ReplaceRoles([RoleId.New()], Now.AddMinutes(3));
+        user.ReplaceRoles(user.Roles.Select(r => r.RoleId).ToArray(), Now.AddMinutes(4));
 
-        // Si ya tiene el rol, asignar de nuevo no rota
-        user.AssignRole(roleId, Now.AddMinutes(2));
-        user.SecurityStamp.Should().Be(assignedStamp);
-
-        user.UnassignRole(roleId, Now.AddMinutes(3));
-        user.SecurityStamp.Should().NotBe(assignedStamp);
-
-        // Si no tiene el rol, desasignar de nuevo no rota
-        var unassignedStamp = user.SecurityStamp;
-        user.UnassignRole(roleId, Now.AddMinutes(4));
-        user.SecurityStamp.Should().Be(unassignedStamp);
-    }
-
-    [Fact]
-    public void ReplaceRoles_rotates_security_stamp()
-    {
-        var user = User.Create("alice@example.com", [1, 2, 3], "Alice", Now);
-        var initialStamp = user.SecurityStamp;
-
-        user.ReplaceRoles([RoleId.New()], Now.AddMinutes(1));
-
-        user.SecurityStamp.Should().NotBe(initialStamp);
+        user.SecurityStamp.Should().Be(initialStamp);
     }
 
     [Fact]

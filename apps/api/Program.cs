@@ -192,11 +192,10 @@ builder.Services
                 return;
             }
 
-            var sessionValidator = ctx.HttpContext.RequestServices.GetService<CookieSessionValidator>();
-            if (sessionValidator is not null)
-            {
-                await sessionValidator.ValidateAsync(ctx);
-            }
+            // #82: GetRequiredService a proposito — si faltara el registro, fallar cerrado en vez de
+            // aceptar cookies sin revalidar.
+            var sessionValidator = ctx.HttpContext.RequestServices.GetRequiredService<CookieSessionValidator>();
+            await sessionValidator.ValidateAsync(ctx);
         };
     })
     .AddScheme<SatelliteTokenAuthOptions, SatelliteTokenAuthHandler>(

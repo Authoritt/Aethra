@@ -280,8 +280,6 @@ public static class AuthEndpoints
         group.MapPost("/me/revoke-sessions", async (
             HttpContext http,
             MediatR.IMediator mediator,
-            IUserRepository userRepo,
-            IRoleRepository roleRepo,
             CancellationToken ct) =>
         {
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -299,18 +297,10 @@ public static class AuthEndpoints
                 return Results.UnprocessableEntity(new { r.Error.Code, r.Error.Message });
             }
 
-            var user = await userRepo.GetByIdAsync(new UserId(parsedUid.Value), ct);
-            if (user is null || !user.IsActive)
+            if (!await SessionCookieReissuer.ReissueAsync(http, new UserId(parsedUid.Value), ct))
             {
                 return Results.Json(new { error = "user_not_found" }, statusCode: StatusCodes.Status401Unauthorized);
             }
-            var roles = await roleRepo.ListByIdsAsync(user.Roles.Select(ur => ur.RoleId), ct);
-            var identity = CookieSessionValidator.BuildIdentityForUser(user, roles);
-
-            await http.SignInAsync(AuthSchemes.Cookie, new ClaimsPrincipal(identity), new AuthenticationProperties
-            {
-                IsPersistent = true,
-            });
 
             return Results.Ok(new { user_id = userId, sessions_revoked = true });
         })

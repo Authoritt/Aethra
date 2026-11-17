@@ -1,3 +1,5 @@
+using Aethra.Shared.Contracts.Authentication;
+
 namespace Aethra.Api.Bootstrap;
 
 /// <summary>
@@ -8,6 +10,8 @@ public static class AuthSchemes
 {
     public const string Cookie = "aethra.cookie";
     public const string ApiKey = "aethra.apikey";
-    public const string BootstrapClaim = "aethra:bootstrap";
-    public const string SecurityStampClaim = "aethra:security_stamp";
+    // Alias de las constantes de Shared.Contracts: CookieSessionValidator (modulo Identity) usa
+    // esas; si divergieran, la rama bootstrap y la del stamp leerian claims distintos.
+    public const string BootstrapClaim = ApiKeyAuthSchemes.BootstrapClaim;
+    public const string SecurityStampClaim = ApiKeyAuthSchemes.SecurityStampClaim;
 }
