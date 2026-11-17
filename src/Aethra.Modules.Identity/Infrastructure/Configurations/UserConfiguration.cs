@@ -31,6 +31,11 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("display_name")
             .HasMaxLength(100);
 
+        builder.Property(u => u.SecurityStamp)
+            .HasColumnName("security_stamp")
+            .HasMaxLength(64)
+            .IsRequired();
+
         // F12.3 — handle de GitHub para mapeo PR.user.login → User. Unique para evitar suplantación.
         builder.Property(u => u.GitHubUsername)
             .HasColumnName("github_username")

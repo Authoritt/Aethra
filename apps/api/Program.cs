@@ -189,6 +189,13 @@ builder.Services
                     ctx.RejectPrincipal();
                     await ctx.HttpContext.SignOutAsync(AuthSchemes.Cookie);
                 }
+                return;
+            }
+
+            var sessionValidator = ctx.HttpContext.RequestServices.GetService<CookieSessionValidator>();
+            if (sessionValidator is not null)
+            {
+                await sessionValidator.ValidateAsync(ctx);
             }
         };
     })

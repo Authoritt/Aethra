@@ -41,6 +41,7 @@ public static class IdentityModule
         services.AddSingleton<IUserPasswordCodec, DataProtectionUserPasswordCodec>();
         services.AddScoped<IUserRepository, EfUserRepository>();
         services.AddScoped<IRoleRepository, EfRoleRepository>();
+        services.AddScoped<CookieSessionValidator>();
         services.AddScoped<EfUserStore>();
         services.AddScoped<IdentitySeeder>();
         services.AddScoped<IdAuth.IAuthenticationAttemptLimiter, IdAuth.AuthenticationAttemptLimiter>();

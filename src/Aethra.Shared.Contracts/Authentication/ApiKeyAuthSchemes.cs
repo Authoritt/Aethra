@@ -21,6 +21,12 @@ public static class ApiKeyAuthSchemes
     /// <summary>Claim type donde se guarda el id de la API key (también usado como Subject).</summary>
     public const string ApiKeyIdClaim = "aethra:api_key_id";
 
+    /// <summary>Claim type para la sesión bootstrap inicial (#21).</summary>
+    public const string BootstrapClaim = "aethra:bootstrap";
+
+    /// <summary>Claim type para el security stamp del usuario (#82).</summary>
+    public const string SecurityStampClaim = "aethra:security_stamp";
+
     /// <summary>
     /// Nombre del scheme cookie que el host registra. Endpoints sensibles (gestión de
     /// api-keys mismas) lo referencian para forzar auth por cookie y rechazar API keys.

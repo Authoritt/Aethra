@@ -62,6 +62,14 @@ public static class UsersEndpoints
             .WithName("ResetUserPassword")
             .RequireAuthorization("scope:users:write");
 
+        users.MapPost("/{userId}/revoke-sessions", async (string userId, IMediator m, CancellationToken ct) =>
+            {
+                var r = await m.Send(new RevokeUserSessionsCommand(userId), ct);
+                return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
+            })
+            .WithName("RevokeUserSessions")
+            .RequireAuthorization("scope:users:write");
+
         users.MapDelete("/{userId}", async (string userId, IMediator m, CancellationToken ct) =>
             {
                 var r = await m.Send(new DeactivateUserCommand(userId), ct);
