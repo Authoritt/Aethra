@@ -6,8 +6,8 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Hosting;
 
 namespace Aethra.Modules.Vms.Presentation;
@@ -16,6 +16,7 @@ public static class VmsEndpoints
 {
     private const string ScopeRead = "scope:vms:read";
     private const string ScopeWrite = "scope:vms:write";
+    public const string SshProbeRateLimitPolicy = "aethra-ssh-probe";
 
     public static IEndpointRouteBuilder MapVmsEndpoints(this IEndpointRouteBuilder app)
     {
@@ -55,19 +56,65 @@ public static class VmsEndpoints
                     Port: body.Ssh.Port,
                     User: body.Ssh.User,
                     AuthMethod: body.Ssh.AuthMethod,
-                    Value: body.Ssh.Value);
+                    Value: body.Ssh.Value,
+                    ExpectedHostKeyFingerprint: body.Ssh.ExpectedHostKeyFingerprint ?? body.ExpectedHostKeyFingerprint);
             var cmd = new AutoInstallSatelliteCommand(
                 VmId: vmId,
                 Credentials: creds,
                 InstallContainerRuntime: body.InstallContainerRuntime,
                 ContainerRuntime: body.ContainerRuntime ?? "docker",
-                DryRun: body.DryRun);
+                DryRun: body.DryRun,
+                ExpectedHostKeyFingerprint: body.ExpectedHostKeyFingerprint ?? body.Ssh?.ExpectedHostKeyFingerprint,
+                RotateHostKey: body.RotateHostKey);
             var r = await mediator.Send(cmd, ct);
             return r.IsSuccess ? Results.Accepted(r.Value.InstallUrl, r.Value) : MapError(r.Error);
         })
         .RequireAuthorization(ScopeWrite)
         .WithName("AutoInstallSatellite")
         .WithDescription("Auto-instala el satélite vía SSH desde el central.");
+
+        // GH-33 / B1 — Sondeo de clave pública de host SSH libre (exige vms:write + rate limit).
+        group.MapPost("/ssh/probe", async (
+                [FromBody] ProbeHostRequest body,
+                IMediator mediator,
+                CancellationToken ct) =>
+        {
+            var q = new ProbeVmHostKeyQuery(Host: body.Host, Port: body.Port);
+            return ToResult(await mediator.Send(q, ct));
+        })
+        .RequireAuthorization(ScopeWrite)
+        .RequireRateLimiting(SshProbeRateLimitPolicy)
+        .WithName("ProbeSshHostKey")
+        .WithDescription("Sondea la clave pública del host SSH sin enviar credenciales. La huella debe confirmarse por otro canal fuera de banda (TOFU).");
+
+        // GH-33 / B1 — Sondeo de clave pública SSH de VM registrada (usa SOLO el host registrado de la VM).
+        group.MapPost("/{vmId}/ssh/probe", async (
+                string vmId,
+                IMediator mediator,
+                CancellationToken ct) =>
+        {
+            var q = new ProbeVmHostKeyQuery(VmId: vmId);
+            return ToResult(await mediator.Send(q, ct));
+        })
+        .RequireAuthorization(ScopeRead)
+        .RequireRateLimiting(SshProbeRateLimitPolicy)
+        .WithName("ProbeVmSshHostKey")
+        .WithDescription("Sondea la clave pública del host SSH de una VM registrada sin enviar credenciales. La huella debe confirmarse por otro canal fuera de banda (TOFU).");
+
+        // GH-33 — Rotación explícita de huella SSH de host.
+        group.MapPost("/{vmId}/ssh/rotate-host-key", async (
+                string vmId,
+                [FromBody] RotateHostKeyRequest body,
+                IMediator mediator,
+                CancellationToken ct) =>
+        {
+            var cmd = new RotateVmHostKeyCommand(vmId, body.NewFingerprint);
+            var r = await mediator.Send(cmd, ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);
+        })
+        .RequireAuthorization(ScopeWrite)
+        .WithName("RotateVmHostKey")
+        .WithDescription("Rota explícitamente la huella SHA256 confiable del host SSH de una VM.");
 
         // F11.4 — Estado de instalación.
         group.MapGet("/{vmId}/install/status", async (string vmId, IMediator mediator, CancellationToken ct) =>
@@ -219,9 +266,17 @@ public static class VmsEndpoints
         SshBlock? Ssh,
         bool InstallContainerRuntime,
         string? ContainerRuntime,
-        bool DryRun);
+        bool DryRun,
+        string? ExpectedHostKeyFingerprint = null,
+        bool RotateHostKey = false);
 
-    public sealed record SshBlock(string Host, int Port, string User, string AuthMethod, string Value);
+    public sealed record SshBlock(
+        string Host,
+        int Port,
+        string User,
+        string AuthMethod,
+        string Value,
+        string? ExpectedHostKeyFingerprint = null);
 
     public sealed record ReinstallRequest(bool InstallContainerRuntime, string? ContainerRuntime);
 
@@ -230,6 +285,10 @@ public static class VmsEndpoints
 
     /// <summary>Body para <c>PATCH /api/vms/{vmId}</c>.</summary>
     public sealed record UpdateVmRequest(string Name, string? PublicIp, string? PrivateIp, string? Description);
+
+    public sealed record ProbeHostRequest(string? Host, int? Port);
+
+    public sealed record RotateHostKeyRequest(string NewFingerprint);
 
     private static IResult ToResult<T>(Result<T> r)
         => r.IsSuccess ? Results.Ok(r.Value) : MapError(r.Error);

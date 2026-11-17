@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 import type {
   AutoInstallRequest,
   AutoInstallResponse,
+  ProbeHostKeyResponse,
   VmInstallLogPayload,
   VmInstallStatus,
   VmInstallStatusChangedPayload,
@@ -66,6 +67,8 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
   const t = useTranslations("pages.vms_new.auto_install");
   const tCommon = useTranslations("pages.vms_new");
   const [running, setRunning] = useState(false);
+  const [probing, setProbing] = useState(false);
+  const [probeWarning, setProbeWarning] = useState<string | null>(null);
   const [installStatus, setInstallStatus] =
     useState<VmInstallStatus | "Planned" | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
@@ -93,6 +96,12 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
           .max(SSH_VALUE_MAX, t("validation_max", { max: SSH_VALUE_MAX })),
         containerRuntime: z.enum(["docker", "podman"]),
         installContainerRuntime: z.boolean(),
+        expectedHostKeyFingerprint: z
+          .string()
+          .min(1, t("validation_host_key_required")),
+        confirmHostKey: z.boolean().refine((val) => val === true, {
+          message: t("validation_confirm_required"),
+        }),
       }),
     [t],
   );
@@ -109,6 +118,8 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
       value: "",
       containerRuntime: "docker",
       installContainerRuntime: false,
+      expectedHostKeyFingerprint: "",
+      confirmHostKey: false,
     },
   });
 
@@ -195,6 +206,47 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
     ]);
   }
 
+  async function handleProbe() {
+    const hostVal = form.getValues("host")?.trim();
+    const portVal = form.getValues("port") || 22;
+    if (!hostVal) {
+      form.setError("host", { message: t("validation_required") });
+      return;
+    }
+    setProbing(true);
+    setProbeWarning(null);
+    appendLocalLog(t("probing"));
+    try {
+      const res = await api<ProbeHostKeyResponse>("/api/vms/ssh/probe", {
+        method: "POST",
+        body: JSON.stringify({ host: hostVal, port: portVal }),
+      });
+      if (res.success && res.fingerprint) {
+        setProbeWarning(res.warning ?? null);
+        form.setValue("expectedHostKeyFingerprint", res.fingerprint, {
+          shouldValidate: true,
+        });
+        toast.success(t("probe_success", { fingerprint: res.fingerprint }));
+        appendLocalLog(t("probe_success", { fingerprint: res.fingerprint }));
+      } else {
+        const err = res.errorMessage ?? t("probe_failed");
+        toast.error(err);
+        appendLocalLog(err, "error");
+      }
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? (e.body as { message?: string } | undefined)?.message ?? `Error ${e.status}`
+          : e instanceof Error
+            ? e.message
+            : t("probe_failed");
+      toast.error(msg);
+      appendLocalLog(msg, "error");
+    } finally {
+      setProbing(false);
+    }
+  }
+
   async function onSubmit(values: FormValues) {
     setRunning(true);
     setErrorCode(null);
@@ -210,9 +262,11 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
         user: values.user.trim(),
         authMethod: values.authMethod,
         value: values.value,
+        expectedHostKeyFingerprint: values.expectedHostKeyFingerprint.trim(),
       },
       installContainerRuntime: values.installContainerRuntime,
       containerRuntime: values.containerRuntime,
+      expectedHostKeyFingerprint: values.expectedHostKeyFingerprint.trim(),
     };
 
     try {
@@ -250,7 +304,7 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
               onSubmit={form.handleSubmit(onSubmit)}
               className="flex flex-col gap-5"
             >
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto]">
+              <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-[1fr_auto_auto]">
                 <FormField
                   control={form.control}
                   name="host"
@@ -290,6 +344,63 @@ export function AutoInstallForm({ vmId, onFallbackManual }: Props) {
                         />
                       </FormControl>
                       <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleProbe}
+                  disabled={probing || running}
+                  className="gap-2"
+                >
+                  {probing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <KeyRound className="h-4 w-4" />
+                  )}
+                  {probing ? t("probing") : t("btn_probe")}
+                </Button>
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-lg border border-border p-4 bg-muted/30">
+                <FormField
+                  control={form.control}
+                  name="expectedHostKeyFingerprint"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("label_host_key")}</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder={t("placeholder_host_key")}
+                          className="font-mono text-xs"
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {probeWarning || t("help_host_key")}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="confirmHostKey"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center gap-3">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={(v) => field.onChange(v === true)}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <Label className="m-0 font-normal text-xs cursor-pointer">
+                          {t("label_confirm_host_key")}
+                        </Label>
+                        <FormMessage />
+                      </div>
                     </FormItem>
                   )}
                 />

@@ -1065,7 +1065,17 @@
         "submit_idle": "Connect and install",
         "submit_running": "Installing…",
         "key_too_large": "Key too large (max {max} bytes).",
-        "key_paste_hint": "Or paste the content above. You can also upload it:"
+        "key_paste_hint": "Or paste the content above. You can also upload it:",
+        "btn_probe": "Probe host key",
+        "probing": "Probing…",
+        "probe_success": "Detected SSH host key: {fingerprint}",
+        "probe_failed": "Failed to probe SSH host key.",
+        "label_host_key": "Expected SSH host key (SHA256) *",
+        "placeholder_host_key": "SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU",
+        "help_host_key": "The fingerprint must be confirmed via another channel (provider console or ssh-keygen -lf on the VM): the probe is TOFU over the same network.",
+        "label_confirm_host_key": "I confirm this fingerprint matches the VM's public key",
+        "validation_host_key_required": "You must probe or provide the expected fingerprint",
+        "validation_confirm_required": "You must confirm the fingerprint to continue"
       },
       "manual": {
         "header_info_title": "Manual mode: NAT / CGNAT / private network.",

@@ -227,6 +227,8 @@ builder.Services.AddAuthorization(opts =>
 
 // OT-012: limitador propio de /auth/login y /auth/login/totp (por IP real tras el tunel).
 builder.Services.AddAethraLoginRateLimiter(builder.Configuration);
+// GH-33 / B1: limitador para los endpoints de sondeo SSH.
+builder.Services.AddAethraSshProbeRateLimiter(builder.Configuration);
 
 // -----------------------------------------------------------------------------
 // SignalR: hub de satélite (entrada de métricas) + hub de dashboard (push al frontend).

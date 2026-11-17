@@ -13,9 +13,9 @@ using Microsoft.Extensions.Configuration;
 namespace Aethra.Modules.Vms.UseCases.Vms.Commands;
 
 /// <summary>
-/// Re-instala el satélite usando las credenciales SSH ya cifradas en <c>Vm.SshCredentialsCipher</c>.
-/// Falla si no hay credenciales guardadas (el operador debe usar <see cref="AutoInstallSatelliteCommand"/>
-/// con credenciales primero).
+/// Re-instala el satélite usando las credenciales SSH ya cifradas en <c>Vm.SshCredentialsCipher</c>
+/// y verificando la clave pública del host contra <c>Vm.SshHostKeyFingerprint</c>.
+/// Falla si no hay credenciales guardadas o si no hay huella de host confiable registrada.
 /// </summary>
 public sealed record ReinstallSatelliteCommand(
     string VmId,
@@ -47,6 +47,11 @@ internal sealed class ReinstallSatelliteHandler(
             return Error.Validation("vm.no_saved_ssh_credentials",
                 "No hay credenciales SSH guardadas. Usa el endpoint de auto-install primero.");
         }
+        if (vm.SshHostKeyFingerprint is null)
+        {
+            return Error.Validation("ssh.host_key_required",
+                "No hay una huella de host SSH de confianza registrada para esta VM. Ejecute auto-install indicando expectedHostKeyFingerprint para fijarla.");
+        }
 
         var creds = codec.Decode(vm.SshCredentialsCipher);
         var token = vm.RotateToken(clock.UtcNow);
@@ -55,7 +60,8 @@ internal sealed class ReinstallSatelliteHandler(
             CentralUrl: centralUrl,
             TokenPlaintext: token,
             ContainerRuntime: request.ContainerRuntime,
-            InstallContainerRuntime: request.InstallContainerRuntime);
+            InstallContainerRuntime: request.InstallContainerRuntime,
+            ExpectedHostKeyFingerprint: vm.SshHostKeyFingerprint);
 
         vm.BeginInstall(clock.UtcNow);
         await db.SaveChangesAsync(cancellationToken);

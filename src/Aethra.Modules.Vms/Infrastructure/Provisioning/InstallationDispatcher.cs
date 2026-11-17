@@ -122,6 +122,10 @@ public sealed class InstallationDispatcher(
         }
         if (result.Success)
         {
+            if (result.VerifiedHostKeyFingerprint is not null)
+            {
+                vm.SetSshHostKeyFingerprint(result.VerifiedHostKeyFingerprint, now);
+            }
             vm.MarkInstalled(now);
             await notifier.PublishStatusAsync(job.VmId, "Installed", cancellationToken: ct);
         }
