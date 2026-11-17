@@ -49,6 +49,16 @@ public sealed class IdentityOptions
 
     /// <summary>Presupuesto compartido de intentos para el paso de contrasena del login.</summary>
     public AuthenticationRateLimitOptions RateLimit { get; set; } = new();
+
+    /// <summary>
+    /// Ventana en segundos durante la cual se confía en la validación previa de la cookie
+    /// de sesión sin consultar la base de datos (#82).
+    /// El valor predeterminado es 0 (revalida contra la BD en cada petición entrante).
+    /// Si es mayor a 0, la hora de la última validación exitosa se guarda en las propiedades
+    /// de autenticación de la cookie y las peticiones dentro del intervalo se consideran válidas
+    /// sin consultar la base de datos.
+    /// </summary>
+    public int SessionValidationIntervalSeconds { get; set; }
 }
 
 public sealed class AuthenticationRateLimitOptions

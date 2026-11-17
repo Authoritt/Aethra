@@ -19,6 +19,7 @@ public sealed class User : AggregateRoot<UserId>
     public string Email { get; private set; }
     public byte[] PasswordHashCipher { get; private set; }
     public string? DisplayName { get; private set; }
+    public string SecurityStamp { get; private set; }
     public bool IsActive { get; private set; }
     public DateTimeOffset? LastLoginAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -48,11 +49,13 @@ public sealed class User : AggregateRoot<UserId>
         string email,
         byte[] passwordHashCipher,
         string? displayName,
+        string securityStamp,
         DateTimeOffset now) : base(id)
     {
         Email = email;
         PasswordHashCipher = passwordHashCipher;
         DisplayName = displayName;
+        SecurityStamp = securityStamp;
         IsActive = true;
         CreatedAt = now;
         UpdatedAt = now;
@@ -76,7 +79,7 @@ public sealed class User : AggregateRoot<UserId>
         }
         ValidateDisplayName(displayName);
 
-        var user = new User(UserId.New(), NormalizeEmail(email), passwordHashCipher, displayName?.Trim(), now);
+        var user = new User(UserId.New(), NormalizeEmail(email), passwordHashCipher, displayName?.Trim(), Guid.NewGuid().ToString("N"), now);
         user.Raise(new UserCreatedEvent(user.Id, user.Email));
         return user;
     }
@@ -129,6 +132,7 @@ public sealed class User : AggregateRoot<UserId>
             throw new ArgumentException("PasswordHashCipher no puede estar vacío.", nameof(newPasswordHashCipher));
         }
         PasswordHashCipher = newPasswordHashCipher;
+        RotateSecurityStamp();
         UpdatedAt = now;
         Raise(new UserPasswordResetEvent(Id));
     }
@@ -140,6 +144,7 @@ public sealed class User : AggregateRoot<UserId>
             return;
         }
         IsActive = false;
+        RotateSecurityStamp();
         UpdatedAt = now;
         Raise(new UserDeactivatedEvent(Id));
     }
@@ -151,6 +156,7 @@ public sealed class User : AggregateRoot<UserId>
             return;
         }
         IsActive = true;
+        RotateSecurityStamp();
         UpdatedAt = now;
     }
 
@@ -199,6 +205,7 @@ public sealed class User : AggregateRoot<UserId>
         TotpEnabledAt = now;
         TotpRecoveryCodesCipher = recoveryCodesCipher;
         TotpRecoveryCodesUsedMask = 0;
+        RotateSecurityStamp();
         UpdatedAt = now;
     }
 
@@ -210,6 +217,7 @@ public sealed class User : AggregateRoot<UserId>
         TotpSecretCipher = null;
         TotpRecoveryCodesCipher = null;
         TotpRecoveryCodesUsedMask = 0;
+        RotateSecurityStamp();
         UpdatedAt = now;
     }
 
@@ -252,6 +260,9 @@ public sealed class User : AggregateRoot<UserId>
         {
             return;
         }
+        // #82: los cambios de roles NO rotan el security stamp. CookieSessionValidator reconstruye
+        // roles y scopes desde la BD en cada validacion: quitar un rol quita su permiso (403) sin
+        // cerrar la sesion entera, y un ReplaceRoles sin cambios no echa a nadie.
         _roles.Add(new UserRole(Id, roleId, now));
         UpdatedAt = now;
     }
@@ -280,6 +291,20 @@ public sealed class User : AggregateRoot<UserId>
             }
         }
         UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// Rota el security stamp para invalidar todas las sesiones activas (#82).
+    /// </summary>
+    public void RotateSecurityStamp(DateTimeOffset now)
+    {
+        RotateSecurityStamp();
+        UpdatedAt = now;
+    }
+
+    internal void RotateSecurityStamp()
+    {
+        SecurityStamp = Guid.NewGuid().ToString("N");
     }
 
     private static void ValidateEmail(string email)
@@ -323,6 +348,7 @@ public sealed class User : AggregateRoot<UserId>
     {
         Email = string.Empty;
         PasswordHashCipher = [];
+        SecurityStamp = string.Empty;
     }
 }
 

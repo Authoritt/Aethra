@@ -213,6 +213,12 @@ namespace Aethra.Modules.Identity.Infrastructure.Migrations
                         .HasColumnType("bytea")
                         .HasColumnName("password_hash_cipher");
 
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("security_stamp");
+
                     b.Property<bool>("TotpEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

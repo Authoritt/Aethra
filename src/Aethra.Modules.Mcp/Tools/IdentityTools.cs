@@ -178,6 +178,41 @@ public sealed class IdentityTools(
             ]);
     }
 
+    [McpServerTool(Name = "aethra_revoke_user_sessions", Destructive = true, Idempotent = true, OpenWorld = false)]
+    [Description("Invalida todas las sesiones activas (cookies) de un usuario rotando su security stamp.")]
+    public async Task<object> RevokeUserSessionsAsync(
+        [Description("ID del user (formato 'usr_...').")] string userId,
+        [Description("Si true, NO ejecuta — devuelve plan.")] bool dryRun,
+        CancellationToken ct)
+    {
+        if (!caller.HasScope(McpScopes.UsersWrite))
+        {
+            return McpResponses.InsufficientScope(McpScopes.UsersWrite);
+        }
+        if (dryRun)
+        {
+            return McpResponses.DryRun(
+                wouldCall: $"POST /api/identity/users/{userId}/revoke-sessions",
+                plan: new { userId, action = "revoke_sessions" });
+        }
+
+        using var grantContext = currentPrincipal.UseScopes(caller.Scopes);
+        var result = await mediator.Send(new RevokeUserSessionsCommand(userId), ct).ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            return McpResponses.FromError(result.Error);
+        }
+        return McpResponses.OkWithNextActions(
+            data: new { user_id = userId, sessions_revoked = true },
+            nextActions:
+            [
+                new McpResponses.NextAction(
+                    Tool: "aethra_list_users",
+                    Why: "Verificá el estado del user.",
+                    SuggestedArgs: null),
+            ]);
+    }
+
     [McpServerTool(Name = "aethra_list_roles", ReadOnly = true, OpenWorld = false)]
     [Description("Lista todos los roles (sistema + custom) con sus scopes. Read-only.")]
     public async Task<object> ListRolesAsync(CancellationToken ct)

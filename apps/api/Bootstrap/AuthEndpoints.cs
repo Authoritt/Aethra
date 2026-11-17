@@ -275,6 +275,38 @@ public static class AuthEndpoints
         .WithName("UpdateMyProfile")
         .RequireAuthorization("CookieOnly");
 
+        // #82 — Revocar todas las sesiones del usuario actual. Tras rotar el stamp,
+        // re-emite la cookie con el stamp nuevo para no echarse a sí mismo.
+        group.MapPost("/me/revoke-sessions", async (
+            HttpContext http,
+            MediatR.IMediator mediator,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId)
+                || !Aethra.Shared.Kernel.Ids.AethraId.TryParse(userId, out var parsedUid)
+                || parsedUid.Value.Prefix != "usr")
+            {
+                return Results.Json(new { error = "not_a_real_user" }, statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            var cmd = new Aethra.Modules.Identity.UseCases.Commands.RevokeUserSessionsCommand(userId);
+            var r = await mediator.Send(cmd, ct);
+            if (!r.IsSuccess)
+            {
+                return Results.UnprocessableEntity(new { r.Error.Code, r.Error.Message });
+            }
+
+            if (!await SessionCookieReissuer.ReissueAsync(http, new UserId(parsedUid.Value), ct))
+            {
+                return Results.Json(new { error = "user_not_found" }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            return Results.Ok(new { user_id = userId, sessions_revoked = true });
+        })
+        .WithName("RevokeMySessions")
+        .RequireAuthorization("CookieOnly");
+
         return app;
     }
 
@@ -282,25 +314,5 @@ public static class AuthEndpoints
     public sealed record UpdateMyProfileRequest(string? GitHubUsername, bool? ClearGitHubUsername);
 
     private static ClaimsIdentity BuildIdentityForUser(User user, IReadOnlyList<Role> roleList)
-    {
-        var aggregatedScopes = roleList
-            .SelectMany(r => r.Scopes)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-        var claims = new List<Claim>
-        {
-            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new(ClaimTypes.Email, user.Email),
-            new(ClaimTypes.Name, user.DisplayName ?? user.Email),
-        };
-        foreach (var role in roleList)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, role.Slug));
-        }
-        foreach (var scope in aggregatedScopes)
-        {
-            claims.Add(new Claim(ApiKeyAuthSchemes.ScopeClaim, scope));
-        }
-        return new ClaimsIdentity(claims, AuthSchemes.Cookie);
-    }
+        => CookieSessionValidator.BuildIdentityForUser(user, roleList);
 }
