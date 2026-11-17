@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Hosting;
 
@@ -15,6 +16,7 @@ public static class VmsEndpoints
 {
     private const string ScopeRead = "scope:vms:read";
     private const string ScopeWrite = "scope:vms:write";
+    public const string SshProbeRateLimitPolicy = "aethra-ssh-probe";
 
     public static IEndpointRouteBuilder MapVmsEndpoints(this IEndpointRouteBuilder app)
     {
@@ -71,7 +73,7 @@ public static class VmsEndpoints
         .WithName("AutoInstallSatellite")
         .WithDescription("Auto-instala el satélite vía SSH desde el central.");
 
-        // GH-33 — Sondeo de clave pública de host SSH sin credenciales.
+        // GH-33 / B1 — Sondeo de clave pública de host SSH libre (exige vms:write + rate limit).
         group.MapPost("/ssh/probe", async (
                 [FromBody] ProbeHostRequest body,
                 IMediator mediator,
@@ -80,22 +82,24 @@ public static class VmsEndpoints
             var q = new ProbeVmHostKeyQuery(Host: body.Host, Port: body.Port);
             return ToResult(await mediator.Send(q, ct));
         })
-        .RequireAuthorization(ScopeRead)
+        .RequireAuthorization(ScopeWrite)
+        .RequireRateLimiting(SshProbeRateLimitPolicy)
         .WithName("ProbeSshHostKey")
-        .WithDescription("Sondea la clave pública del host SSH sin enviar credenciales.");
+        .WithDescription("Sondea la clave pública del host SSH sin enviar credenciales. La huella debe confirmarse por otro canal fuera de banda (TOFU).");
 
+        // GH-33 / B1 — Sondeo de clave pública SSH de VM registrada (usa SOLO el host registrado de la VM).
         group.MapPost("/{vmId}/ssh/probe", async (
                 string vmId,
-                [FromBody] ProbeHostRequest? body,
                 IMediator mediator,
                 CancellationToken ct) =>
         {
-            var q = new ProbeVmHostKeyQuery(VmId: vmId, Host: body?.Host, Port: body?.Port);
+            var q = new ProbeVmHostKeyQuery(VmId: vmId);
             return ToResult(await mediator.Send(q, ct));
         })
         .RequireAuthorization(ScopeRead)
+        .RequireRateLimiting(SshProbeRateLimitPolicy)
         .WithName("ProbeVmSshHostKey")
-        .WithDescription("Sondea la clave pública del host SSH de una VM registrada sin enviar credenciales.");
+        .WithDescription("Sondea la clave pública del host SSH de una VM registrada sin enviar credenciales. La huella debe confirmarse por otro canal fuera de banda (TOFU).");
 
         // GH-33 — Rotación explícita de huella SSH de host.
         group.MapPost("/{vmId}/ssh/rotate-host-key", async (
@@ -194,6 +198,8 @@ public static class VmsEndpoints
                     message = "scripts/install-satellite.sh no está disponible en el servidor.",
                 }, statusCode: StatusCodes.Status503ServiceUnavailable);
             }
+            // Servimos como text/x-shellscript para que curl no se queje, pero text/plain
+            // también funciona (curl -fsSL no valida content-type).
             return Results.File(scriptPath, "text/x-shellscript", "install-satellite.sh");
         })
         .AllowAnonymous()
@@ -242,6 +248,8 @@ public static class VmsEndpoints
 
     private static string ResolveInstallScriptPath(IHostEnvironment env)
     {
+        // En desarrollo el script vive en el repo bajo scripts/. En despliegues custom,
+        // el operador puede copiarlo al ContentRoot/satellite-binaries/ — chequeamos ambos.
         var inRepo = Path.Combine(env.ContentRootPath, "..", "..", "scripts", "install-satellite.sh");
         if (File.Exists(inRepo))
         {
@@ -272,8 +280,10 @@ public static class VmsEndpoints
 
     public sealed record ReinstallRequest(bool InstallContainerRuntime, string? ContainerRuntime);
 
+    /// <summary>F12.3 — body para <c>PATCH /api/vms/{id}/accepts-previews</c>.</summary>
     public sealed record SetAcceptsPreviewsRequest(bool AcceptsPreviews);
 
+    /// <summary>Body para <c>PATCH /api/vms/{vmId}</c>.</summary>
     public sealed record UpdateVmRequest(string Name, string? PublicIp, string? PrivateIp, string? Description);
 
     public sealed record ProbeHostRequest(string? Host, int? Port);

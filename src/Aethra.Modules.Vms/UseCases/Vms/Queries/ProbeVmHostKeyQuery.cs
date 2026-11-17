@@ -16,13 +16,13 @@ public sealed record ProbeVmHostKeyQuery(
     int? Port = null) : IQuery<ProbeVmHostKeyResult>;
 
 public sealed record ProbeVmHostKeyResult(
-    string Host,
     int Port,
     string? HostKeyType,
     string? Fingerprint,
     bool MatchesPinned,
     string? PinnedFingerprint,
     bool Success,
+    string? Warning = null,
     string? ErrorCode = null,
     string? ErrorMessage = null);
 
@@ -31,10 +31,13 @@ internal sealed class ProbeVmHostKeyHandler(
     ISshHostKeyProber prober,
     ISshCredentialsCodec codec) : IQueryHandler<ProbeVmHostKeyQuery, ProbeVmHostKeyResult>
 {
+    public const string TofuWarningNotice =
+        "La huella debe confirmarse por otro canal (consola del proveedor, ssh-keygen -lf en la VM): el sondeo es TOFU por la misma red.";
+
     public async Task<Result<ProbeVmHostKeyResult>> Handle(ProbeVmHostKeyQuery request, CancellationToken ct)
     {
-        string? targetHost = request.Host;
-        int targetPort = request.Port ?? 22;
+        string? targetHost = null;
+        int targetPort = 22;
         string? pinnedFingerprint = null;
 
         if (!string.IsNullOrWhiteSpace(request.VmId))
@@ -52,22 +55,26 @@ internal sealed class ProbeVmHostKeyHandler(
 
             pinnedFingerprint = vm.SshHostKeyFingerprint;
 
-            if (string.IsNullOrWhiteSpace(targetHost))
+            // B1 (b): una VM registrada usa SOLO sus datos guardados (sin override de host/puerto desde
+            // la peticion). Las credenciales guardadas mandan sobre PublicIp/PrivateIp: son el endpoint
+            // SSH real (host Y puerto) contra el que se fijo la huella y al que va el reinstall; sondear
+            // PublicIp:22 daria un "no coincide" falso en una VM con SSH en otro puerto. Solo se usan
+            // host y puerto: el secreto descifrado no sale de aqui.
+            if (vm.SshCredentialsCipher is not null)
             {
-                if (vm.SshCredentialsCipher is not null)
-                {
-                    var saved = codec.Decode(vm.SshCredentialsCipher);
-                    targetHost = saved.Host;
-                    if (!request.Port.HasValue)
-                    {
-                        targetPort = saved.Port;
-                    }
-                }
-                else
-                {
-                    targetHost = vm.PublicIp ?? vm.PrivateIp;
-                }
+                var saved = codec.Decode(vm.SshCredentialsCipher);
+                targetHost = saved.Host;
+                targetPort = saved.Port;
             }
+            else
+            {
+                targetHost = vm.PublicIp ?? vm.PrivateIp;
+            }
+        }
+        else
+        {
+            targetHost = request.Host;
+            targetPort = request.Port ?? 22;
         }
 
         if (string.IsNullOrWhiteSpace(targetHost))
@@ -79,13 +86,13 @@ internal sealed class ProbeVmHostKeyHandler(
         if (!probeResult.Success)
         {
             return new ProbeVmHostKeyResult(
-                Host: targetHost,
                 Port: targetPort,
                 HostKeyType: null,
                 Fingerprint: null,
                 MatchesPinned: false,
                 PinnedFingerprint: pinnedFingerprint,
                 Success: false,
+                Warning: TofuWarningNotice,
                 ErrorCode: probeResult.ErrorCode,
                 ErrorMessage: probeResult.ErrorMessage);
         }
@@ -94,12 +101,12 @@ internal sealed class ProbeVmHostKeyHandler(
             SshHostKeyHelper.FingerprintsMatch(pinnedFingerprint, probeResult.Fingerprint);
 
         return new ProbeVmHostKeyResult(
-            Host: targetHost,
             Port: targetPort,
             HostKeyType: probeResult.HostKeyType,
             Fingerprint: probeResult.Fingerprint,
             MatchesPinned: matches,
             PinnedFingerprint: pinnedFingerprint,
-            Success: true);
+            Success: true,
+            Warning: TofuWarningNotice);
     }
 }

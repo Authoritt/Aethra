@@ -102,6 +102,7 @@ export interface AutoInstallSshRequest {
   user: string;
   authMethod: SshAuthMethod;
   value: string;
+  expectedHostKeyFingerprint?: string | null;
 }
 
 export interface AutoInstallRequest {
@@ -109,6 +110,20 @@ export interface AutoInstallRequest {
   installContainerRuntime: boolean;
   containerRuntime: "docker" | "podman";
   dryRun?: boolean;
+  expectedHostKeyFingerprint?: string | null;
+  rotateHostKey?: boolean;
+}
+
+export interface ProbeHostKeyResponse {
+  port: number;
+  hostKeyType: string | null;
+  fingerprint: string | null;
+  matchesPinned: boolean;
+  pinnedFingerprint: string | null;
+  success: boolean;
+  warning?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
 }
 
 export interface AutoInstallResponse {

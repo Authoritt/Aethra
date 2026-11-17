@@ -1065,7 +1065,17 @@
         "submit_idle": "Conectar e instalar",
         "submit_running": "Instalando…",
         "key_too_large": "Clave demasiado grande (máximo {max} bytes).",
-        "key_paste_hint": "O pega el contenido arriba. También podés cargarlo:"
+        "key_paste_hint": "O pega el contenido arriba. También podés cargarlo:",
+        "btn_probe": "Sondear huella",
+        "probing": "Sondeando…",
+        "probe_success": "Huella SSH detectada: {fingerprint}",
+        "probe_failed": "Fallo al sondear la huella SSH.",
+        "label_host_key": "Huella SSH esperada (SHA256) *",
+        "placeholder_host_key": "SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU",
+        "help_host_key": "La huella debe confirmarse por otro canal (consola del proveedor o ssh-keygen -lf en la VM): el sondeo es TOFU por la misma red.",
+        "label_confirm_host_key": "Confirmo que esta huella coincide con la clave pública de la VM",
+        "validation_host_key_required": "Debes sondear o indicar la huella esperada",
+        "validation_confirm_required": "Debes confirmar la huella para continuar"
       },
       "manual": {
         "header_info_title": "Modo manual: NAT / CGNAT / red privada.",

@@ -64,13 +64,25 @@ public sealed class RenciSshHostKeyProber(
             {
                 // Esperado si el servidor requiere auth tras recibir la clave
             }
-            catch (SocketException ex)
+            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
             {
-                return new SshHostKeyProbeResult(false, null, null, "ssh_connect_failed", $"Socket error: {ex.Message}");
+                return new SshHostKeyProbeResult(false, null, null, "ssh.probe_timeout", "Tiempo de espera agotado al conectar al host SSH.");
+            }
+            catch (SshOperationTimeoutException)
+            {
+                return new SshHostKeyProbeResult(false, null, null, "ssh.probe_timeout", "Tiempo de espera agotado al conectar al host SSH.");
+            }
+            catch (SocketException)
+            {
+                return new SshHostKeyProbeResult(false, null, null, "ssh.probe_failed", "No se pudo conectar al host SSH.");
             }
             catch (Exception ex) when (ex is not OperationCanceledException && receivedFingerprint is null)
             {
-                return new SshHostKeyProbeResult(false, null, null, "ssh_connect_failed", $"Error conectando al host SSH: {ex.Message}");
+                if (ex is TimeoutException)
+                {
+                    return new SshHostKeyProbeResult(false, null, null, "ssh.probe_timeout", "Tiempo de espera agotado al conectar al host SSH.");
+                }
+                return new SshHostKeyProbeResult(false, null, null, "ssh.probe_failed", "No se pudo conectar al host SSH.");
             }
 
             if (receivedFingerprint is not null)
@@ -78,7 +90,7 @@ public sealed class RenciSshHostKeyProber(
                 return new SshHostKeyProbeResult(true, receivedKeyType, receivedFingerprint, null, null);
             }
 
-            return new SshHostKeyProbeResult(false, null, null, "ssh_no_host_key", "El servidor no presentó ninguna clave pública de host.");
+            return new SshHostKeyProbeResult(false, null, null, "ssh.no_host_key", "El servidor no presentó ninguna clave pública de host.");
         }
         catch (OperationCanceledException)
         {
@@ -87,7 +99,7 @@ public sealed class RenciSshHostKeyProber(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error inesperado al sondear host SSH {Host}:{Port}", host, port);
-            return new SshHostKeyProbeResult(false, null, null, "ssh_probe_failed", ex.Message);
+            return new SshHostKeyProbeResult(false, null, null, "ssh.probe_failed", "Fallo inesperado al sondear el host SSH.");
         }
         finally
         {

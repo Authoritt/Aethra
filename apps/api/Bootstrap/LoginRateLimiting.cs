@@ -59,6 +59,62 @@ public static class LoginRateLimiting
 }
 
 /// <summary>
+/// GH-33 / B1 — Limitador para los endpoints de sondeo SSH (/ssh/probe y /{vmId}/ssh/probe).
+/// Reutiliza el mismo patron de particion por IP real tras Cloudflare (<see cref="ClientAddress.ForRateLimit"/>).
+/// Solo AGREGA su politica: el <c>RejectionStatusCode</c> (429) y el <c>OnRejected</c> globales son
+/// los del login; esta politica trae su propio <c>OnRejected</c> para no pisar el log del login
+/// (<c>AddRateLimiter</c> acumula configuraciones y la ultima en asignar <c>OnRejected</c> gana).
+/// </summary>
+public static class SshProbeRateLimiting
+{
+    public const string PolicyName = Aethra.Modules.Vms.Presentation.VmsEndpoints.SshProbeRateLimitPolicy;
+
+    public static IServiceCollection AddAethraSshProbeRateLimiter(
+        this IServiceCollection services, IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var permit = Math.Max(1, configuration.GetValue("Panel:ProbeRateLimit:PermitLimit", 10));
+        var window = TimeSpan.FromSeconds(
+            Math.Max(1, configuration.GetValue("Panel:ProbeRateLimit:WindowSeconds", 60)));
+        var peers = PanelPeers.FromConfiguration(configuration);
+
+        services.AddRateLimiter(options =>
+            options.AddPolicy(PolicyName, new SshProbePolicy(permit, window, peers)));
+        return services;
+    }
+
+    private sealed class SshProbePolicy(int permit, TimeSpan window, PanelPeers peers) : IRateLimiterPolicy<string>
+    {
+        public Func<OnRejectedContext, CancellationToken, ValueTask>? OnRejected => (ctx, _) =>
+        {
+            if (ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            {
+                ctx.HttpContext.Response.Headers.RetryAfter =
+                    ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+            }
+            ctx.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Aethra.Vms.ProbeRateLimit")
+                .LogWarning("Sondeo SSH limitado para {Client} en {Path}",
+                    ClientAddress.ForRateLimit(ctx.HttpContext, peers) ?? "local",
+                    ctx.HttpContext.Request.Path);
+            return ValueTask.CompletedTask;
+        };
+
+        public RateLimitPartition<string> GetPartition(HttpContext httpContext) =>
+            ClientAddress.ForRateLimit(httpContext, peers) is { } key
+                ? RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = permit,
+                    Window = window,
+                    QueueLimit = 0,
+                    AutoReplenishment = true,
+                })
+                // Par local sin CF-Connecting-IP: automatizacion de la maquina (mismo criterio que el login).
+                : RateLimitPartition.GetNoLimiter("local");
+    }
+}
+
+/// <summary>
 /// OT-012 (H2 de OT-011) — <c>/openapi</c> exige una sesion/clave de ADMIN (scope <c>*</c>) con
 /// independencia de <c>ASPNETCORE_ENVIRONMENT</c>: produccion corre en Development a proposito
 /// (AETHRA-DEPLOY-CONTEXT.md) y antes eso dejaba el documento anonimo.

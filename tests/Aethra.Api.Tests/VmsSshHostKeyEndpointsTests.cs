@@ -26,6 +26,8 @@ public sealed class VmsSshHostKeyEndpointsTests(VmsSshHostKeyApiFactory factory)
 {
     private readonly HttpClient _client = factory.CreateClient();
 
+    public const string ValidFingerprint = "SHA256:OwJWE9o9Sh2G6lT66MH5qOLhtBQbNdw3G/jbDjDLG+8";
+
     [Fact]
     public async Task ProbeSshHostKey_without_auth_returns_unauthorized()
     {
@@ -37,23 +39,14 @@ public sealed class VmsSshHostKeyEndpointsTests(VmsSshHostKeyApiFactory factory)
     public async Task RotateVmHostKey_without_auth_returns_unauthorized()
     {
         var response = await _client.PostAsJsonAsync("/api/vms/vm_01JTESTVM00000000000000/ssh/rotate-host-key",
-            new { newFingerprint = "SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU" });
+            new { newFingerprint = ValidFingerprint });
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
-    public async Task ProbeSshHostKey_with_read_scope_returns_ok_probe_result()
+    public async Task ProbeSshHostKey_with_read_scope_returns_forbidden()
     {
-        factory.Mediator.Send(Arg.Any<ProbeVmHostKeyQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result<ProbeVmHostKeyResult>.Success(new ProbeVmHostKeyResult(
-                Host: "10.0.0.5",
-                Port: 22,
-                HostKeyType: "ssh-ed25519",
-                Fingerprint: "SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU",
-                MatchesPinned: true,
-                PinnedFingerprint: "SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU",
-                Success: true)));
-
+        // B1: sondear un host libre exige vms:write; un visualizador (vms:read) recibe 403.
         using var req = new HttpRequestMessage(HttpMethod.Post, "/api/vms/ssh/probe")
         {
             Content = JsonContent.Create(new { host = "10.0.0.5", port = 22 }),
@@ -61,12 +54,105 @@ public sealed class VmsSshHostKeyEndpointsTests(VmsSshHostKeyApiFactory factory)
         req.Headers.Add(VmsSshHostKeyApiFactory.CallerHeader, "read-caller");
 
         var response = await _client.SendAsync(req);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ProbeSshHostKey_with_write_scope_returns_ok_probe_result()
+    {
+        factory.Mediator.Send(Arg.Any<ProbeVmHostKeyQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result<ProbeVmHostKeyResult>.Success(new ProbeVmHostKeyResult(
+                Port: 22,
+                HostKeyType: "ssh-ed25519",
+                Fingerprint: ValidFingerprint,
+                MatchesPinned: true,
+                PinnedFingerprint: ValidFingerprint,
+                Success: true)));
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, "/api/vms/ssh/probe")
+        {
+            Content = JsonContent.Create(new { host = "10.0.0.5", port = 22 }),
+        };
+        req.Headers.Add(VmsSshHostKeyApiFactory.CallerHeader, "write-caller");
+
+        var response = await _client.SendAsync(req);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<ProbeVmHostKeyResult>();
         body.Should().NotBeNull();
-        body!.Fingerprint.Should().Be("SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU");
+        body!.Fingerprint.Should().Be(ValidFingerprint);
         body.MatchesPinned.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ProbeSshHostKey_is_rate_limited_per_real_client_ip()
+    {
+        // B1: el sondeo libre tiene cupo propio (10 por 60 s por defecto) por IP real tras el tunel,
+        // separado del cupo del login.
+        factory.Mediator.Send(Arg.Any<ProbeVmHostKeyQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result<ProbeVmHostKeyResult>.Success(new ProbeVmHostKeyResult(
+                Port: 22,
+                HostKeyType: "ssh-ed25519",
+                Fingerprint: ValidFingerprint,
+                MatchesPinned: false,
+                PinnedFingerprint: null,
+                Success: true)));
+
+        async Task<HttpStatusCode> ProbeAsync()
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/api/vms/ssh/probe")
+            {
+                Content = JsonContent.Create(new { host = "10.0.0.5", port = 22 }),
+            };
+            req.Headers.Add(VmsSshHostKeyApiFactory.CallerHeader, "write-caller");
+            req.Headers.Add(AethraApiFactory.PeerHeader, AethraApiFactory.BridgeGateway);
+            req.Headers.Add("CF-Connecting-IP", "203.0.113.77");
+            using var res = await _client.SendAsync(req);
+            return res.StatusCode;
+        }
+
+        for (var i = 0; i < 10; i++)
+        {
+            (await ProbeAsync()).Should().Be(HttpStatusCode.OK);
+        }
+        (await ProbeAsync()).Should().Be((HttpStatusCode)429);
+    }
+
+    [Fact]
+    public async Task ProbeVmSshHostKey_with_read_scope_returns_ok()
+    {
+        factory.Mediator.Send(Arg.Any<ProbeVmHostKeyQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result<ProbeVmHostKeyResult>.Success(new ProbeVmHostKeyResult(
+                Port: 22,
+                HostKeyType: "ssh-ed25519",
+                Fingerprint: ValidFingerprint,
+                MatchesPinned: true,
+                PinnedFingerprint: ValidFingerprint,
+                Success: true)));
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, "/api/vms/vm_01JTESTVM00000000000000/ssh/probe");
+        req.Headers.Add(VmsSshHostKeyApiFactory.CallerHeader, "read-caller");
+
+        var response = await _client.SendAsync(req);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<ProbeVmHostKeyResult>();
+        body.Should().NotBeNull();
+        body!.Fingerprint.Should().Be(ValidFingerprint);
+    }
+
+    [Fact]
+    public async Task RotateVmHostKey_with_read_scope_returns_forbidden()
+    {
+        // N7: el rol de solo lectura no puede rotar huellas.
+        using var req = new HttpRequestMessage(HttpMethod.Post, "/api/vms/vm_01JTESTVM00000000000000/ssh/rotate-host-key")
+        {
+            Content = JsonContent.Create(new { newFingerprint = ValidFingerprint }),
+        };
+        req.Headers.Add(VmsSshHostKeyApiFactory.CallerHeader, "read-caller");
+
+        var response = await _client.SendAsync(req);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -92,11 +178,11 @@ public sealed class VmsSshHostKeyEndpointsTests(VmsSshHostKeyApiFactory factory)
                 TotalMemoryBytes: null,
                 AgentVersion: null,
                 AcceptsPreviews: true,
-                SshHostKeyFingerprint: "SHA256:uD34F12345678901234567890123456789012345678")));
+                SshHostKeyFingerprint: ValidFingerprint)));
 
         using var req = new HttpRequestMessage(HttpMethod.Post, "/api/vms/vm_01JTESTVM00000000000000/ssh/rotate-host-key")
         {
-            Content = JsonContent.Create(new { newFingerprint = "SHA256:uD34F12345678901234567890123456789012345678" }),
+            Content = JsonContent.Create(new { newFingerprint = ValidFingerprint }),
         };
         req.Headers.Add(VmsSshHostKeyApiFactory.CallerHeader, "write-caller");
 
@@ -105,7 +191,7 @@ public sealed class VmsSshHostKeyEndpointsTests(VmsSshHostKeyApiFactory factory)
 
         var body = await response.Content.ReadFromJsonAsync<VmDto>();
         body.Should().NotBeNull();
-        body!.SshHostKeyFingerprint.Should().Be("SHA256:uD34F12345678901234567890123456789012345678");
+        body!.SshHostKeyFingerprint.Should().Be(ValidFingerprint);
     }
 
     [Fact]

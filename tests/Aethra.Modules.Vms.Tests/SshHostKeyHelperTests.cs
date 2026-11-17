@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Aethra.Modules.Vms.Domain;
+using Aethra.Modules.Vms.Infrastructure.Provisioning;
 using FluentAssertions;
 using Xunit;
 
@@ -85,5 +86,20 @@ public sealed class SshHostKeyHelperTests
         // Nulo o vacío
         SshHostKeyHelper.IsValidFingerprint(null).Should().BeFalse();
         SshHostKeyHelper.IsValidFingerprint("   ").Should().BeFalse();
+    }
+
+    [Fact]
+    public void FormatFingerprint_matches_fixed_value_from_ssh_keygen()
+    {
+        // Clave pública ed25519 de prueba (formato OpenSSH):
+        // ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOmf3jK+pYwG7h5NqE9P0Y1q2w3e4r5t6y7u8i9o0p1q test-key
+        // Calculado con: ssh-keygen -lf <fichero>
+        // Salida esperada: 256 SHA256:OwJWE9o9Sh2G6lT66MH5qOLhtBQbNdw3G/jbDjDLG+8 test-key (ED25519)
+        const string expectedFingerprint = "SHA256:OwJWE9o9Sh2G6lT66MH5qOLhtBQbNdw3G/jbDjDLG+8";
+        var keyBytes = Convert.FromBase64String("AAAAC3NzaC1lZDI1NTE5AAAAIOmf3jK+pYwG7h5NqE9P0Y1q2w3e4r5t6y7u8i9o0p1q");
+
+        var actual = SshHostKeyHelper.FormatFingerprint(keyBytes);
+
+        actual.Should().Be(expectedFingerprint);
     }
 }

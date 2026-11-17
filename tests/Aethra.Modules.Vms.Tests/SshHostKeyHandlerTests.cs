@@ -228,6 +228,41 @@ public sealed class SshHostKeyHandlerTests
         result.Value.PinnedFingerprint.Should().Be(PinnedFp);
     }
 
+    [Fact]
+    public async Task ProbeVm_with_saved_credentials_probes_their_host_and_port_not_the_public_ip()
+    {
+        // La huella se fijo contra el endpoint de las credenciales (aqui un puerto no estandar):
+        // sondear PublicIp:22 compararia contra otro servidor.
+        using var db = CreateDb();
+        var vm = SeedVm(db, "creds-vm", pinnedFp: PinnedFp, withSavedCreds: true);
+        var prober = new RecordingProber(new SshHostKeyProbeResult(true, "ssh-ed25519", PinnedFp, null, null));
+        var handler = new ProbeVmHostKeyHandler(db, prober, new NonStandardPortCodec());
+
+        var result = await handler.Handle(new ProbeVmHostKeyQuery(VmId: vm.Id.ToString()), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        prober.Host.Should().Be("ssh.interno.example");
+        prober.Port.Should().Be(2222);
+        result.Value.Port.Should().Be(2222);
+        result.Value.MatchesPinned.Should().BeTrue();
+        result.Value.Warning.Should().Be(ProbeVmHostKeyHandler.TofuWarningNotice);
+    }
+
+    [Fact]
+    public async Task ProbeVm_without_saved_credentials_probes_the_public_ip_on_port_22()
+    {
+        using var db = CreateDb();
+        var vm = SeedVm(db, "no-creds-vm", pinnedFp: PinnedFp, withSavedCreds: false);
+        var prober = new RecordingProber(new SshHostKeyProbeResult(true, "ssh-ed25519", PinnedFp, null, null));
+        var handler = new ProbeVmHostKeyHandler(db, prober, new NonStandardPortCodec());
+
+        var result = await handler.Handle(new ProbeVmHostKeyQuery(VmId: vm.Id.ToString()), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        prober.Host.Should().Be("10.0.0.5");
+        prober.Port.Should().Be(22);
+    }
+
     // =========================================================================
     // FAKES
     // =========================================================================
@@ -255,6 +290,25 @@ public sealed class SshHostKeyHandlerTests
     {
         public byte[] Encode(SshCredentials creds) => [1, 2, 3];
         public SshCredentials Decode(byte[] cipher) => new("10.0.0.5", 22, "root", SshAuthMethod.Password, "pass123");
+    }
+
+    private sealed class NonStandardPortCodec : ISshCredentialsCodec
+    {
+        public byte[] Encode(SshCredentials creds) => [1, 2, 3];
+        public SshCredentials Decode(byte[] cipher) => new("ssh.interno.example", 2222, "root", SshAuthMethod.Password, "pass123");
+    }
+
+    private sealed class RecordingProber(SshHostKeyProbeResult result) : ISshHostKeyProber
+    {
+        public string? Host { get; private set; }
+        public int? Port { get; private set; }
+
+        public Task<SshHostKeyProbeResult> ProbeAsync(string host, int port, CancellationToken ct)
+        {
+            Host = host;
+            Port = port;
+            return Task.FromResult(result);
+        }
     }
 
     private sealed class FakeProber(SshHostKeyProbeResult result) : ISshHostKeyProber

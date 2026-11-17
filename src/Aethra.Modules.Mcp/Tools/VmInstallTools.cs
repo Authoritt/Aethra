@@ -222,18 +222,23 @@ public sealed class VmInstallTools(IMediator mediator, IMcpCallerContext caller)
     }
 
     [McpServerTool(Name = "aethra_probe_vm_host_key", Destructive = false, Idempotent = true, OpenWorld = true)]
-    [Description("Sondea la clave pública del host SSH sin enviar credenciales ni comandos. Devuelve la huella SHA256 para verificación previa out-of-band.")]
+    [Description("Sondea la clave pública del host SSH sin enviar credenciales ni comandos. La huella debe confirmarse por otro canal fuera de banda (consola del proveedor de nube o ssh-keygen -lf en la VM): el sondeo es trust-on-first-use (TOFU) a través de la misma red.")]
     public async Task<object> ProbeHostKeyAsync(
         [Description("ID opcional de la VM (formato 'vm_...'). Si se omite, se debe indicar 'host'.")] string? vmId,
         [Description("Hostname o IP a sondear (si vmId no se especifica).")] string? host,
         [Description("Puerto SSH (default 22).")] int? port,
         CancellationToken ct)
     {
-        if (!caller.HasScope(McpScopes.VmsRead))
+        var isFreeHost = string.IsNullOrWhiteSpace(vmId);
+        var requiredScope = isFreeHost ? McpScopes.VmsWrite : McpScopes.VmsRead;
+        if (!caller.HasScope(requiredScope))
         {
-            return McpResponses.InsufficientScope(McpScopes.VmsRead);
+            return McpResponses.InsufficientScope(requiredScope);
         }
-        var result = await mediator.Send(new ProbeVmHostKeyQuery(vmId, host, port), ct).ConfigureAwait(false);
+        var query = isFreeHost
+            ? new ProbeVmHostKeyQuery(Host: host, Port: port)
+            : new ProbeVmHostKeyQuery(VmId: vmId);
+        var result = await mediator.Send(query, ct).ConfigureAwait(false);
         if (!result.IsSuccess)
         {
             return McpResponses.FromError(result.Error);
@@ -297,22 +302,24 @@ public sealed class VmInstallTools(IMediator mediator, IMcpCallerContext caller)
         {
             return McpResponses.FromError(result.Error);
         }
-        return McpResponses.Ok(new
-        {
-            vm_id = vmId,
-            container_runtime = runtime,
-            install_container_runtime = installContainerRuntime ?? false,
-            script = result.Value,
-        });
+        return McpResponses.OkWithNextActions(
+            data: result.Value,
+            nextActions:
+            [
+                new McpResponses.NextAction(
+                    Tool: "aethra_get_install_status",
+                    Why: "Después de pegar el script en la VM, esperá 30-60s y poll el status.",
+                    SuggestedArgs: new { vm_id = vmId }),
+            ]);
     }
 
-    [McpServerTool(Name = "aethra_reinstall_satellite", Destructive = false, Idempotent = false, OpenWorld = true)]
-    [Description("Re-instala el satélite en una VM ya aprovisionada usando las credenciales SSH guardadas en BD. " +
-        "Falla si la VM no tiene credenciales guardadas (requiere aethra_install_satellite previo).")]
+    [McpServerTool(Name = "aethra_reinstall_satellite", Destructive = true, Idempotent = false, OpenWorld = true)]
+    [Description("Re-instala el satélite en una VM usando las credenciales SSH guardadas (cifradas) en el central. " +
+        "Falla si no hay credenciales (en cuyo caso usá aethra_install_satellite).")]
     public async Task<object> ReinstallSatelliteAsync(
         [Description("ID de la VM (formato 'vm_...').")] string vmId,
         [Description("Container runtime: 'docker' (default) o 'podman'.")] string? containerRuntime,
-        [Description("Si true, el script intentará instalar el runtime con apt-get/yum.")] bool? installContainerRuntime,
+        [Description("Si true, instala docker/podman si falta.")] bool? installContainerRuntime,
         [Description("Si true, NO ejecuta — devuelve plan.")] bool dryRun,
         CancellationToken ct)
     {
@@ -328,9 +335,9 @@ public sealed class VmInstallTools(IMediator mediator, IMcpCallerContext caller)
                 plan: new
                 {
                     vm_id = vmId,
+                    using_saved_credentials = true,
                     container_runtime = runtime,
                     install_container_runtime = installContainerRuntime ?? false,
-                    note = "Usa credenciales SSH ya guardadas en la BD.",
                 });
         }
         var result = await mediator.Send(
