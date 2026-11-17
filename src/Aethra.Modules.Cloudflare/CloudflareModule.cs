@@ -1,6 +1,8 @@
 using Aethra.Modules.Cloudflare.Infrastructure;
 using Aethra.Modules.Cloudflare.Infrastructure.Cloudflare;
+using Aethra.Modules.Cloudflare.Infrastructure.Lookups;
 using Aethra.Modules.Cloudflare.Presentation;
+using Aethra.Shared.Contracts.Vms;
 using Aethra.Shared.Infrastructure.Modules;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -36,6 +38,7 @@ public static class CloudflareModule
         services.AddAethraModuleDbContext<CloudflareDbContext>(conn);
 
         services.AddSingleton<ICloudflareTokenCodec, DataProtectionCloudflareTokenCodec>();
+        services.AddScoped<IVmWorkloadLookup, EfCloudflareVmWorkloadLookup>();
 
         services.AddHttpClient<ICloudflareApiClient, HttpCloudflareApiClient>(http =>
         {

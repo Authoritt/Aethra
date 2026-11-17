@@ -228,7 +228,8 @@ public static class VmsEndpoints
             return r.IsSuccess ? Results.NoContent() : MapError(r.Error);
         })
         .RequireAuthorization(ScopeWrite)
-        .WithName("DeleteVm");
+        .WithName("DeleteVm")
+        .WithDescription("Borra una VM registrada. Si tiene cargas activas (instancias, servicios, túneles) falla con 409 (vm.in_use) con o sin force. Si el satélite está conectado y force=false, falla con 409 (vm.satellite_connected); con force=true borra la VM revocando su satélite.");
 
         // F12.3 — opt-in / opt-out al pool de previews.
         group.MapPatch("/{vmId}/accepts-previews", async (

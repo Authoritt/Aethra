@@ -1,11 +1,13 @@
 using Aethra.Modules.Services.Infrastructure;
 using Aethra.Modules.Services.Infrastructure.Backup;
 using Aethra.Modules.Services.Infrastructure.Binding;
+using Aethra.Modules.Services.Infrastructure.Lookups;
 using Aethra.Modules.Services.Infrastructure.Provisioning;
 using Aethra.Modules.Services.Infrastructure.Reconciliation;
 using Aethra.Modules.Services.Infrastructure.Scheduling;
 using Aethra.Modules.Services.Presentation;
 using Aethra.Modules.Services.Templates;
+using Aethra.Shared.Contracts.Vms;
 using Aethra.Shared.Infrastructure.Modules;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -51,6 +53,7 @@ public static class ServicesModule
         services.AddScoped<IBackupStorage, VolumeBackupStorage>();
         services.AddScoped<IBackupStorage, S3BackupStorage>();
         services.AddScoped<BackupOrchestrator>();
+        services.AddScoped<IVmWorkloadLookup, EfServicesVmWorkloadLookup>();
 
         // HttpClient para llamadas HTTP del rabbit engine y S3 storage.
         services.AddHttpClient("services-backup", c => c.Timeout = TimeSpan.FromMinutes(5));

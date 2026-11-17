@@ -367,11 +367,12 @@ public sealed class AdminCrudTools(
     }
 
     [McpServerTool(Name = "aethra_delete_vm", Destructive = true, Idempotent = true, OpenWorld = false)]
-    [Description("Borra una VM del registro de Aethra (junto con su satélite/token). force=true por simetría; " +
-        "la limpieza de instancias/contenedores que apuntaban a la VM es responsabilidad del caller.")]
+    [Description("Borra una VM del registro de Aethra (junto con su satélite/token). Si la VM tiene cargas activas " +
+        "(instancias, servicios gestionados o túneles) falla con error de conflicto vm.in_use (con o sin force). " +
+        "Si el satélite está conectado exige force=true para confirmar el borrado.")]
     public async Task<object> DeleteVmAsync(
         [Description("ID de la VM.")] string vmId,
-        [Description("true = fuerza el borrado (simetría de API).")] bool force,
+        [Description("true = confirma el borrado cuando el satélite está conectado (no omite la protección de cargas activas).")] bool force,
         [Description("Si true, NO ejecuta — devuelve plan.")] bool dryRun,
         CancellationToken ct)
     {
