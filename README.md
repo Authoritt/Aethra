@@ -217,8 +217,9 @@ cd apps/web && npm install && npm run dev # panel,  http://localhost:3000
 dotnet run --project apps/satellite       # optional: a local satellite
 ```
 
-If you do not set `Identity__*`, development falls back to `admin@aethra.local` / `aethra-dev`.
-**Change that before exposing Aethra to anything.**
+If `Identity__AdminPasswordSeed` is not set, no initial admin user is created and the
+startup log says so. To create the first admin user, set `Identity__AdminPasswordSeed`
+and restart; the seed is only used while the database has no users.
 
 Coming from Coolify? See [`docs/migration-from-coolify.md`](docs/migration-from-coolify.md) and the
 assisted scripts in `scripts/migrate-from-coolify.{sh,ps1}`.

@@ -5,20 +5,22 @@ set -uo pipefail
 
 API=http://localhost:5080
 COOKIES=/tmp/cookies.txt
+ADMIN_PASSWORD="${AETHRA_ADMIN_PASSWORD:-aethra-dev}"
+export Identity__AdminPasswordSeed="$ADMIN_PASSWORD"
 
 step() { echo; echo "==== $1 ===="; }
 fail() { echo "FAIL: $1"; exit 1; }
 
 step "1. Login"
 RESP=$(curl -s -c "$COOKIES" -X POST "$API/auth/login" -H 'content-type: application/json' \
-  -d '{"email":"admin@aethra.local","password":"aethra-dev"}')
+  -d "{\"email\":\"admin@aethra.local\",\"password\":\"$ADMIN_PASSWORD\"}")
 echo "$RESP"
 if echo "$RESP" | grep -q '"requires_totp":true'; then
   # Smoke: disable totp directly (development convenience).
   PGPASSWORD=changeme "/c/Program Files/PostgreSQL/16/bin/psql.exe" -U aethra -d aethra -h localhost -p 5432 \
     -c "UPDATE identity.users SET totp_enabled = false, totp_secret_cipher = NULL, totp_recovery_codes_cipher = NULL, totp_recovery_codes_used_mask = 0 WHERE email = 'admin@aethra.local'" >/dev/null
   RESP=$(curl -s -c "$COOKIES" -X POST "$API/auth/login" -H 'content-type: application/json' \
-    -d '{"email":"admin@aethra.local","password":"aethra-dev"}')
+    -d "{\"email\":\"admin@aethra.local\",\"password\":\"$ADMIN_PASSWORD\"}")
   echo "Retry: $RESP"
 fi
 

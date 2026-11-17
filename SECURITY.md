@@ -40,9 +40,10 @@ Aethra's threat model, in rough order of severity:
 
 ### Not vulnerabilities
 
-- The development defaults (`admin@aethra.local` / `aethra-dev`, `Password=changeme` in the sample
-  configs). They are documented as things to change before exposure. A report that they exist is not a
-  finding; a way to *keep* them after a proper install is.
+- The development defaults (`admin@aethra.local`, local development seeds like `aethra-dev` in
+  `launchSettings.json`, or `Password=changeme` in sample configs). Without `Identity__AdminPasswordSeed`
+  no admin user is seeded on an empty database. A report that local development profiles configure sample
+  credentials is not a finding; a way to *keep* them after a proper install is.
 - Anything that requires the attacker to already hold a valid admin cookie.
 - Missing hardening headers with no demonstrated impact.
 
