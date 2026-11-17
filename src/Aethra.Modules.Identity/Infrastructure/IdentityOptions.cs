@@ -22,6 +22,8 @@ public sealed class IdentityOptions
     /// Si esta presente, se trata como password en texto plano que se hashea en memoria
     /// al arranque. Recomendado: settear via variable de entorno
     /// <c>Identity__AdminPasswordSeed</c> en primer arranque y removerla despues.
+    /// Si no se configura (null o espacios), el seeder asegura los roles builtin pero no crea
+    /// ningun usuario admin inicial (sin contraseñas por defecto).
     /// </summary>
     public string? AdminPasswordSeed { get; set; }
 

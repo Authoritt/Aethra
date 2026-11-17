@@ -13,6 +13,8 @@ set -uo pipefail
 
 export PATH="/c/Program Files/PostgreSQL/16/bin:$PATH"
 export PGPASSWORD=postgres
+ADMIN_PASSWORD="${AETHRA_ADMIN_PASSWORD:-aethra-dev}"
+export Identity__AdminPasswordSeed="$ADMIN_PASSWORD"
 
 ROOT=$(cd "$(dirname "$0")"/.. && pwd)
 API_LOG=/tmp/api.log
@@ -47,7 +49,7 @@ grep -m1 "Now listening on" "$API_LOG" | tee -a "$OUT" || (echo "FATAL: central 
 step "3. Login con admin"
 curl -sS -c "$COOK" -X POST "$CENTRAL/auth/login" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@aethra.local","password":"aethra-dev"}' \
+  -d "{\"email\":\"admin@aethra.local\",\"password\":\"$ADMIN_PASSWORD\"}" \
   -o /tmp/login.json -w "HTTP %{http_code}\n" 2>&1 | tee -a "$OUT"
 cat /tmp/login.json | tee -a "$OUT" >/dev/null
 
