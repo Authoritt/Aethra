@@ -26,6 +26,7 @@ public static class IdentityModule
     {
         services.Configure<IdentityOptions>(configuration.GetSection("Identity"));
         services.AddSingleton<SingleUserStore>();
+        services.AddScoped<BootstrapAuthenticationService>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentPrincipalAccessor, CurrentPrincipalAccessor>();
 

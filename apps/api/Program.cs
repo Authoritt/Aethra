@@ -17,6 +17,7 @@ using Aethra.Modules.Proxy.Presentation;
 using Aethra.Modules.Services;
 using Aethra.Modules.Settings;
 using Aethra.Modules.Identity.Infrastructure.Authentication;
+using Aethra.Modules.Identity.Infrastructure.Persistence;
 using Aethra.Modules.Vms;
 using Aethra.Modules.Vms.Authentication;
 using Aethra.Shared.Infrastructure.Outbox;
@@ -178,6 +179,18 @@ builder.Services
             ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return Task.CompletedTask;
         };
+        options.Events.OnValidatePrincipal = async ctx =>
+        {
+            if (ctx.Principal?.HasClaim(c => c.Type == AuthSchemes.BootstrapClaim && c.Value == "true") == true)
+            {
+                var userRepo = ctx.HttpContext.RequestServices.GetService<IUserRepository>();
+                if (userRepo is not null && await userRepo.CountAsync(ctx.HttpContext.RequestAborted) > 0)
+                {
+                    ctx.RejectPrincipal();
+                    await ctx.HttpContext.SignOutAsync(AuthSchemes.Cookie);
+                }
+            }
+        };
     })
     .AddScheme<SatelliteTokenAuthOptions, SatelliteTokenAuthHandler>(
         SatelliteAuthSchemes.TokenHeader, _ => { })
@@ -283,6 +296,10 @@ var applyMigrations = app.Environment.IsDevelopment()
 if (applyMigrations)
 {
     await app.Services.ApplyPendingMigrationsAsync();
+}
+else if (MigrationsBootstrap.ShouldSeedIdentity(app.Configuration))
+{
+    await app.Services.SeedIdentityAsync();
 }
 
 var applyMonitorBackfill = MigrationsBootstrap.ShouldApplyMonitorUrlBackfill(app.Configuration);
