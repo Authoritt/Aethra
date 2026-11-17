@@ -5,6 +5,7 @@ using Aethra.Modules.Projects.Infrastructure.Lookups;
 using Aethra.Modules.Projects.Infrastructure.Security;
 using Aethra.Modules.Projects.Presentation;
 using Aethra.Shared.Contracts.Projects;
+using Aethra.Shared.Contracts.Vms;
 using Aethra.Shared.Infrastructure.Http;
 using Aethra.Shared.Infrastructure.Modules;
 using Microsoft.AspNetCore.Builder;
@@ -43,6 +44,7 @@ public static class ProjectsModule
 
         services.AddScoped<ITemplateLookup, EfTemplateLookup>();
         services.AddScoped<IInstanceLookup, EfInstanceLookup>();
+        services.AddScoped<IVmWorkloadLookup, EfProjectsVmWorkloadLookup>();
         // OT-009 (G2) — quién usa un hostname (para no borrar el DNS de un host ajeno).
         services.AddScoped<IHostnameUsageLookup, EfHostnameUsageLookup>();
         services.AddScoped<ITenantContext, EfTenantContext>();

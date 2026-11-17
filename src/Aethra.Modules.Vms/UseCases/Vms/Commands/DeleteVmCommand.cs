@@ -1,5 +1,7 @@
 using Aethra.Modules.Vms.Domain;
 using Aethra.Modules.Vms.Infrastructure;
+using Aethra.Shared.Contracts.Containers;
+using Aethra.Shared.Contracts.Vms;
 using Aethra.Shared.Infrastructure.Cqrs;
 using Aethra.Shared.Kernel.Errors;
 using Aethra.Shared.Kernel.Ids;
@@ -11,15 +13,24 @@ namespace Aethra.Modules.Vms.UseCases.Vms.Commands;
 /// <summary>
 /// Borra una VM del registro de Aethra (junto con su satélite/token).
 ///
-/// nota: el módulo Vms no comparte DbContext con Projects (Instances) ni con Services
-/// (ManagedServices), así que no podemos verificar acá si la VM tiene cargas activas. El
-/// <paramref name="Force"/> se acepta por simetría de API, pero la limpieza de contenedores /
-/// instancias que apuntaban a esta VM es responsabilidad del caller (debe reasignar o borrar
-/// esas cargas antes de invocar esto).
+/// Reglas de protección de borrado:
+/// 1. Si la VM tiene cargas asignadas (instancias de proyectos, servicios gestionados o túneles de Cloudflare),
+///    se rechaza con error de conflicto (<c>vm.in_use</c>) tanto si <paramref name="Force"/> es true como false.
+///    El operador debe borrar o mover las cargas antes de eliminar la VM.
+/// 2. Si la VM no tiene cargas pero tiene un satélite conectado activamente y <paramref name="Force"/> es false,
+///    se rechaza con error de conflicto (<c>vm.satellite_connected</c>).
+/// 3. Si no tiene cargas (o si tiene satélite conectado con <paramref name="Force"/>=true), se borra la VM. Al eliminarse
+///    el registro de la base de datos, el token del satélite queda revocado y cualquier satélite conectado caerá en su
+///    próximo intento de reconexión o petición autenticada.
 /// </summary>
 public sealed record DeleteVmCommand(string VmId, bool Force = false) : ICommand;
 
-internal sealed class DeleteVmHandler(VmsDbContext db)
+// Dependencias obligatorias a proposito: si faltara el registro del satelite, DI falla al construir el
+// handler en vez de saltarse la proteccion en silencio.
+internal sealed class DeleteVmHandler(
+    VmsDbContext db,
+    IEnumerable<IVmWorkloadLookup> workloadLookups,
+    ISatelliteConnectionRegistry satelliteRegistry)
     : ICommandHandler<DeleteVmCommand>
 {
     public async Task<Result> Handle(DeleteVmCommand request, CancellationToken cancellationToken)
@@ -35,9 +46,38 @@ internal sealed class DeleteVmHandler(VmsDbContext db)
             return Error.NotFound("vm.not_found", $"VM '{request.VmId}' no existe.");
         }
 
-        // nota: sin guard cross-module — ver doc del command. Force solo existe por simetría.
-        _ = request.Force;
+        // 1. Regla: comprobar si la VM tiene cargas activas asignadas (instancias, servicios, túneles, etc.).
+        // Si tiene cargas, se rechaza SIEMPRE (con o sin force) con vm.in_use.
+        var workloads = new List<VmWorkloadRef>();
+        foreach (var lookup in workloadLookups)
+        {
+            var items = await lookup.ListOnVmAsync(request.VmId, cancellationToken).ConfigureAwait(false);
+            workloads.AddRange(items);
+        }
 
+        if (workloads.Count > 0)
+        {
+            const int maxListed = 10;
+            var sample = workloads.Take(maxListed).Select(w => $"{w.Kind}:{w.Name}");
+            var summary = string.Join(", ", sample);
+            var detail = workloads.Count > maxListed
+                ? $"{summary} y {workloads.Count - maxListed} más"
+                : summary;
+
+            return Error.Conflict("vm.in_use",
+                $"No se puede borrar la VM '{request.VmId}' porque tiene {workloads.Count} carga(s) asignada(s): {detail}. Debe borrar o mover las cargas antes de eliminar la VM.");
+        }
+
+        // 2. Regla: sin cargas pero con el satélite conectado y Force == false -> vm.satellite_connected.
+        if (!request.Force && satelliteRegistry.IsConnected(request.VmId))
+        {
+            return Error.Conflict("vm.satellite_connected",
+                $"No se puede borrar la VM '{request.VmId}' porque tiene un satélite conectado. Pasa force=true para borrarla de todos modos.");
+        }
+
+        // 3. Con force y satélite conectado: al borrar la VM (db.Vms.Remove(vm)), su registro y token quedan
+        // revocados. No existe API de cierre forzado de socket en ISatelliteConnectionRegistry; el satélite
+        // caerá en su próximo intento de reconexión o petición autenticada.
         db.Vms.Remove(vm);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return Result.Success();
