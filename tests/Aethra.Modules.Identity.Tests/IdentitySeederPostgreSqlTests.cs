@@ -86,7 +86,7 @@ public sealed class IdentitySeederPostgreSqlTests(PostgreSql18Fixture postgres)
         adminUser.Roles.Single().RoleId.Should().Be(adminRole.Id);
 
         var passwordCodec = sp.GetRequiredService<IUserPasswordCodec>();
-        passwordCodec.Verify(AdminPassword, adminUser.PasswordHashProtected).Should().BeTrue(
+        passwordCodec.Verify(AdminPassword, adminUser.PasswordHashCipher).Should().BeTrue(
             "la contraseña sembrada debe coincidir con la configurada en Identity:AdminPasswordSeed");
 
         // 7. Idempotencia: una segunda ejecución no duplica roles ni usuarios

@@ -33,7 +33,7 @@ namespace Aethra.Api.Tests;
 /// 1. Despliegue en producción con migraciones externas y tabla de usuarios vacía (comportamiento seguro por defecto: 503).
 /// 2. Habilitación explícita mediante Identity:AllowBootstrapLogin=true cuando la tabla está vacía.
 /// 3. Rechazo de credenciales incorrectas en la rama bootstrap (401).
-/// 4. Modo Development: con bandera ausente/false → 503 bootstrap_login_disabled (B1).
+/// 4. Modo Development: ningún appsettings incluido en el repo enciende la bandera (B1); el 503 lo cubre el caso 1.
 /// 5. Rechazo inmediato de credenciales bootstrap una vez existe un admin persistido en BD.
 /// 6. Inmediata invalidación de sesión/cookie activa de bootstrap en cuanto existe el primer usuario persistido (M2).
 /// 7. Desacoplamiento de IdentitySeeder respecto a ApplyMigrationsOnStart (Aethra:SeedIdentityOnStart).
@@ -121,52 +121,38 @@ public sealed class BootstrapAuthenticationTests
         factory.CapturedLogs.Entries.Should().NotContain(e => e.Message.Contains(wrongPassword));
     }
 
-    [Fact]
-    public async Task Development_environment_with_flag_absent_returns_503_bootstrap_login_disabled()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public void Shipped_appsettings_never_enable_bootstrap_login(string environment)
     {
-        // B1: Demuestra que en Development con la bandera ausente/false, el login bootstrap
-        // responde 503 bootstrap_login_disabled (no habilitado por defecto).
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development });
-        builder.WebHost.UseTestServer();
-        builder.Logging.ClearProviders();
+        // B1: la producción del dueño corre con ASPNETCORE_ENVIRONMENT=Development, así que ni
+        // appsettings.json ni appsettings.{env}.json pueden encender el bootstrap: solo una
+        // variable explícita del operador (Identity__AllowBootstrapLogin=true) lo hace.
+        var apiDir = Path.Combine(FindRepoRoot(), "apps", "api");
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(apiDir)
+            .AddJsonFile("appsettings.json", optional: false)
+            .AddJsonFile($"appsettings.{environment}.json", optional: true)
+            .Build();
 
-        builder.Services.AddRouting();
-        builder.Services.AddAuthentication(AuthSchemes.Cookie)
-            .AddCookie(AuthSchemes.Cookie, _ => { });
-        builder.Services.Configure<IdentityOptions>(_ => { });
-        builder.Services.AddSingleton<SingleUserStore>();
-        builder.Services.AddScoped<BootstrapAuthenticationService>();
-        builder.Services.AddScoped<IUserRepository, TestUserRepository>();
-        builder.Services.AddScoped<IUserPasswordCodec, StubPasswordCodec>();
-        builder.Services.AddScoped<IClock, SystemClock>();
-        builder.Services.AddScoped<IAuthenticationAttemptLimiter, TestAttemptLimiter>();
-        builder.Services.AddScoped<EfUserStore>();
-        builder.Services.AddScoped<IRoleRepository, StubRoleRepository>();
-        builder.Services.AddSingleton<ITotpChallengeTokens, StubTotpChallengeTokens>();
-        builder.Services.AddDbContext<IdentityDbContext>(o =>
-            o.UseNpgsql("Host=127.0.0.1;Port=1;Database=none;Username=none;Password=none"));
-        builder.Services.AddRateLimiter(o =>
-            o.AddPolicy(LoginRateLimiting.PolicyName, _ => RateLimitPartition.GetNoLimiter("test")));
+        var options = new IdentityOptions();
+        configuration.GetSection("Identity").Bind(options);
 
-        var app = builder.Build();
-        app.UseRouting();
-        app.UseAuthentication();
-        app.UseAuthorization();
-        app.UseRateLimiter();
-        app.MapAuthEndpoints();
-        await app.StartAsync();
+        options.AllowBootstrapLogin.Should().BeFalse(
+            $"appsettings del entorno {environment} no debe habilitar Identity:AllowBootstrapLogin");
+    }
 
-        using var client = app.GetTestClient();
-        using var response = await client.PostAsync("/auth/login", new StringContent(
-            JsonSerializer.Serialize(new { email = AdminEmail, password = "dev-seed-password-123" }),
-            Encoding.UTF8, "application/json"));
+    private static string FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Aethra.slnx")))
+        {
+            dir = dir.Parent;
+        }
 
-        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable,
-            "en entorno Development con bandera ausente/false, el login bootstrap debe responder 503 bootstrap_login_disabled");
-
-        var body = await response.Content.ReadAsStringAsync();
-        var json = JsonNode.Parse(body);
-        json?["error"]?.GetValue<string>().Should().Be("bootstrap_login_disabled");
+        return dir?.FullName ?? throw new InvalidOperationException(
+            "No se encontró Aethra.slnx subiendo desde " + AppContext.BaseDirectory);
     }
 
     [Fact]
@@ -460,7 +446,7 @@ public sealed class BootstrapAuthenticationTests
     {
         public Task<Role?> FindBySlugAsync(string slug, CancellationToken ct) => Task.FromResult<Role?>(null);
         public Task<Role?> GetByIdAsync(RoleId id, CancellationToken ct) => Task.FromResult<Role?>(null);
-        public Task<IReadOnlyList<Role>> ListByIdsAsync(IReadOnlyCollection<RoleId> ids, CancellationToken ct) => Task.FromResult<IReadOnlyList<Role>>([]);
+        public Task<IReadOnlyList<Role>> ListByIdsAsync(IEnumerable<RoleId> ids, CancellationToken ct) => Task.FromResult<IReadOnlyList<Role>>([]);
         public Task<IReadOnlyList<Role>> ListAllAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<Role>>([]);
         public Task<int> CountAsync(CancellationToken ct) => Task.FromResult(0);
     }
