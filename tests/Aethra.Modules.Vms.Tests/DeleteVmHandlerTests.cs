@@ -158,7 +158,7 @@ public sealed class DeleteVmHandlerTests
     public async Task Handle_with_invalid_id_returns_validation_error()
     {
         await using var db = CreateDb();
-        var handler = new DeleteVmHandler(db);
+        var handler = new DeleteVmHandler(db, [], new FakeSatelliteRegistry());
 
         var result = await handler.Handle(new DeleteVmCommand("not-a-vm-id", Force: false), CancellationToken.None);
 
@@ -171,7 +171,7 @@ public sealed class DeleteVmHandlerTests
     public async Task Handle_when_vm_not_found_returns_not_found()
     {
         await using var db = CreateDb();
-        var handler = new DeleteVmHandler(db);
+        var handler = new DeleteVmHandler(db, [], new FakeSatelliteRegistry());
 
         var nonExistentId = Aethra.Shared.Kernel.Ids.AethraId.NewId("vm").ToString();
         var result = await handler.Handle(new DeleteVmCommand(nonExistentId, Force: false), CancellationToken.None);

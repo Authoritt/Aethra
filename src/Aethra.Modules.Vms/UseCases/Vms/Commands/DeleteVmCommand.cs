@@ -25,10 +25,12 @@ namespace Aethra.Modules.Vms.UseCases.Vms.Commands;
 /// </summary>
 public sealed record DeleteVmCommand(string VmId, bool Force = false) : ICommand;
 
+// Dependencias obligatorias a proposito: si faltara el registro del satelite, DI falla al construir el
+// handler en vez de saltarse la proteccion en silencio.
 internal sealed class DeleteVmHandler(
     VmsDbContext db,
-    IEnumerable<IVmWorkloadLookup>? workloadLookups = null,
-    ISatelliteConnectionRegistry? satelliteRegistry = null)
+    IEnumerable<IVmWorkloadLookup> workloadLookups,
+    ISatelliteConnectionRegistry satelliteRegistry)
     : ICommandHandler<DeleteVmCommand>
 {
     public async Task<Result> Handle(DeleteVmCommand request, CancellationToken cancellationToken)
@@ -47,16 +49,10 @@ internal sealed class DeleteVmHandler(
         // 1. Regla: comprobar si la VM tiene cargas activas asignadas (instancias, servicios, túneles, etc.).
         // Si tiene cargas, se rechaza SIEMPRE (con o sin force) con vm.in_use.
         var workloads = new List<VmWorkloadRef>();
-        if (workloadLookups is not null)
+        foreach (var lookup in workloadLookups)
         {
-            foreach (var lookup in workloadLookups)
-            {
-                var items = await lookup.ListOnVmAsync(request.VmId, cancellationToken).ConfigureAwait(false);
-                if (items is { Count: > 0 })
-                {
-                    workloads.AddRange(items);
-                }
-            }
+            var items = await lookup.ListOnVmAsync(request.VmId, cancellationToken).ConfigureAwait(false);
+            workloads.AddRange(items);
         }
 
         if (workloads.Count > 0)
@@ -73,7 +69,7 @@ internal sealed class DeleteVmHandler(
         }
 
         // 2. Regla: sin cargas pero con el satélite conectado y Force == false -> vm.satellite_connected.
-        if (!request.Force && satelliteRegistry is not null && satelliteRegistry.IsConnected(request.VmId))
+        if (!request.Force && satelliteRegistry.IsConnected(request.VmId))
         {
             return Error.Conflict("vm.satellite_connected",
                 $"No se puede borrar la VM '{request.VmId}' porque tiene un satélite conectado. Pasa force=true para borrarla de todos modos.");
